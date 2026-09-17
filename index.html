@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <meta
+    name="theme-color"
+    content="#16a34a"
+  >
+
+  <meta
+    name="description"
+    content="DekhoEarn - Watch, Earn and Reward"
+  >
+
+  <link rel="manifest" href="/manifest.json">
+
+  <title>DekhoEarn</title>
+
+  <link rel="stylesheet" href="/style.css">
+</head>
+
+<body>
+
+  <header class="topbar">
+    <div>
+      <div class="logo">DekhoEarn</div>
+      <div class="tagline">Dekho. Earn Karo. Reward Lo.</div>
+    </div>
+
+    <button id="installBtn" class="install-btn" hidden>
+      Install
+    </button>
+  </header>
+
+  <main>
+
+    <section class="welcome">
+      <h1>Welcome 👋</h1>
+      <p>Videos dekho aur rewards collect karo.</p>
+    </section>
+
+    <section class="wallet-card">
+      <div class="wallet-title">Your Points</div>
+
+      <div id="points" class="points">
+        0
+      </div>
+
+      <div class="wallet-label">
+        Points
+      </div>
+    </section>
+
+    <section class="stats">
+
+      <div class="stat-card">
+        <strong id="videosWatched">0</strong>
+        <span>Videos Watched</span>
+      </div>
+
+      <div class="stat-card">
+        <strong id="todayEarned">0</strong>
+        <span>Today's Points</span>
+      </div>
+
+    </section>
+
+    <section class="video-section">
+
+      <div class="section-title">
+        Watch & Earn
+      </div>
+
+      <div class="video-card">
+
+        <div class="video-icon">
+          ▶
+        </div>
+
+        <div class="video-info">
+          <h3>Reward Video</h3>
+          <p>Watch the video and collect points.</p>
+        </div>
+
+        <button id="watchBtn" class="watch-btn">
+          Watch
+        </button>
+
+      </div>
+
+    </section>
+
+    <section class="daily-card">
+
+      <h2>Daily Bonus 🎁</h2>
+
+      <p>
+        Come back every day and collect your bonus.
+      </p>
+
+      <button id="dailyBtn">
+        Claim Daily Bonus
+      </button>
+
+    </section>
+
+  </main>
+
+  <nav class="bottom-nav">
+
+    <button class="active">
+      🏠
+      <span>Home</span>
+    </button>
+
+    <button>
+      🎬
+      <span>Watch</span>
+    </button>
+
+    <button>
+      💰
+      <span>Wallet</span>
+    </button>
+
+    <button>
+      👥
+      <span>Invite</span>
+    </button>
+
+  </nav>
+
+  <script src="/app.js"></script>
+
+</body>
+</html>
