@@ -1,0 +1,12 @@
+{
+  "name": "DekhoEarn",
+  "short_name": "DekhoEarn",
+  "description": "Dekho. Earn Karo. Reward Lo.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#16a34a",
+  "orientation": "portrait",
+  "icons": []
+}
