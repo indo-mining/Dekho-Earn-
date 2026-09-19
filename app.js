@@ -1410,3 +1410,849 @@ async function startApp() {
 
 
 startApp();
+// =========================================================
+// DEKHOEARN
+// REAL GALLERY VIDEO UPLOAD
+// Cloudinary + Neon
+// =========================================================
+
+let selectedVideoFile = null;
+
+const MAX_VIDEO_SIZE =
+  100 * 1024 * 1024;
+
+
+// ---------------------------------------------------------
+// ELEMENTS
+// ---------------------------------------------------------
+
+const videoFileInput =
+  document.getElementById(
+    "videoFile"
+  );
+
+const videoFileName =
+  document.getElementById(
+    "videoFileName"
+  );
+
+const uploadPreview =
+  document.getElementById(
+    "uploadPreview"
+  );
+
+const uploadPreviewVideo =
+  document.getElementById(
+    "uploadPreviewVideo"
+  );
+
+const uploadProgressBox =
+  document.getElementById(
+    "uploadProgressBox"
+  );
+
+const uploadProgressBar =
+  document.getElementById(
+    "uploadProgressBar"
+  );
+
+const uploadProgressText =
+  document.getElementById(
+    "uploadProgressText"
+  );
+
+const uploadProgressPercent =
+  document.getElementById(
+    "uploadProgressPercent"
+  );
+
+const uploadVideoBtn =
+  document.getElementById(
+    "uploadVideoBtn"
+  );
+
+
+// ---------------------------------------------------------
+// FILE SIZE
+// ---------------------------------------------------------
+
+function formatVideoSize(bytes) {
+
+  if (!bytes) {
+    return "0 B";
+  }
+
+  const mb =
+    bytes / 1024 / 1024;
+
+  if (mb < 1) {
+    return (
+      Math.round(bytes / 1024) +
+      " KB"
+    );
+  }
+
+  return (
+    mb.toFixed(1) +
+    " MB"
+  );
+}
+
+
+// ---------------------------------------------------------
+// SELECT VIDEO
+// ---------------------------------------------------------
+
+if (videoFileInput) {
+
+  videoFileInput.addEventListener(
+    "change",
+    function () {
+
+      const file =
+        this.files &&
+        this.files[0];
+
+      if (!file) {
+
+        selectedVideoFile =
+          null;
+
+        videoFileName.textContent =
+          "Gallery se video choose karein";
+
+        uploadPreview.classList.add(
+          "hidden"
+        );
+
+        return;
+      }
+
+
+      // VIDEO CHECK
+
+      if (
+        !file.type ||
+        !file.type.startsWith("video/")
+      ) {
+
+        showToast(
+          "Sirf video file select karein."
+        );
+
+        this.value = "";
+
+        selectedVideoFile =
+          null;
+
+        return;
+      }
+
+
+      // SIZE CHECK
+
+      if (
+        file.size >
+        MAX_VIDEO_SIZE
+      ) {
+
+        showToast(
+          "Video maximum 100 MB ka ho sakta hai."
+        );
+
+        this.value = "";
+
+        selectedVideoFile =
+          null;
+
+        return;
+      }
+
+
+      selectedVideoFile =
+        file;
+
+
+      videoFileName.textContent =
+        `${file.name} • ${formatVideoSize(file.size)}`;
+
+
+      // PREVIEW
+
+      if (
+        uploadPreview &&
+        uploadPreviewVideo
+      ) {
+
+        const objectUrl =
+          URL.createObjectURL(file);
+
+        uploadPreviewVideo.src =
+          objectUrl;
+
+        uploadPreview.classList.remove(
+          "hidden"
+        );
+      }
+
+    }
+  );
+
+}
+
+
+// ---------------------------------------------------------
+// PROGRESS UI
+// ---------------------------------------------------------
+
+function updateUploadProgress(
+  percent,
+  message
+) {
+
+  const value =
+    Math.max(
+      0,
+      Math.min(
+        100,
+        Number(percent) || 0
+      )
+    );
+
+
+  if (uploadProgressBar) {
+
+    uploadProgressBar.style.width =
+      `${value}%`;
+
+  }
+
+
+  if (uploadProgressPercent) {
+
+    uploadProgressPercent.textContent =
+      `${value}%`;
+
+  }
+
+
+  if (uploadProgressText) {
+
+    uploadProgressText.textContent =
+      message ||
+      "Uploading...";
+
+  }
+
+}
+
+
+// ---------------------------------------------------------
+// GET CLOUDINARY SIGNATURE
+// ---------------------------------------------------------
+
+async function getCloudinarySignature() {
+
+  const response =
+    await fetch(
+      `${API_BASE}/api/cloudinary/signature`,
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json"
+        }
+      }
+    );
+
+
+  let data;
+
+  try {
+
+    data =
+      await response.json();
+
+  } catch {
+
+    throw new Error(
+      "Server ka response invalid hai."
+    );
+
+  }
+
+
+  if (
+    !response.ok ||
+    !data ||
+    !data.ok
+  ) {
+
+    throw new Error(
+      data?.error ||
+      "Cloudinary signature nahi mili."
+    );
+
+  }
+
+
+  return data;
+}
+
+
+// ---------------------------------------------------------
+// DIRECT CLOUDINARY UPLOAD
+// ---------------------------------------------------------
+
+function uploadToCloudinary(
+  file,
+  signatureData
+) {
+
+  return new Promise(
+    (resolve, reject) => {
+
+      const cloudName =
+        signatureData.cloud_name;
+
+
+      const uploadUrl =
+        `https://api.cloudinary.com/v1_1/${cloudName}/video/upload`;
+
+
+      const xhr =
+        new XMLHttpRequest();
+
+
+      xhr.open(
+        "POST",
+        uploadUrl,
+        true
+      );
+
+
+      // PROGRESS
+
+      xhr.upload.addEventListener(
+        "progress",
+        function (event) {
+
+          if (
+            !event.lengthComputable
+          ) {
+            return;
+          }
+
+
+          const percent =
+            Math.round(
+              (
+                event.loaded /
+                event.total
+              ) * 100
+            );
+
+
+          updateUploadProgress(
+            percent,
+            "Video upload ho raha hai..."
+          );
+
+        }
+      );
+
+
+      // SUCCESS / ERROR
+
+      xhr.onload =
+        function () {
+
+          let data =
+            null;
+
+
+          try {
+
+            data =
+              JSON.parse(
+                xhr.responseText
+              );
+
+          } catch {
+
+            data =
+              null;
+
+          }
+
+
+          if (
+            xhr.status >= 200 &&
+            xhr.status < 300 &&
+            data &&
+            data.secure_url
+          ) {
+
+            resolve(data);
+
+            return;
+          }
+
+
+          reject(
+            new Error(
+              data?.error?.message ||
+              "Cloudinary upload failed."
+            )
+          );
+
+        };
+
+
+      xhr.onerror =
+        function () {
+
+          reject(
+            new Error(
+              "Network error. Upload failed."
+            )
+          );
+
+        };
+
+
+      xhr.onabort =
+        function () {
+
+          reject(
+            new Error(
+              "Upload cancel ho gaya."
+            )
+          );
+
+        };
+
+
+      // FORM DATA
+
+      const formData =
+        new FormData();
+
+
+      formData.append(
+        "file",
+        file
+      );
+
+
+      formData.append(
+        "api_key",
+        signatureData.api_key
+      );
+
+
+      formData.append(
+        "timestamp",
+        signatureData.timestamp
+      );
+
+
+      formData.append(
+        "signature",
+        signatureData.signature
+      );
+
+
+      xhr.send(
+        formData
+      );
+
+    }
+  );
+
+}
+
+
+// ---------------------------------------------------------
+// SAVE VIDEO TO NEON
+// ---------------------------------------------------------
+
+async function saveVideoMetadata(
+  cloudinaryData,
+  title,
+  description
+) {
+
+  if (
+    !currentUser ||
+    !currentUser.id
+  ) {
+
+    throw new Error(
+      "User session nahi mili."
+    );
+
+  }
+
+
+  const result =
+    await api(
+      "/api/videos",
+      {
+        method: "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json"
+        },
+
+        body:
+          JSON.stringify({
+
+            user_id:
+              currentUser.id,
+
+            title:
+              title,
+
+            description:
+              description,
+
+            video_url:
+              cloudinaryData.secure_url,
+
+            thumbnail_url:
+              "",
+
+            cloudinary_public_id:
+              cloudinaryData.public_id ||
+              "",
+
+            cloudinary_resource_type:
+              "video"
+
+          })
+      }
+    );
+
+
+  if (
+    result &&
+    result.ok === false
+  ) {
+
+    throw new Error(
+      result.error ||
+      "Video Neon database mein save nahi hua."
+    );
+
+  }
+
+
+  return result;
+}
+
+
+// ---------------------------------------------------------
+// MAIN UPLOAD
+// ---------------------------------------------------------
+
+async function uploadUserVideo() {
+
+  try {
+
+    if (
+      !currentUser ||
+      !currentUser.id
+    ) {
+
+      showToast(
+        "User session load nahi hui."
+      );
+
+      return;
+    }
+
+
+    const titleInput =
+      document.getElementById(
+        "videoTitle"
+      );
+
+
+    const descriptionInput =
+      document.getElementById(
+        "videoDescription"
+      );
+
+
+    const title =
+      titleInput
+        ?.value
+        ?.trim() ||
+        "";
+
+
+    const description =
+      descriptionInput
+        ?.value
+        ?.trim() ||
+        "";
+
+
+    if (!title) {
+
+      showToast(
+        "Video title likhiye."
+      );
+
+      titleInput?.focus();
+
+      return;
+    }
+
+
+    if (!selectedVideoFile) {
+
+      showToast(
+        "Gallery se video select karein."
+      );
+
+      return;
+    }
+
+
+    if (
+      selectedVideoFile.size >
+      MAX_VIDEO_SIZE
+    ) {
+
+      showToast(
+        "Video maximum 100 MB ka ho sakta hai."
+      );
+
+      return;
+    }
+
+
+    // LOCK
+
+    uploadVideoBtn.disabled =
+      true;
+
+    uploadProgressBox.classList.remove(
+      "hidden"
+    );
+
+
+    updateUploadProgress(
+      0,
+      "Secure upload prepare ho raha hai..."
+    );
+
+
+    uploadVideoBtn.textContent =
+      "Preparing...";
+
+
+    // -----------------------------------------------------
+    // SIGNATURE
+    // -----------------------------------------------------
+
+    const signatureData =
+      await getCloudinarySignature();
+
+
+    // -----------------------------------------------------
+    // CLOUDINARY
+    // -----------------------------------------------------
+
+    uploadVideoBtn.textContent =
+      "Uploading...";
+
+
+    const cloudinaryData =
+      await uploadToCloudinary(
+        selectedVideoFile,
+        signatureData
+      );
+
+
+    // -----------------------------------------------------
+    // NEON
+    // -----------------------------------------------------
+
+    updateUploadProgress(
+      100,
+      "Upload complete. Video save ho raha hai..."
+    );
+
+
+    uploadVideoBtn.textContent =
+      "Saving...";
+
+
+    await saveVideoMetadata(
+      cloudinaryData,
+      title,
+      description
+    );
+
+
+    // -----------------------------------------------------
+    // SUCCESS
+    // -----------------------------------------------------
+
+    showToast(
+      "🎉 Video successfully upload ho gaya!"
+    );
+
+
+    // RESET TITLE
+
+    if (titleInput) {
+      titleInput.value =
+        "";
+    }
+
+
+    if (descriptionInput) {
+      descriptionInput.value =
+        "";
+    }
+
+
+    if (videoFileInput) {
+      videoFileInput.value =
+        "";
+    }
+
+
+    selectedVideoFile =
+      null;
+
+
+    if (videoFileName) {
+
+      videoFileName.textContent =
+        "Gallery se video choose karein";
+
+    }
+
+
+    if (uploadPreviewVideo) {
+
+      uploadPreviewVideo.pause();
+
+      uploadPreviewVideo.removeAttribute(
+        "src"
+      );
+
+      uploadPreviewVideo.load();
+
+    }
+
+
+    if (uploadPreview) {
+
+      uploadPreview.classList.add(
+        "hidden"
+      );
+
+    }
+
+
+    // REFRESH FEED
+
+    if (
+      typeof loadVideos ===
+      "function"
+    ) {
+
+      await loadVideos();
+
+    }
+
+
+    // REFRESH MY VIDEOS
+
+    if (
+      typeof loadMyVideos ===
+      "function"
+    ) {
+
+      await loadMyVideos();
+
+    }
+
+
+    // BUTTON
+
+    uploadVideoBtn.disabled =
+      false;
+
+    uploadVideoBtn.textContent =
+      "🎥 Upload Video";
+
+
+    setTimeout(
+      function () {
+
+        uploadProgressBox.classList.add(
+          "hidden"
+        );
+
+        updateUploadProgress(
+          0,
+          "Uploading..."
+        );
+
+      },
+      1500
+    );
+
+
+  } catch (error) {
+
+    console.error(
+      "DekhoEarn upload error:",
+      error
+    );
+
+
+    showToast(
+      error?.message ||
+      "Video upload failed."
+    );
+
+
+    uploadVideoBtn.disabled =
+      false;
+
+    uploadVideoBtn.textContent =
+      "🎥 Upload Video";
+
+
+    updateUploadProgress(
+      0,
+      "Upload failed"
+    );
+
+  }
+
+}
+
+
+// ---------------------------------------------------------
+// BUTTON
+// ---------------------------------------------------------
+
+if (uploadVideoBtn) {
+
+  uploadVideoBtn.addEventListener(
+    "click",
+    uploadUserVideo
+  );
+
+}
