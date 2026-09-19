@@ -1,489 +1,137 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
+<section id="uploadPage" class="page-section">
 
-  <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-
-  <meta name="theme-color" content="#16a34a">
-  <meta name="description"
-        content="DekhoEarn - Dekho. Earn Karo. Reward Lo.">
-
-  <link rel="manifest" href="/manifest.json">
-  <link rel="stylesheet" href="/style.css">
-
-  <title>DekhoEarn</title>
-</head>
-
-<body>
-
-<header class="topbar">
-  <div class="brand">
-    <div class="logo">DekhoEarn</div>
-    <div class="tagline">Dekho. Earn Karo. Reward Lo.</div>
+  <div class="section-header">
+    <div>
+      <h2>Upload Video 🎥</h2>
+      <p>Apna video DekhoEarn par share karein</p>
+    </div>
   </div>
 
-  <button id="installBtn" class="install-btn" hidden>
-    Install
-  </button>
-</header>
+  <div class="upload-card">
 
-<div id="toast" class="toast"></div>
+    <label class="upload-label">
+      Video Title
+    </label>
 
-<main>
+    <input
+      type="text"
+      id="videoTitle"
+      class="input"
+      maxlength="120"
+      placeholder="Video ka title"
+      autocomplete="off"
+    />
 
-  <!-- HOME -->
-  <section id="homeSection" class="page-section">
 
-    <section class="welcome">
-      <p class="small-label">WELCOME 👋</p>
-      <h1 id="welcomeName">DekhoEarn</h1>
-      <p>Videos dekho, creators ko support karo aur rewards earn karo.</p>
-    </section>
+    <label class="upload-label">
+      Description
+    </label>
 
-    <section class="wallet-card">
-      <div class="wallet-title">Your Points</div>
-      <div id="points" class="points">0</div>
-      <div class="wallet-label">DekhoEarn Points</div>
-    </section>
+    <textarea
+      id="videoDescription"
+      class="input textarea"
+      maxlength="1000"
+      placeholder="Video ke baare mein likhein..."
+    ></textarea>
 
-    <section class="stats">
 
-      <div class="stat-card">
-        <div class="stat-icon">🎬</div>
-        <strong id="videosWatched">0</strong>
-        <span>Videos Watched</span>
+    <label class="upload-label">
+      Video Select Karein
+    </label>
+
+    <label
+      for="videoFile"
+      class="video-picker"
+    >
+
+      <div class="video-picker-icon">
+        🎥
       </div>
 
-      <div class="stat-card">
-        <div class="stat-icon">🎁</div>
-        <strong id="todayEarned">0</strong>
-        <span>Today's Points</span>
+      <div class="video-picker-content">
+
+        <strong id="videoFileName">
+          Gallery se video choose karein
+        </strong>
+
+        <small>
+          MP4, MOV, WebM • Maximum 100 MB
+        </small>
+
       </div>
 
-      <div class="stat-card">
-        <div class="stat-icon">👥</div>
-        <strong id="followersCount">0</strong>
-        <span>Followers</span>
-      </div>
+    </label>
 
-      <div class="stat-card">
-        <div class="stat-icon">⏱️</div>
-        <strong id="watchHours">0</strong>
-        <span>Watch Hours</span>
-      </div>
-
-    </section>
-
-    <section class="quick-actions">
-
-      <button onclick="showPage('watchSection')">
-        <span>▶️</span>
-        <b>Watch & Earn</b>
-        <small>Watch videos</small>
-      </button>
-
-      <button onclick="claimDaily()">
-        <span>🎁</span>
-        <b>Daily Bonus</b>
-        <small>+10 points</small>
-      </button>
-
-      <button onclick="showPage('uploadSection')">
-        <span>➕</span>
-        <b>Upload</b>
-        <small>Share your video</small>
-      </button>
-
-      <button onclick="showPage('profileSection')">
-        <span>👤</span>
-        <b>Profile</b>
-        <small>Your account</small>
-      </button>
-
-    </section>
-
-    <section class="daily-card">
-
-      <div>
-        <div class="daily-title">🎁 Daily Reward</div>
-        <p>Har din login karke bonus points collect karo.</p>
-      </div>
-
-      <button id="dailyBtn" onclick="claimDaily()">
-        Claim +10
-      </button>
-
-    </section>
-
-  </section>
+    <input
+      type="file"
+      id="videoFile"
+      accept="video/*"
+      hidden
+    />
 
 
-  <!-- WATCH -->
-  <section id="watchSection" class="page-section hidden">
+    <!-- VIDEO PREVIEW -->
 
-    <div class="page-header">
-      <button class="back-btn" onclick="showPage('homeSection')">←</button>
-      <div>
-        <h2>Watch & Earn</h2>
-        <p>Videos dekho aur eligible watch par points earn karo.</p>
-      </div>
-    </div>
-
-    <div id="videoFeed" class="video-feed">
-      <div class="loading">Videos load ho rahe hain...</div>
-    </div>
-
-  </section>
-
-
-  <!-- VIDEO PLAYER -->
-  <section id="playerSection" class="page-section hidden">
-
-    <div class="page-header">
-      <button class="back-btn" onclick="showPage('watchSection')">←</button>
-      <div>
-        <h2 id="playerTitle">Video</h2>
-        <p id="playerCreator">Creator</p>
-      </div>
-    </div>
-
-    <div class="player-card">
+    <div
+      id="uploadPreview"
+      class="upload-preview hidden"
+    >
 
       <video
-        id="videoPlayer"
+        id="uploadPreviewVideo"
         controls
         playsinline
-        preload="metadata">
-      </video>
+      ></video>
 
-      <div class="player-info">
+    </div>
 
-        <h2 id="playerVideoTitle">Video</h2>
 
-        <p id="playerDescription"></p>
+    <!-- PROGRESS -->
 
-        <div class="video-stats">
-          <span id="playerViews">0 views</span>
-          <span id="playerLikes">0 likes</span>
-        </div>
+    <div
+      id="uploadProgressBox"
+      class="upload-progress-box hidden"
+    >
 
-        <div class="player-actions">
+      <div class="upload-progress-text">
 
-          <button id="likeBtn">
-            ❤️ Like
-          </button>
+        <span id="uploadProgressText">
+          Uploading...
+        </span>
 
-          <button onclick="showComments()">
-            💬 Comments
-          </button>
+        <span id="uploadProgressPercent">
+          0%
+        </span>
 
-          <button id="reportBtn">
-            🚩 Report
-          </button>
+      </div>
 
-        </div>
+      <div class="progress-track">
 
-        <div id="watchProgress" class="watch-progress">
-          Watch at least 10 seconds to become eligible for the watch reward.
-        </div>
+        <div
+          id="uploadProgressBar"
+          class="progress-bar"
+        ></div>
 
       </div>
 
     </div>
 
-    <div class="comments-box">
-
-      <h3>Comments</h3>
-
-      <div class="comment-input">
-        <input
-          id="commentInput"
-          type="text"
-          maxlength="500"
-          placeholder="Write a comment...">
-
-        <button onclick="addComment()">
-          Send
-        </button>
-      </div>
-
-      <div id="commentsList"></div>
-
-    </div>
-
-  </section>
-
-
-  <!-- EARN -->
-  <section id="earnSection" class="page-section hidden">
-
-    <div class="page-header">
-      <div>
-        <h2>Earn 🪙</h2>
-        <p>Available reward options</p>
-      </div>
-    </div>
-
-    <div class="earn-card">
-      <div class="earn-icon">🎬</div>
-      <div>
-        <h3>Watch Videos</h3>
-        <p>Eligible completed video watch</p>
-      </div>
-      <strong>+1</strong>
-    </div>
-
-    <div class="earn-card">
-      <div class="earn-icon">🎁</div>
-      <div>
-        <h3>Daily Bonus</h3>
-        <p>Once per day</p>
-      </div>
-      <strong>+10</strong>
-    </div>
-
-    <div class="earn-card">
-      <div class="earn-icon">📺</div>
-      <div>
-        <h3>Rewarded Ad</h3>
-        <p>Only after a genuine rewarded-ad completion</p>
-      </div>
-      <button onclick="completeRewardedAd()">
-        Earn +5
-      </button>
-    </div>
-
-    <div class="earn-note">
-      <b>Important:</b>
-      DekhoEarn points are internal reward points. Ad clicks are never rewarded.
-    </div>
-
-    <section class="history-card">
-      <h3>Points History</h3>
-      <div id="pointsHistory">
-        Loading...
-      </div>
-    </section>
-
-  </section>
-
-
-  <!-- UPLOAD -->
-  <section id="uploadSection" class="page-section hidden">
-
-    <div class="page-header">
-      <button class="back-btn" onclick="showPage('homeSection')">←</button>
-      <div>
-        <h2>Upload Video ➕</h2>
-        <p>Apna original content share karo.</p>
-      </div>
-    </div>
-
-    <div class="form-card">
-
-      <label>Video Title</label>
-      <input
-        id="uploadTitle"
-        type="text"
-        maxlength="200"
-        placeholder="Enter video title">
-
-      <label>Description</label>
-      <textarea
-        id="uploadDescription"
-        maxlength="2000"
-        placeholder="Tell viewers about your video"></textarea>
-
-      <label>Video URL</label>
-      <input
-        id="uploadUrl"
-        type="url"
-        placeholder="https://example.com/video.mp4">
-
-      <label>Thumbnail URL <span>(optional)</span></label>
-      <input
-        id="uploadThumbnail"
-        type="url"
-        placeholder="https://example.com/thumbnail.jpg">
-
-      <button class="primary-btn" onclick="uploadVideo()">
-        Publish Video
-      </button>
-
-      <div class="form-note">
-        Copyrighted or copied content may be placed under review.
-      </div>
-
-    </div>
-
-    <section class="my-videos">
-      <h3>My Videos</h3>
-      <div id="myVideosList">
-        Load your videos after publishing.
-      </div>
-    </section>
-
-  </section>
-
-
-  <!-- PROFILE -->
-  <section id="profileSection" class="page-section hidden">
-
-    <div class="profile-card">
-
-      <div class="profile-avatar" id="profileAvatar">
-        👤
-      </div>
-
-      <h2 id="profileName">User</h2>
-      <p id="profileUsername">@user</p>
-
-      <div class="profile-stats">
-
-        <div>
-          <strong id="profilePoints">0</strong>
-          <span>Points</span>
-        </div>
-
-        <div>
-          <strong id="profileFollowers">0</strong>
-          <span>Followers</span>
-        </div>
-
-        <div>
-          <strong id="profileVideos">0</strong>
-          <span>Watched</span>
-        </div>
-
-      </div>
-
-    </div>
-
-
-    <div class="profile-menu">
-
-      <button onclick="showPage('creatorSection')">
-        <span>👑</span>
-        <div>
-          <b>Creator Studio</b>
-          <small>Creator stats & monetization</small>
-        </div>
-        <span>›</span>
-      </button>
-
-      <button onclick="showPage('earnSection')">
-        <span>🪙</span>
-        <div>
-          <b>Points & History</b>
-          <small>See your earning history</small>
-        </div>
-        <span>›</span>
-      </button>
-
-      <button onclick="loadUser(true)">
-        <span>🔄</span>
-        <div>
-          <b>Refresh Account</b>
-          <small>Sync with server</small>
-        </div>
-        <span>›</span>
-      </button>
-
-    </div>
-
-  </section>
-
-
-  <!-- CREATOR -->
-  <section id="creatorSection" class="page-section hidden">
-
-    <div class="page-header">
-      <button class="back-btn" onclick="showPage('profileSection')">←</button>
-      <div>
-        <h2>Creator Studio 👑</h2>
-        <p>Grow your audience and track monetization.</p>
-      </div>
-    </div>
-
-    <div class="creator-stats">
-
-      <div class="creator-stat">
-        <strong id="creatorFollowers">0</strong>
-        <span>Followers</span>
-      </div>
-
-      <div class="creator-stat">
-        <strong id="creatorHours">0</strong>
-        <span>Watch Hours</span>
-      </div>
-
-      <div class="creator-stat">
-        <strong id="creatorVideos">0</strong>
-        <span>Videos</span>
-      </div>
-
-    </div>
-
-    <div id="monetizationStatus" class="monetization-card">
-      Monetization information loading...
-    </div>
 
     <button
-      id="monetizationBtn"
+      type="button"
+      id="uploadVideoBtn"
       class="primary-btn"
-      onclick="applyMonetization()">
-      Apply for Monetization
+    >
+      🎥 Upload Video
     </button>
 
-    <div class="creator-note">
-      DekhoEarn creator monetization eligibility:
-      <b>1,000 followers + 1,000 eligible watch-hours.</b>
-    </div>
 
-  </section>
+    <p class="upload-note">
+      Video Cloudinary par securely upload hoga.
+      Video ki information DekhoEarn ke Neon database
+      mein save hogi.
+    </p>
 
-</main>
+  </div>
 
-
-<nav class="bottom-nav">
-
-  <button id="navHome"
-          class="active"
-          onclick="showPage('homeSection')">
-    <span>🏠</span>
-    <small>Home</small>
-  </button>
-
-  <button id="navWatch"
-          onclick="showPage('watchSection')">
-    <span>🎬</span>
-    <small>Watch</small>
-  </button>
-
-  <button id="navEarn"
-          onclick="showPage('earnSection')">
-    <span>🪙</span>
-    <small>Earn</small>
-  </button>
-
-  <button id="navUpload"
-          onclick="showPage('uploadSection')">
-    <span>➕</span>
-    <small>Upload</small>
-  </button>
-
-  <button id="navProfile"
-          onclick="showPage('profileSection')">
-    <span>👤</span>
-    <small>Profile</small>
-  </button>
-
-</nav>
-
-
-<script src="/app.js"></script>
-
-</body>
-</html>
+</section>
