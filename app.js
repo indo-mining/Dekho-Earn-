@@ -1,194 +1,141 @@
 /*
 =========================================================
- DEKHOEARN FRONTEND CONTROLLER
+ DEKHOEARN FRONTEND
  Version 3.0.0
  --------------------------------------------------------
- Compatible with DekhoEarn Server v3.0.0
- Features:
- - User
- - Video Feed
- - Video Player
- - Watch Reward
- - Like / Comment / Report
- - Daily Reward
- - Rewarded Ad
- - Points History
- - Gallery Video Upload
- - Cloudinary Direct Upload
- - Upload Progress
- - Video Preview
- - Neon Metadata Save
- - My Videos
- - Delete Video
- - Creator Stats
- - PWA Install
+ Login / Register
+ Video Feed
+ Watch Reward
+ Cloudinary Upload
+ Neon Metadata
+ Likes / Comments
+ Daily Reward
+ Creator
+ Profile
+ PWA
 =========================================================
 */
 
 "use strict";
 
-/* ======================================================
-   CONFIG
-====================================================== */
-
 const API_BASE = "";
 
-const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100 MB
-
-/* ======================================================
-   GLOBAL STATE
-====================================================== */
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
 
 let currentUser = null;
 let currentVideo = null;
 
 let watchSeconds = 0;
 let watchRewardSent = false;
-let watchTimer = null;
-
-let deferredPrompt = null;
 
 let selectedVideoFile = null;
-let previewObjectUrl = null;
+let uploadObjectUrl = null;
 
-let uploadBusy = false;
+let watchTimer = null;
+
 
 /* ======================================================
-   BASIC HELPERS
+   DOM HELPER
 ====================================================== */
 
 function $(id) {
   return document.getElementById(id);
 }
 
-function escapeHTML(value) {
-  return String(value ?? "").replace(/[&<>"']/g, function (char) {
-    return {
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#039;"
-    }[char];
-  });
-}
-
-function formatNumber(value) {
-  const number = Number(value || 0);
-
-  if (number >= 1000000) {
-    return (number / 1000000).toFixed(1) + "M";
-  }
-
-  if (number >= 1000) {
-    return (number / 1000).toFixed(1) + "K";
-  }
-
-  return number.toLocaleString();
-}
-
-function formatVideoSize(bytes) {
-  const size = Number(bytes || 0);
-
-  if (size < 1024) {
-    return size + " B";
-  }
-
-  if (size < 1024 * 1024) {
-    return (size / 1024).toFixed(1) + " KB";
-  }
-
-  if (size < 1024 * 1024 * 1024) {
-    return (size / (1024 * 1024)).toFixed(1) + " MB";
-  }
-
-  return (size / (1024 * 1024 * 1024)).toFixed(2) + " GB";
-}
-
-function formatDate(date) {
-  if (!date) return "";
-
-  try {
-    return new Date(date).toLocaleString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
-    });
-  } catch {
-    return "";
-  }
-}
 
 /* ======================================================
    TOAST
 ====================================================== */
 
-let toastTimer = null;
-
 function showToast(message, type = "normal") {
-  let toast = $("toast");
+  const toast = $("toast");
 
-  if (!toast) {
-    toast = document.createElement("div");
-    toast.id = "toast";
-    toast.className = "toast";
-    document.body.appendChild(toast);
-  }
+  if (!toast) return;
 
   toast.textContent = message;
+  toast.classList.remove(
+    "hidden",
+    "success",
+    "error"
+  );
 
-  toast.classList.remove("success", "error", "normal");
-  toast.classList.add(type);
+  if (type === "success") {
+    toast.classList.add("success");
+  }
 
-  toast.style.display = "block";
+  if (type === "error") {
+    toast.classList.add("error");
+  }
 
-  clearTimeout(toastTimer);
+  clearTimeout(showToast.timer);
 
-  toastTimer = setTimeout(() => {
-    toast.style.display = "none";
+  showToast.timer = setTimeout(() => {
+    toast.classList.add("hidden");
   }, 3000);
 }
 
+
 /* ======================================================
-   API HELPER
+   ESCAPE HTML
 ====================================================== */
 
-async function api(path, options = {}) {
-  const config = {
-    method: options.method || "GET",
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {})
-    }
+function escapeHTML(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+
+/* ======================================================
+   API
+====================================================== */
+
+async function api(
+  endpoint,
+  options = {}
+) {
+  const headers = {
+    ...(options.headers || {}),
   };
 
+  if (
+    options.body &&
+    !(options.body instanceof FormData)
+  ) {
+    headers["Content-Type"] =
+      "application/json";
+  }
+
   if (currentUser?.id) {
-    config.headers["x-user-id"] = currentUser.id;
+    headers["x-user-id"] =
+      String(currentUser.id);
   }
 
-  if (options.body !== undefined) {
-    config.body =
-      typeof options.body === "string"
-        ? options.body
-        : JSON.stringify(options.body);
-  }
+  const response = await fetch(
+    API_BASE + endpoint,
+    {
+      ...options,
+      headers,
+    }
+  );
 
-  const response = await fetch(API_BASE + path, config);
-
-  let data = {};
+  let data;
 
   try {
     data = await response.json();
   } catch {
-    data = {};
+    data = {
+      ok: false,
+      message: "Invalid server response.",
+    };
   }
 
   if (!response.ok || data.ok === false) {
     throw new Error(
       data.message ||
-      data.error ||
       `Request failed (${response.status})`
     );
   }
@@ -196,669 +143,772 @@ async function api(path, options = {}) {
   return data;
 }
 
+
 /* ======================================================
-   LOCAL USER
+   LOCAL STORAGE
 ====================================================== */
 
-function saveLocalUser() {
-  if (!currentUser) return;
+const AUTH_KEY =
+  "dekhoearn_logged_user";
+
+
+function saveCurrentUser(user) {
+  currentUser = user;
 
   localStorage.setItem(
-    "dekhoearn_user",
-    JSON.stringify(currentUser)
+    AUTH_KEY,
+    JSON.stringify(user)
   );
 }
 
-function loadLocalUser() {
+
+function getSavedUser() {
   try {
-    const saved = localStorage.getItem("dekhoearn_user");
+    const value =
+      localStorage.getItem(AUTH_KEY);
 
-    if (!saved) return null;
+    if (!value) return null;
 
-    return JSON.parse(saved);
+    return JSON.parse(value);
   } catch {
-    localStorage.removeItem("dekhoearn_user");
     return null;
   }
 }
 
+
+function clearSavedUser() {
+  localStorage.removeItem(AUTH_KEY);
+}
+
+
 /* ======================================================
-   USER CREATE
+   AUTH SCREEN
 ====================================================== */
 
-async function createUser() {
-  const savedUser = loadLocalUser();
+function showAuth() {
+  $("authScreen")?.classList.remove("hidden");
+  $("appShell")?.classList.add("hidden");
+}
 
-  if (savedUser?.id) {
-    currentUser = savedUser;
-    return currentUser;
-  }
+
+function showApp() {
+  $("authScreen")?.classList.add("hidden");
+  $("appShell")?.classList.remove("hidden");
+}
+
+
+/* ======================================================
+   LOGIN / REGISTER SWITCH
+====================================================== */
+
+function setupAuthSwitches() {
+
+  $("showRegisterBtn")?.addEventListener(
+    "click",
+    () => {
+      $("loginBox")?.classList.add("hidden");
+      $("registerBox")?.classList.remove("hidden");
+    }
+  );
+
+
+  $("showLoginBtn")?.addEventListener(
+    "click",
+    () => {
+      $("registerBox")?.classList.add("hidden");
+      $("loginBox")?.classList.remove("hidden");
+    }
+  );
+
+}
+
+
+/* ======================================================
+   LOGIN
+====================================================== */
+
+async function login() {
 
   const username =
-    "Guest" +
-    Math.floor(10000 + Math.random() * 89999);
+    $("loginUsername")?.value.trim();
 
-  const firstName = "Guest";
+  const password =
+    $("loginPassword")?.value || "";
+
+  if (!username) {
+    showToast(
+      "Username enter karein.",
+      "error"
+    );
+    return;
+  }
+
+  if (!password) {
+    showToast(
+      "Password enter karein.",
+      "error"
+    );
+    return;
+  }
+
+  const button = $("loginBtn");
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Logging in...";
+  }
+
+  try {
+
+    const data = await api(
+      "/api/auth/login",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          username,
+          password,
+        }),
+      }
+    );
+
+    saveCurrentUser(data.user);
+
+    showApp();
+
+    await loadUser();
+
+    await loadVideos();
+
+    showToast(
+      "Login successful 🎉",
+      "success"
+    );
+
+  } catch (error) {
+
+    showToast(
+      error.message,
+      "error"
+    );
+
+  } finally {
+
+    if (button) {
+      button.disabled = false;
+      button.textContent = "🔐 Login";
+    }
+
+  }
+}
+
+
+/* ======================================================
+   REGISTER
+====================================================== */
+
+async function register() {
+
+  const firstName =
+    $("registerName")?.value.trim();
+
+  const username =
+    $("registerUsername")?.value.trim();
+
+  const password =
+    $("registerPassword")?.value || "";
 
   const referralCode =
-    localStorage.getItem("dekhoearn_referral_code") || "";
+    $("registerReferral")?.value.trim();
 
-  const data = await api("/api/user", {
-    method: "POST",
-    body: {
-      username,
-      first_name: firstName,
-      referral_code: referralCode
+  if (!username) {
+    showToast(
+      "Username enter karein.",
+      "error"
+    );
+    return;
+  }
+
+  if (username.length < 3) {
+    showToast(
+      "Username minimum 3 characters ka hona chahiye.",
+      "error"
+    );
+    return;
+  }
+
+  if (password.length < 6) {
+    showToast(
+      "Password minimum 6 characters ka hona chahiye.",
+      "error"
+    );
+    return;
+  }
+
+  const button = $("registerBtn");
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Creating...";
+  }
+
+  try {
+
+    const data = await api(
+      "/api/auth/register",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          first_name: firstName,
+          username,
+          password,
+          referral_code: referralCode,
+        }),
+      }
+    );
+
+    saveCurrentUser(data.user);
+
+    showApp();
+
+    await loadUser();
+
+    await loadVideos();
+
+    showToast(
+      "Account created successfully 🎉",
+      "success"
+    );
+
+  } catch (error) {
+
+    showToast(
+      error.message,
+      "error"
+    );
+
+  } finally {
+
+    if (button) {
+      button.disabled = false;
+      button.textContent =
+        "🚀 Create Account";
     }
-  });
 
-  currentUser = data.user;
-
-  saveLocalUser();
-
-  return currentUser;
+  }
 }
+
+
+/* ======================================================
+   LOGOUT
+====================================================== */
+
+async function logout() {
+
+  try {
+    await api(
+      "/api/auth/logout",
+      {
+        method: "POST",
+      }
+    );
+  } catch {
+    // Local logout should still work.
+  }
+
+  currentUser = null;
+  currentVideo = null;
+
+  clearSavedUser();
+
+  localStorage.removeItem(
+    "dekhoearn_user"
+  );
+
+  if (watchTimer) {
+    clearInterval(watchTimer);
+    watchTimer = null;
+  }
+
+  $("loginPassword").value = "";
+
+  showAuth();
+
+  showToast(
+    "Logout successful.",
+    "success"
+  );
+}
+
 
 /* ======================================================
    LOAD USER
 ====================================================== */
 
 async function loadUser() {
-  if (!currentUser?.id) return;
+
+  if (!currentUser?.id) {
+    return;
+  }
 
   try {
+
     const data = await api(
-      "/api/user/" +
-      encodeURIComponent(currentUser.id)
+      `/api/user/${encodeURIComponent(
+        currentUser.id
+      )}`
     );
 
-    if (data.user) {
-      currentUser = data.user;
-      saveLocalUser();
-      updateUserUI();
-    }
+    currentUser = data.user;
+
+    saveCurrentUser(
+      currentUser
+    );
+
+    updateUserUI();
+
   } catch (error) {
-    console.error("loadUser:", error);
+
+    console.error(
+      "LOAD USER:",
+      error
+    );
+
+    clearSavedUser();
+    currentUser = null;
+
+    showAuth();
   }
 }
 
+
 /* ======================================================
-   UPDATE USER UI
+   USER UI
 ====================================================== */
 
 function updateUserUI() {
+
   if (!currentUser) return;
 
-  const points = Number(currentUser.points || 0);
-  const watched = Number(currentUser.watched_videos || 0);
-  const today = Number(currentUser.today_earned || 0);
-  const videos = Number(currentUser.video_count || 0);
-  const views = Number(currentUser.total_views || 0);
+  const name =
+    currentUser.first_name ||
+    currentUser.username ||
+    "User";
 
-  const elements = {
-    topPoints: points,
-    earnPoints: points,
-    earnWatched: watched,
-    earnToday: today,
-    profilePoints: points,
-    profileVideos: videos,
-    profileViews: views
-  };
+  const username =
+    currentUser.username || "";
 
-  Object.keys(elements).forEach((id) => {
-    const element = $(id);
+  const points =
+    Number(currentUser.points || 0);
 
-    if (element) {
-      element.textContent =
-        formatNumber(elements[id]);
-    }
-  });
+  const watched =
+    Number(
+      currentUser.watched_videos || 0
+    );
 
-  const profileName = $("profileName");
+  const earned =
+    Number(
+      currentUser.total_earned || 0
+    );
 
-  if (profileName) {
-    profileName.textContent =
-      currentUser.first_name ||
-      currentUser.username ||
-      "User";
+  if ($("headerGreeting")) {
+    $("headerGreeting").textContent =
+      `Hello, ${name} 👋`;
   }
 
-  const profileId = $("profileId");
+  if ($("headerPoints")) {
+    $("headerPoints").textContent =
+      points.toLocaleString();
+  }
 
-  if (profileId) {
-    profileId.textContent =
-      "User ID: " + currentUser.id;
+  if ($("profileName")) {
+    $("profileName").textContent =
+      name;
+  }
+
+  if ($("profileUsername")) {
+    $("profileUsername").textContent =
+      `@${username}`;
+  }
+
+  if ($("profilePoints")) {
+    $("profilePoints").textContent =
+      points.toLocaleString();
+  }
+
+  if ($("profileVideos")) {
+    $("profileVideos").textContent =
+      watched.toLocaleString();
+  }
+
+  if ($("profileEarned")) {
+    $("profileEarned").textContent =
+      earned.toLocaleString();
   }
 }
+
 
 /* ======================================================
    NAVIGATION
 ====================================================== */
 
-const PAGE_IDS = [
+const pages = [
   "homeSection",
   "watchSection",
   "playerSection",
   "earnSection",
   "uploadSection",
   "profileSection",
-  "creatorSection"
+  "creatorSection",
 ];
 
-function findPage(name) {
-  const aliases = {
-    home: [
-      "homeSection",
-      "homePage",
-      "home"
-    ],
 
-    watch: [
-      "watchSection",
-      "watchPage",
-      "watch"
-    ],
+function showPage(pageId) {
 
-    player: [
-      "playerSection",
-      "playerPage",
-      "player"
-    ],
-
-    earn: [
-      "earnSection",
-      "earnPage",
-      "earn"
-    ],
-
-    upload: [
-      "uploadSection",
-      "uploadPage",
-      "upload"
-    ],
-
-    profile: [
-      "profileSection",
-      "profilePage",
-      "profile"
-    ],
-
-    creator: [
-      "creatorSection",
-      "creatorPage",
-      "creator"
-    ]
-  };
-
-  const list = aliases[name] || [];
-
-  for (const id of list) {
-    const element = $(id);
-
-    if (element) {
-      return element;
-    }
-  }
-
-  return null;
-}
-
-function showPage(pageName) {
-  const target = findPage(pageName);
-
-  document.querySelectorAll(
-    ".page-section, .page"
-  ).forEach((section) => {
-    section.classList.remove("active");
-    section.classList.add("hidden");
-  });
-
-  if (target) {
-    target.classList.remove("hidden");
-    target.classList.add("active");
-  }
-
-  document.querySelectorAll(
-    "[data-page], [data-section]"
-  ).forEach((button) => {
-    const value =
-      button.dataset.page ||
-      button.dataset.section;
-
-    button.classList.toggle(
+  pages.forEach((id) => {
+    $(id)?.classList.toggle(
       "active",
-      value === pageName
+      id === pageId
     );
   });
 
-  if (pageName === "home") {
+  document
+    .querySelectorAll(".nav-btn")
+    .forEach((button) => {
+
+      button.classList.toggle(
+        "active",
+        button.dataset.page === pageId
+      );
+
+    });
+
+
+  if (pageId === "homeSection") {
     loadVideos();
   }
 
-  if (pageName === "earn") {
+  if (pageId === "watchSection") {
+    loadWatchHistory();
+  }
+
+  if (pageId === "earnSection") {
     loadPointsHistory();
   }
 
-  if (pageName === "profile") {
+  if (pageId === "profileSection") {
     loadMyVideos();
   }
 
-  if (pageName === "creator") {
-    loadCreatorStats();
+  if (pageId === "creatorSection") {
+    loadCreatorDashboard();
   }
 }
 
-/* ======================================================
-   NAVIGATION EVENTS
-====================================================== */
 
 function setupNavigation() {
-  document.addEventListener("click", (event) => {
-    const button =
-      event.target.closest("[data-page]") ||
-      event.target.closest("[data-section]");
 
-    if (!button) return;
+  document
+    .querySelectorAll(".nav-btn")
+    .forEach((button) => {
 
-    const page =
-      button.dataset.page ||
-      button.dataset.section;
+      button.addEventListener(
+        "click",
+        () => {
 
-    if (!page) return;
+          const page =
+            button.dataset.page;
 
-    event.preventDefault();
-
-    showPage(page);
-  });
-}
-
-/* ======================================================
-   VIDEO THUMBNAIL
-====================================================== */
-
-function getThumbnail(video) {
-  if (video.thumbnail_url) {
-    return video.thumbnail_url;
-  }
-
-  if (
-    video.cloudinary_public_id &&
-    video.cloudinary_resource_type === "video"
-  ) {
-    return "";
-  }
-
-  return "";
-}
-
-/* ======================================================
-   VIDEO CARD
-====================================================== */
-
-function renderVideoCard(video, options = {}) {
-  const own =
-    options.own === true ||
-    String(video.user_id) ===
-    String(currentUser?.id);
-
-  const thumbnail =
-    getThumbnail(video);
-
-  return `
-    <article class="video-card">
-
-      ${
-        thumbnail
-          ? `
-            <img
-              class="video-thumb"
-              src="${escapeHTML(thumbnail)}"
-              alt="${escapeHTML(video.title)}"
-              loading="lazy"
-              onerror="this.style.display='none'"
-            >
-          `
-          : `
-            <div class="video-thumb video-placeholder">
-              🎥
-            </div>
-          `
-      }
-
-      <div class="video-info">
-
-        <h3 class="video-title">
-          ${escapeHTML(video.title)}
-        </h3>
-
-        <p class="video-description">
-          ${escapeHTML(
-            video.description || ""
-          )}
-        </p>
-
-        <div class="video-meta">
-          <span>
-            👤
-            ${escapeHTML(
-              video.creator_name ||
-              video.username ||
-              "Creator"
-            )}
-          </span>
-
-          <span>
-            👁️
-            ${formatNumber(video.views)}
-          </span>
-
-          <span>
-            ❤️
-            ${formatNumber(video.likes_count)}
-          </span>
-        </div>
-
-        <div class="video-actions">
-
-          <button
-            type="button"
-            class="btn primary-btn"
-            onclick="openVideo(${Number(video.id)})"
-          >
-            ▶️ Watch
-          </button>
-
-          <button
-            type="button"
-            class="btn"
-            onclick="likeVideo(${Number(video.id)})"
-          >
-            ❤️ Like
-          </button>
-
-          ${
-            own
-              ? `
-                <button
-                  type="button"
-                  class="btn danger-btn"
-                  onclick="deleteVideo(${Number(video.id)})"
-                >
-                  🗑️ Delete
-                </button>
-              `
-              : ""
+          if (page) {
+            showPage(page);
           }
 
-        </div>
+        }
+      );
 
-      </div>
+    });
 
-    </article>
-  `;
 }
 
+
 /* ======================================================
-   LOAD VIDEOS
+   VIDEO FEED
 ====================================================== */
 
 async function loadVideos() {
-  const feed =
-    $("videoFeed") ||
-    $("feed") ||
-    $("videosList");
+
+  const feed = $("videoFeed");
 
   if (!feed) return;
 
   feed.innerHTML = `
-    <div class="loading">
-      Videos load ho rahe hain...
+    <div class="loading-card">
+      Loading videos...
     </div>
   `;
 
   try {
+
     const data =
       await api("/api/videos");
 
-    const videos =
-      Array.isArray(data.videos)
-        ? data.videos
-        : [];
-
-    if (!videos.length) {
-      feed.innerHTML = `
-        <div class="empty-state">
-          <div>🎥</div>
-          <h3>Abhi koi video nahi hai</h3>
-          <p>Sabse pehla video aap upload karein.</p>
-        </div>
-      `;
-
-      return;
-    }
-
-    feed.innerHTML =
-      videos
-        .map((video) =>
-          renderVideoCard(video)
-        )
-        .join("");
+    renderVideos(
+      data.videos || [],
+      feed
+    );
 
   } catch (error) {
-    console.error("loadVideos:", error);
 
     feed.innerHTML = `
-      <div class="empty-state">
-        <h3>Videos load nahi ho paaye</h3>
-        <p>${escapeHTML(error.message)}</p>
-
-        <button
-          class="btn primary-btn"
-          onclick="loadVideos()"
-        >
-          🔄 Retry
-        </button>
+      <div class="empty-card">
+        ${escapeHTML(error.message)}
       </div>
     `;
+
   }
 }
+
+
+function renderVideos(
+  videos,
+  container
+) {
+
+  if (!videos.length) {
+
+    container.innerHTML = `
+      <div class="empty-card">
+        <div class="empty-icon">🎬</div>
+        <h3>No videos yet</h3>
+        <p>Sabse pehle apna video upload karein.</p>
+      </div>
+    `;
+
+    return;
+  }
+
+
+  container.innerHTML =
+    videos.map((video) => {
+
+      const title =
+        escapeHTML(video.title);
+
+      const description =
+        escapeHTML(
+          video.description || ""
+        );
+
+      const creator =
+        escapeHTML(
+          video.creator_name ||
+          video.creator_username ||
+          "Creator"
+        );
+
+      return `
+        <article
+          class="video-card"
+          data-video-id="${video.id}"
+        >
+
+          <div
+            class="video-thumbnail"
+            onclick="openVideo(${video.id})"
+          >
+
+            ${
+              video.thumbnail_url
+                ? `
+                  <img
+                    src="${escapeHTML(
+                      video.thumbnail_url
+                    )}"
+                    alt="${title}"
+                    loading="lazy"
+                  />
+                `
+                : `
+                  <div class="video-placeholder">
+                    ▶
+                  </div>
+                `
+            }
+
+            <span class="play-overlay">
+              ▶
+            </span>
+
+          </div>
+
+          <div class="video-card-body">
+
+            <h3>
+              ${title}
+            </h3>
+
+            <p>
+              ${description}
+            </p>
+
+            <div class="video-card-meta">
+
+              <span>
+                👤 ${creator}
+              </span>
+
+              <span>
+                👁️ ${formatNumber(video.views)}
+              </span>
+
+              <span>
+                ❤️ ${formatNumber(video.likes_count)}
+              </span>
+
+            </div>
+
+          </div>
+
+        </article>
+      `;
+
+    }).join("");
+}
+
 
 /* ======================================================
    OPEN VIDEO
 ====================================================== */
 
 async function openVideo(videoId) {
-  if (!videoId) return;
 
   try {
+
     const data =
       await api(
-        "/api/videos/" +
-        encodeURIComponent(videoId)
+        `/api/videos/${videoId}`
       );
 
-    currentVideo = data.video;
+    currentVideo =
+      data.video;
 
-    watchSeconds = 0;
-    watchRewardSent = false;
+    setupPlayer(
+      currentVideo
+    );
 
-    clearInterval(watchTimer);
+    showPage(
+      "playerSection"
+    );
 
-    renderVideoPlayer();
+    await loadComments(
+      videoId
+    );
 
-    showPage("watch");
-
-    await loadComments(videoId);
+    startWatchTracking();
 
   } catch (error) {
-    console.error("openVideo:", error);
 
     showToast(
-      error.message ||
-      "Video open nahi ho paaya",
+      error.message,
       "error"
     );
+
   }
 }
 
-/* ======================================================
-   RENDER PLAYER
-====================================================== */
 
-function renderVideoPlayer() {
-  if (!currentVideo) return;
+function setupPlayer(video) {
 
-  const container =
-    $("videoPlayer") ||
-    $("playerBox") ||
-    $("playerContainer");
+  if (!video) return;
 
-  if (!container) return;
+  const player =
+    $("mainVideo");
 
-  const videoUrl =
-    currentVideo.video_url || "";
+  if (player) {
 
-  container.innerHTML = `
-    <div class="player-card">
+    player.pause();
 
-      <video
-        id="mainVideo"
-        class="main-video"
-        controls
-        playsinline
-        preload="metadata"
-      >
-        <source
-          src="${escapeHTML(videoUrl)}"
-          type="video/${escapeHTML(
-            currentVideo.cloudinary_format ||
-            "mp4"
-          )}"
-        >
-      </video>
+    player.src =
+      video.video_url;
 
-      <div class="player-info">
+    player.load();
 
-        <h2>
-          ${escapeHTML(
-            currentVideo.title
-          )}
-        </h2>
+  }
 
-        <p>
-          ${escapeHTML(
-            currentVideo.description || ""
-          )}
-        </p>
+  if ($("playerTitle")) {
+    $("playerTitle").textContent =
+      video.title || "Video";
+  }
 
-        <div class="player-meta">
-          👁️ ${formatNumber(currentVideo.views)}
-          &nbsp;&nbsp;
-          ❤️ ${formatNumber(currentVideo.likes_count)}
-          &nbsp;&nbsp;
-          💬 ${formatNumber(currentVideo.comments_count)}
-        </div>
+  if ($("playerDescription")) {
+    $("playerDescription").textContent =
+      video.description || "";
+  }
 
-        <div class="player-actions">
+  if ($("playerViews")) {
+    $("playerViews").textContent =
+      formatNumber(video.views);
+  }
 
-          <button
-            class="btn"
-            onclick="likeVideo(${Number(currentVideo.id)})"
-          >
-            ❤️ Like
-          </button>
+  if ($("playerLikes")) {
+    $("playerLikes").textContent =
+      formatNumber(video.likes_count);
+  }
 
-          <button
-            class="btn danger-btn"
-            onclick="reportVideo(${Number(currentVideo.id)})"
-          >
-            ⚠️ Report
-          </button>
+  if ($("playerCommentsCount")) {
+    $("playerCommentsCount").textContent =
+      formatNumber(
+        video.comments_count
+      );
+  }
 
-        </div>
-
-      </div>
-
-    </div>
-  `;
-
-  setupWatchTracking();
+  watchSeconds = 0;
+  watchRewardSent = false;
 }
+
 
 /* ======================================================
    WATCH TRACKING
 ====================================================== */
 
-function setupWatchTracking() {
-  const video =
-    $("mainVideo");
+function startWatchTracking() {
 
-  if (!video) return;
+  if (watchTimer) {
+    clearInterval(watchTimer);
+  }
 
-  watchSeconds = 0;
-  watchRewardSent = false;
+  watchTimer =
+    setInterval(() => {
 
-  clearInterval(watchTimer);
+      const player =
+        $("mainVideo");
 
-  video.addEventListener(
-    "timeupdate",
-    () => {
-      watchSeconds =
-        Math.floor(video.currentTime);
+      if (!player) return;
 
       if (
-        watchSeconds >= 10 &&
-        !watchRewardSent
+        !player.paused &&
+        !player.ended
       ) {
-        completeWatch();
-      }
-    }
-  );
 
-  video.addEventListener(
-    "play",
-    () => {
-      clearInterval(watchTimer);
+        watchSeconds++;
 
-      watchTimer = setInterval(() => {
-        if (!video.paused) {
-          watchSeconds =
-            Math.floor(video.currentTime);
-
-          if (
-            watchSeconds >= 10 &&
-            !watchRewardSent
-          ) {
-            completeWatch();
-          }
+        if (
+          watchSeconds >= 10 &&
+          !watchRewardSent
+        ) {
+          completeWatch();
         }
-      }, 1000);
-    }
-  );
 
-  video.addEventListener(
-    "pause",
-    () => {
-      clearInterval(watchTimer);
-    }
-  );
+      }
 
-  video.addEventListener(
-    "ended",
-    () => {
-      clearInterval(watchTimer);
-    }
-  );
+    }, 1000);
 }
 
-/* ======================================================
-   COMPLETE WATCH
-====================================================== */
 
 async function completeWatch() {
+
   if (
-    watchRewardSent ||
     !currentVideo ||
+    watchRewardSent ||
     !currentUser
   ) {
     return;
@@ -867,235 +917,190 @@ async function completeWatch() {
   watchRewardSent = true;
 
   try {
+
     const data =
       await api(
         "/api/watch/complete",
         {
           method: "POST",
-          body: {
+          body: JSON.stringify({
             video_id:
               currentVideo.id,
-
-            seconds:
-              Math.max(
-                10,
-                watchSeconds
-              )
-          }
+            watch_seconds:
+              watchSeconds,
+          }),
         }
       );
 
-    if (data.user) {
-      currentUser = data.user;
-      saveLocalUser();
-      updateUserUI();
+    if (data.reward > 0) {
+
+      showToast(
+        `+${data.reward} point earned 🎉`,
+        "success"
+      );
+
+      await loadUser();
     }
 
-    showToast(
-      "🎉 Watch reward mil gaya!",
-      "success"
-    );
-
   } catch (error) {
-    watchRewardSent = false;
 
     console.error(
-      "completeWatch:",
+      "WATCH REWARD:",
       error
     );
 
-    showToast(
-      error.message ||
-      "Reward nahi mila",
-      "error"
-    );
+    watchRewardSent = false;
   }
 }
 
+
 /* ======================================================
-   LIKE VIDEO
+   LIKE
 ====================================================== */
 
-async function likeVideo(videoId) {
-  if (!currentUser) {
-    showToast(
-      "Login required",
-      "error"
-    );
+async function likeCurrentVideo() {
 
-    return;
-  }
+  if (!currentVideo) return;
 
   try {
+
     const data =
       await api(
-        "/api/videos/" +
-        encodeURIComponent(videoId) +
-        "/like",
+        `/api/videos/${currentVideo.id}/like`,
         {
-          method: "POST"
+          method: "POST",
         }
       );
 
+    currentVideo.likes_count =
+      data.likes_count;
+
+    if ($("playerLikes")) {
+      $("playerLikes").textContent =
+        formatNumber(
+          data.likes_count
+        );
+    }
+
     showToast(
       data.liked
-        ? "❤️ Video liked"
-        : "Like removed",
+        ? "Liked ❤️"
+        : "Like removed.",
       "success"
     );
 
-    if (
-      currentVideo &&
-      Number(currentVideo.id) ===
-      Number(videoId)
-    ) {
-      currentVideo.likes_count =
-        Number(currentVideo.likes_count || 0) +
-        (data.liked ? 1 : -1);
-
-      renderVideoPlayer();
-    }
-
-    loadVideos();
-
   } catch (error) {
+
     showToast(
-      error.message ||
-      "Like failed",
+      error.message,
       "error"
     );
+
   }
 }
+
 
 /* ======================================================
    COMMENTS
 ====================================================== */
 
 async function loadComments(videoId) {
-  const commentsBox =
-    $("commentsBox") ||
-    $("commentsSection");
 
-  const comments =
-    $("comments") ||
+  const container =
     $("commentsList");
 
-  if (!comments) return;
+  if (!container) return;
 
-  if (commentsBox) {
-    commentsBox.classList.remove("hidden");
-  }
-
-  comments.innerHTML = `
-    <div class="loading">
-      Comments load ho rahe hain...
-    </div>
-  `;
+  container.innerHTML =
+    `<div class="loading-card">
+      Loading comments...
+    </div>`;
 
   try {
+
     const data =
       await api(
-        "/api/videos/" +
-        encodeURIComponent(videoId) +
-        "/comments"
+        `/api/videos/${videoId}/comments`
       );
 
-    const list =
-      Array.isArray(data.comments)
-        ? data.comments
-        : [];
+    const comments =
+      data.comments || [];
 
-    if (!list.length) {
-      comments.innerHTML = `
-        <div class="empty-state">
-          💬 Abhi koi comment nahi hai.
-        </div>
-      `;
+    if (!comments.length) {
+
+      container.innerHTML =
+        `<div class="empty-comment">
+          No comments yet.
+        </div>`;
 
       return;
     }
 
-    comments.innerHTML =
-      list
-        .map((comment) => `
-          <div class="comment-item">
+    container.innerHTML =
+      comments.map(
+        (comment) => {
 
-            <div class="comment-user">
-              👤
-              ${escapeHTML(
-                comment.username ||
-                "User"
-              )}
+          const name =
+            escapeHTML(
+              comment.first_name ||
+              comment.username ||
+              "User"
+            );
+
+          const text =
+            escapeHTML(
+              comment.comment
+            );
+
+          return `
+            <div class="comment-item">
+
+              <div class="comment-avatar">
+                👤
+              </div>
+
+              <div>
+
+                <strong>
+                  ${name}
+                </strong>
+
+                <p>
+                  ${text}
+                </p>
+
+              </div>
+
             </div>
+          `;
 
-            <div class="comment-text">
-              ${escapeHTML(
-                comment.comment
-              )}
-            </div>
-
-            <div class="comment-date">
-              ${formatDate(
-                comment.created_at
-              )}
-            </div>
-
-          </div>
-        `)
-        .join("");
+        }
+      ).join("");
 
   } catch (error) {
-    console.error(
-      "loadComments:",
-      error
-    );
 
-    comments.innerHTML = `
-      <div class="empty-state">
-        Comments load nahi ho paaye.
-      </div>
-    `;
+    container.innerHTML =
+      `<div class="empty-comment">
+        ${escapeHTML(error.message)}
+      </div>`;
   }
 }
 
-/* ======================================================
-   SEND COMMENT
-====================================================== */
 
-async function sendComment() {
-  if (
-    !currentVideo ||
-    !currentUser
-  ) {
-    showToast(
-      "Video open karein",
-      "error"
-    );
+async function addComment() {
 
-    return;
-  }
+  if (!currentVideo) return;
 
   const input =
-    $("commentInput") ||
-    $("commentText");
-
-  if (!input) return;
+    $("commentInput");
 
   const comment =
-    input.value.trim();
+    input?.value.trim();
 
   if (!comment) {
-    showToast(
-      "Comment likhein",
-      "error"
-    );
 
-    return;
-  }
-
-  if (comment.length > 1000) {
     showToast(
-      "Comment maximum 1000 characters ka ho sakta hai",
+      "Comment likhein.",
       "error"
     );
 
@@ -1103,431 +1108,528 @@ async function sendComment() {
   }
 
   try {
+
     await api(
-      "/api/videos/" +
-      encodeURIComponent(
-        currentVideo.id
-      ) +
-      "/comments",
+      `/api/videos/${currentVideo.id}/comments`,
       {
         method: "POST",
-        body: {
-          comment
-        }
+        body: JSON.stringify({
+          comment,
+        }),
       }
     );
 
     input.value = "";
 
-    showToast(
-      "💬 Comment posted",
-      "success"
-    );
-
     await loadComments(
       currentVideo.id
     );
 
-  } catch (error) {
+    currentVideo.comments_count++;
+
+    if ($("playerCommentsCount")) {
+      $("playerCommentsCount").textContent =
+        formatNumber(
+          currentVideo.comments_count
+        );
+    }
+
     showToast(
-      error.message ||
-      "Comment failed",
+      "Comment added 💬",
+      "success"
+    );
+
+  } catch (error) {
+
+    showToast(
+      error.message,
       "error"
     );
   }
 }
 
+
 /* ======================================================
    REPORT
 ====================================================== */
 
-async function reportVideo(videoId) {
-  let reason =
-    window.prompt(
-      "Report reason:",
-      "Inappropriate content"
+async function reportCurrentVideo() {
+
+  if (!currentVideo) return;
+
+  const reason =
+    prompt(
+      "Report reason:"
     );
 
   if (reason === null) {
     return;
   }
 
-  reason =
-    reason.trim();
-
-  if (!reason) {
-    reason = "Other";
-  }
-
   try {
+
     await api(
-      "/api/videos/" +
-      encodeURIComponent(videoId) +
-      "/report",
+      `/api/videos/${currentVideo.id}/report`,
       {
         method: "POST",
-        body: {
-          reason
-        }
+        body: JSON.stringify({
+          reason,
+        }),
       }
     );
 
     showToast(
-      "⚠️ Report submitted",
+      "Report submitted 🚩",
       "success"
     );
 
   } catch (error) {
+
     showToast(
-      error.message ||
-      "Report failed",
+      error.message,
       "error"
     );
+
   }
 }
+
+
+/* ======================================================
+   FOLLOW
+====================================================== */
+
+async function followCreator() {
+
+  if (!currentVideo) return;
+
+  const creatorId =
+    currentVideo.user_id ||
+    currentVideo.creator_id;
+
+  if (!creatorId) return;
+
+  try {
+
+    const data =
+      await api(
+        `/api/creator/${creatorId}/follow`,
+        {
+          method: "POST",
+        }
+      );
+
+    showToast(
+      data.message,
+      "success"
+    );
+
+  } catch (error) {
+
+    showToast(
+      error.message,
+      "error"
+    );
+
+  }
+}
+
+
+/* ======================================================
+   DAILY REWARD
+====================================================== */
+
+async function claimDailyReward() {
+
+  try {
+
+    const data =
+      await api(
+        "/api/daily/claim",
+        {
+          method: "POST",
+        }
+      );
+
+    showToast(
+      data.message,
+      data.reward > 0
+        ? "success"
+        : "normal"
+    );
+
+    if (data.reward > 0) {
+      await loadUser();
+    }
+
+  } catch (error) {
+
+    showToast(
+      error.message,
+      "error"
+    );
+
+  }
+}
+
+
+/* ======================================================
+   REWARDED AD
+====================================================== */
+
+async function rewardedAd() {
+
+  const button =
+    $("rewardedAdBtn");
+
+  if (button) {
+    button.disabled = true;
+    button.textContent =
+      "Advertisement...";
+  }
+
+  try {
+
+    /*
+      Real ad network ko later yahan connect
+      kiya ja sakta hai.
+
+      Abhi demo completion endpoint call
+      kiya ja raha hai.
+    */
+
+    await new Promise(
+      (resolve) =>
+        setTimeout(resolve, 3000)
+    );
+
+    const data =
+      await api(
+        "/api/rewarded-ad/complete",
+        {
+          method: "POST",
+        }
+      );
+
+    showToast(
+      data.message,
+      "success"
+    );
+
+    await loadUser();
+
+  } catch (error) {
+
+    showToast(
+      error.message,
+      "error"
+    );
+
+  } finally {
+
+    if (button) {
+      button.disabled = false;
+      button.textContent =
+        "Watch Ad +5";
+    }
+
+  }
+}
+
+
+/* ======================================================
+   POINTS HISTORY
+====================================================== */
+
+async function loadPointsHistory() {
+
+  const container =
+    $("pointsHistory");
+
+  if (!container || !currentUser) {
+    return;
+  }
+
+  try {
+
+    const data =
+      await api(
+        `/api/user/${currentUser.id}/points/history`
+      );
+
+    const history =
+      data.history || [];
+
+    if (!history.length) {
+
+      container.innerHTML =
+        `<div class="empty-card">
+          No points history yet.
+        </div>`;
+
+      return;
+    }
+
+    container.innerHTML =
+      history.map(
+        (item) => {
+
+          return `
+            <div class="history-row">
+
+              <div>
+                <strong>
+                  ${escapeHTML(
+                    item.description ||
+                    item.type
+                  )}
+                </strong>
+
+                <small>
+                  ${formatDate(
+                    item.created_at
+                  )}
+                </small>
+              </div>
+
+              <strong class="points-positive">
+                +${formatNumber(
+                  item.points
+                )}
+              </strong>
+
+            </div>
+          `;
+
+        }
+      ).join("");
+
+  } catch (error) {
+
+    container.innerHTML =
+      `<div class="empty-card">
+        ${escapeHTML(error.message)}
+      </div>`;
+  }
+}
+
+
+/* ======================================================
+   WATCH HISTORY
+====================================================== */
+
+async function loadWatchHistory() {
+
+  const container =
+    $("watchHistoryList");
+
+  if (!container || !currentUser) {
+    return;
+  }
+
+  try {
+
+    const data =
+      await api(
+        `/api/videos`
+      );
+
+    const videos =
+      data.videos || [];
+
+    const watched =
+      videos.filter(
+        (video) =>
+          Number(video.views || 0) > 0
+      );
+
+    renderVideos(
+      watched,
+      container
+    );
+
+  } catch (error) {
+
+    container.innerHTML =
+      `<div class="empty-card">
+        ${escapeHTML(error.message)}
+      </div>`;
+  }
+}
+
 
 /* ======================================================
    UPLOAD ELEMENTS
 ====================================================== */
 
-function getUploadElements() {
-  return {
-    file:
-      $("videoFile"),
-
-    fileName:
-      $("videoFileName"),
-
-    preview:
-      $("uploadPreview"),
-
-    previewVideo:
-      $("uploadPreviewVideo"),
-
-    progressBox:
-      $("uploadProgressBox"),
-
-    progressBar:
-      $("uploadProgressBar"),
-
-    progressText:
-      $("uploadProgressText"),
-
-    progressPercent:
-      $("uploadProgressPercent"),
-
-    uploadButton:
-      $("uploadVideoBtn"),
-
-    title:
-      $("videoTitle"),
-
-    description:
-      $("videoDescription")
-  };
-}
-
-/* ======================================================
-   SETUP VIDEO FILE INPUT
-====================================================== */
-
 function setupVideoFileInput() {
-  const elements =
-    getUploadElements();
 
-  const fileInput =
-    elements.file;
+  const input =
+    $("videoFile");
 
-  if (!fileInput) {
-    console.warn(
-      "videoFile input not found."
-    );
+  if (!input) return;
 
-    return;
-  }
-
-  fileInput.addEventListener(
+  input.addEventListener(
     "change",
-    handleVideoFileChange
-  );
-}
+    () => {
 
-/* ======================================================
-   VIDEO FILE CHANGE
-====================================================== */
+      const file =
+        input.files?.[0];
 
-function handleVideoFileChange(event) {
-  const file =
-    event.target.files?.[0];
+      if (!file) {
+        return;
+      }
 
-  if (!file) {
-    selectedVideoFile = null;
-    return;
-  }
+      if (
+        !file.type.startsWith(
+          "video/"
+        )
+      ) {
 
-  if (
-    !file.type ||
-    !file.type.startsWith("video/")
-  ) {
-    showToast(
-      "Sirf video file select karein.",
-      "error"
-    );
+        showToast(
+          "Please select a video file.",
+          "error"
+        );
 
-    event.target.value = "";
-    selectedVideoFile = null;
+        input.value = "";
 
-    return;
-  }
+        return;
+      }
 
-  if (
-    file.size >
-    MAX_VIDEO_SIZE
-  ) {
-    showToast(
-      "Video maximum 100 MB hona chahiye.",
-      "error"
-    );
+      if (
+        file.size >
+        MAX_VIDEO_SIZE
+      ) {
 
-    event.target.value = "";
-    selectedVideoFile = null;
+        showToast(
+          "Video maximum 100 MB ka hona chahiye.",
+          "error"
+        );
 
-    return;
-  }
+        input.value = "";
 
-  selectedVideoFile = file;
+        return;
+      }
 
-  const elements =
-    getUploadElements();
+      selectedVideoFile =
+        file;
 
-  if (elements.fileName) {
-    elements.fileName.textContent =
-      file.name +
-      " • " +
-      formatVideoSize(file.size);
-  }
+      if ($("videoFileName")) {
 
-  if (
-    elements.preview &&
-    elements.previewVideo
-  ) {
-    if (previewObjectUrl) {
-      URL.revokeObjectURL(
-        previewObjectUrl
-      );
+        $("videoFileName").textContent =
+          `${file.name} • ${formatVideoSize(
+            file.size
+          )}`;
+
+      }
+
+      if (uploadObjectUrl) {
+        URL.revokeObjectURL(
+          uploadObjectUrl
+        );
+      }
+
+      uploadObjectUrl =
+        URL.createObjectURL(file);
+
+      const preview =
+        $("uploadPreview");
+
+      const previewVideo =
+        $("uploadPreviewVideo");
+
+      if (preview && previewVideo) {
+
+        previewVideo.src =
+          uploadObjectUrl;
+
+        preview.classList.remove(
+          "hidden"
+        );
+      }
+
     }
-
-    previewObjectUrl =
-      URL.createObjectURL(file);
-
-    elements.previewVideo.src =
-      previewObjectUrl;
-
-    elements.preview.classList.remove(
-      "hidden"
-    );
-  }
-
-  showToast(
-    "Video select ho gaya 🎥",
-    "success"
   );
 }
 
+
 /* ======================================================
-   UPDATE UPLOAD PROGRESS
+   UPLOAD PROGRESS
 ====================================================== */
 
 function updateUploadProgress(
   percent,
   message
 ) {
-  const elements =
-    getUploadElements();
 
-  const safePercent =
+  const value =
     Math.max(
       0,
-      Math.min(
-        100,
-        Number(percent || 0)
-      )
+      Math.min(100, percent)
     );
 
-  if (elements.progressBox) {
-    elements.progressBox.classList.remove(
-      "hidden"
-    );
+  if ($("uploadProgressBox")) {
+    $("uploadProgressBox")
+      .classList.remove("hidden");
   }
 
-  if (elements.progressBar) {
-    elements.progressBar.style.width =
-      safePercent + "%";
+  if ($("uploadProgressBar")) {
+    $("uploadProgressBar").style.width =
+      `${value}%`;
   }
 
-  if (elements.progressPercent) {
-    elements.progressPercent.textContent =
-      Math.round(safePercent) + "%";
+  if ($("uploadProgressPercent")) {
+    $("uploadProgressPercent")
+      .textContent =
+      `${Math.round(value)}%`;
   }
 
-  if (
-    elements.progressText &&
-    message
-  ) {
-    elements.progressText.textContent =
-      message;
+  if ($("uploadProgressText")) {
+    $("uploadProgressText")
+      .textContent =
+      message ||
+      "Uploading...";
   }
 }
 
+
 /* ======================================================
-   GET CLOUDINARY SIGNATURE
+   CLOUDINARY SIGNATURE
 ====================================================== */
 
 async function getCloudinarySignature() {
-  if (!currentUser?.id) {
-    throw new Error(
-      "User login required."
-    );
-  }
 
-  const data =
-    await api(
-      "/api/cloudinary/signature",
-      {
-        method: "POST",
-        body: {
-          user_id:
-            currentUser.id
-        }
-      }
-    );
-
-  if (
-    !data.ok ||
-    !data.cloud_name ||
-    !data.api_key ||
-    !data.timestamp ||
-    !data.signature
-  ) {
-    throw new Error(
-      "Cloudinary signature nahi mila."
-    );
-  }
-
-  return data;
+  return api(
+    "/api/cloudinary/signature",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        user_id:
+          currentUser?.id || null,
+      }),
+    }
+  );
 }
 
+
 /* ======================================================
-   CLOUDINARY DIRECT VIDEO UPLOAD
+   CLOUDINARY DIRECT UPLOAD
 ====================================================== */
 
 function uploadToCloudinary(
   file,
   signatureData
 ) {
+
   return new Promise(
     (resolve, reject) => {
-      if (!file) {
-        reject(
-          new Error(
-            "Video file missing."
-          )
-        );
-
-        return;
-      }
 
       const cloudName =
         signatureData.cloud_name;
 
-      const uploadUrl =
-        "https://api.cloudinary.com/v1_1/" +
-        encodeURIComponent(
+      const url =
+        `https://api.cloudinary.com/v1_1/${encodeURIComponent(
           cloudName
-        ) +
-        "/video/upload";
-
-      const xhr =
-        new XMLHttpRequest();
-
-      xhr.open(
-        "POST",
-        uploadUrl,
-        true
-      );
-
-      xhr.upload.addEventListener(
-        "progress",
-        (event) => {
-          if (!event.lengthComputable) {
-            return;
-          }
-
-          const cloudinaryPercent =
-            event.loaded /
-            event.total *
-            90;
-
-          updateUploadProgress(
-            cloudinaryPercent,
-            "Video Cloudinary par upload ho raha hai..."
-          );
-        }
-      );
-
-      xhr.addEventListener(
-        "error",
-        () => {
-          reject(
-            new Error(
-              "Cloudinary network error."
-            )
-          );
-        }
-      );
-
-      xhr.addEventListener(
-        "abort",
-        () => {
-          reject(
-            new Error(
-              "Upload cancel ho gaya."
-            )
-          );
-        }
-      );
-
-      xhr.addEventListener(
-        "load",
-        () => {
-          let data = {};
-
-          try {
-            data =
-              JSON.parse(
-                xhr.responseText
-              );
-          } catch {
-            data = {};
-          }
-
-          if (
-            xhr.status >= 200 &&
-            xhr.status < 300 &&
-            data.secure_url
-          ) {
-            resolve(data);
-            return;
-          }
-
-          reject(
-            new Error(
-              data?.error?.message ||
-              "Cloudinary upload failed."
-            )
-          );
-        }
-      );
+        )}/video/upload`;
 
       const formData =
         new FormData();
@@ -1552,65 +1654,108 @@ function uploadToCloudinary(
         signatureData.signature
       );
 
-      if (
-        signatureData.folder
-      ) {
+      if (signatureData.folder) {
+
         formData.append(
           "folder",
           signatureData.folder
         );
+
       }
 
+      const xhr =
+        new XMLHttpRequest();
+
+      xhr.open(
+        "POST",
+        url,
+        true
+      );
+
+      xhr.upload.onprogress =
+        (event) => {
+
+          if (!event.lengthComputable) {
+            return;
+          }
+
+          const percent =
+            (event.loaded /
+              event.total) *
+            100;
+
+          updateUploadProgress(
+            percent,
+            "Cloudinary par video upload ho raha hai..."
+          );
+
+        };
+
+      xhr.onload = () => {
+
+        let data;
+
+        try {
+          data =
+            JSON.parse(
+              xhr.responseText
+            );
+        } catch {
+          reject(
+            new Error(
+              "Cloudinary invalid response."
+            )
+          );
+          return;
+        }
+
+        if (
+          xhr.status >= 200 &&
+          xhr.status < 300 &&
+          data.secure_url
+        ) {
+
+          resolve(data);
+
+        } else {
+
+          reject(
+            new Error(
+              data.error?.message ||
+              "Cloudinary upload failed."
+            )
+          );
+
+        }
+
+      };
+
+      xhr.onerror = () => {
+
+        reject(
+          new Error(
+            "Cloudinary network error."
+          )
+        );
+
+      };
+
+      xhr.onabort = () => {
+
+        reject(
+          new Error(
+            "Upload cancelled."
+          )
+        );
+
+      };
+
       xhr.send(formData);
+
     }
   );
 }
 
-/* ======================================================
-   CLOUDINARY THUMBNAIL
-====================================================== */
-
-function makeCloudinaryThumbnail(
-  cloudinaryData
-) {
-  const publicId =
-    cloudinaryData.public_id;
-
-  const resourceType =
-    cloudinaryData.resource_type ||
-    "video";
-
-  if (
-    !publicId ||
-    resourceType !== "video"
-  ) {
-    return "";
-  }
-
-  const cloudName =
-    cloudinaryData.cloud_name ||
-    "";
-
-  if (!cloudName) {
-    return "";
-  }
-
-  const encodedPublicId =
-    publicId
-      .split("/")
-      .map(
-        encodeURIComponent
-      )
-      .join("/");
-
-  return (
-    "https://res.cloudinary.com/" +
-    cloudName +
-    "/video/upload/so_0/" +
-    encodedPublicId +
-    ".jpg"
-  );
-}
 
 /* ======================================================
    SAVE VIDEO METADATA
@@ -1621,200 +1766,143 @@ async function saveVideoMetadata(
   title,
   description
 ) {
-  if (!currentUser?.id) {
-    throw new Error(
-      "User login required."
-    );
-  }
 
-  const thumbnailUrl =
-    makeCloudinaryThumbnail(
-      cloudinaryData
-    );
+  return api(
+    "/api/videos",
+    {
+      method: "POST",
+      body: JSON.stringify({
 
-  const data =
-    await api(
-      "/api/videos",
-      {
-        method: "POST",
+        user_id:
+          currentUser.id,
 
-        body: {
-          user_id:
-            currentUser.id,
+        creator_id:
+          currentUser.id,
 
-          creator_id:
-            currentUser.id,
+        title,
 
-          title:
-            title.trim(),
+        description,
 
-          description:
-            description.trim(),
+        video_url:
+          cloudinaryData.secure_url,
 
-          video_url:
-            cloudinaryData.secure_url,
+        thumbnail_url:
+          cloudinaryData.thumbnail_url ||
+          "",
 
-          thumbnail_url:
-            thumbnailUrl,
+        cloudinary_public_id:
+          cloudinaryData.public_id ||
+          "",
 
-          cloudinary_public_id:
-            cloudinaryData.public_id ||
-            "",
+        cloudinary_resource_type:
+          cloudinaryData.resource_type ||
+          "video",
 
-          cloudinary_resource_type:
-            cloudinaryData.resource_type ||
-            "video",
+        cloudinary_format:
+          cloudinaryData.format ||
+          "",
 
-          cloudinary_format:
-            cloudinaryData.format ||
-            "",
+        duration:
+          Number(
+            cloudinaryData.duration || 0
+          ),
 
-          duration:
-            Number(
-              cloudinaryData.duration ||
-              0
-            ),
+        bytes:
+          Number(
+            cloudinaryData.bytes || 0
+          ),
 
-          bytes:
-            Number(
-              cloudinaryData.bytes ||
-              selectedVideoFile?.size ||
-              0
-            )
-        }
-      }
-    );
-
-  return data;
+      }),
+    }
+  );
 }
 
+
 /* ======================================================
-   RESET UPLOAD FORM
+   RESET UPLOAD
 ====================================================== */
 
 function resetUploadForm() {
-  const elements =
-    getUploadElements();
 
-  if (elements.title) {
-    elements.title.value = "";
-  }
+  $("videoTitle").value = "";
+  $("videoDescription").value = "";
 
-  if (elements.description) {
-    elements.description.value = "";
-  }
-
-  if (elements.file) {
-    elements.file.value = "";
-  }
-
-  if (elements.fileName) {
-    elements.fileName.textContent =
-      "Gallery se video choose karein";
-  }
-
-  if (elements.preview) {
-    elements.preview.classList.add(
-      "hidden"
-    );
-  }
-
-  if (elements.previewVideo) {
-    elements.previewVideo.pause();
-
-    elements.previewVideo.removeAttribute(
-      "src"
-    );
-
-    elements.previewVideo.load();
-  }
-
-  if (previewObjectUrl) {
-    URL.revokeObjectURL(
-      previewObjectUrl
-    );
-
-    previewObjectUrl = null;
-  }
-
-  if (elements.progressBox) {
-    elements.progressBox.classList.add(
-      "hidden"
-    );
-  }
-
-  if (elements.progressBar) {
-    elements.progressBar.style.width =
-      "0%";
-  }
-
-  if (elements.progressPercent) {
-    elements.progressPercent.textContent =
-      "0%";
-  }
-
-  if (elements.progressText) {
-    elements.progressText.textContent =
-      "Uploading...";
-  }
+  $("videoFile").value = "";
 
   selectedVideoFile = null;
+
+  if (uploadObjectUrl) {
+
+    URL.revokeObjectURL(
+      uploadObjectUrl
+    );
+
+    uploadObjectUrl = null;
+  }
+
+  $("videoFileName").textContent =
+    "Gallery se video choose karein";
+
+  $("uploadPreview")
+    ?.classList.add("hidden");
+
+  $("uploadProgressBox")
+    ?.classList.add("hidden");
+
+  if ($("uploadProgressBar")) {
+    $("uploadProgressBar").style.width =
+      "0%";
+  }
+
+  if ($("uploadProgressPercent")) {
+    $("uploadProgressPercent").textContent =
+      "0%";
+  }
+
 }
+
 
 /* ======================================================
    UPLOAD VIDEO
 ====================================================== */
 
 async function uploadUserVideo() {
-  if (uploadBusy) {
-    return;
-  }
 
   if (!currentUser) {
+
     showToast(
-      "User account ready nahi hai.",
+      "Please login first.",
       "error"
     );
 
     return;
   }
-
-  const elements =
-    getUploadElements();
 
   const title =
-    elements.title?.value.trim() || "";
+    $("videoTitle")
+      ?.value.trim();
 
   const description =
-    elements.description?.value.trim() || "";
+    $("videoDescription")
+      ?.value.trim() || "";
+
+  const file =
+    selectedVideoFile;
 
   if (!title) {
+
     showToast(
-      "Video title likhein.",
-      "error"
-    );
-
-    elements.title?.focus();
-
-    return;
-  }
-
-  if (!selectedVideoFile) {
-    showToast(
-      "Gallery se video select karein.",
+      "Video title enter karein.",
       "error"
     );
 
     return;
   }
 
-  if (
-    !selectedVideoFile.type.startsWith(
-      "video/"
-    )
-  ) {
+  if (!file) {
+
     showToast(
-      "Valid video file select karein.",
+      "Please video select karein.",
       "error"
     );
 
@@ -1822,100 +1910,86 @@ async function uploadUserVideo() {
   }
 
   if (
-    selectedVideoFile.size >
+    file.size >
     MAX_VIDEO_SIZE
   ) {
+
     showToast(
-      "Video maximum 100 MB hona chahiye.",
+      "Video maximum 100 MB ka hona chahiye.",
       "error"
     );
 
     return;
   }
 
-  uploadBusy = true;
+  const button =
+    $("uploadVideoBtn");
 
-  if (elements.uploadButton) {
-    elements.uploadButton.disabled =
-      true;
+  if (button) {
 
-    elements.uploadButton.textContent =
-      "⏳ Uploading...";
+    button.disabled = true;
+
+    button.textContent =
+      "Uploading...";
   }
 
   try {
-    /* STEP 1 */
 
     updateUploadProgress(
-      1,
-      "Secure upload prepare ho raha hai..."
+      0,
+      "Upload prepare ho raha hai..."
     );
 
     const signature =
       await getCloudinarySignature();
 
-    /* STEP 2 */
-
     updateUploadProgress(
-      5,
-      "Cloudinary upload ready..."
+      0,
+      "Cloudinary upload start ho raha hai..."
     );
 
-    const cloudinaryData =
+    const cloudinary =
       await uploadToCloudinary(
-        selectedVideoFile,
+        file,
         signature
       );
 
-    /* STEP 3 */
-
     updateUploadProgress(
-      94,
-      "Video information database mein save ho rahi hai..."
+      100,
+      "Cloudinary upload complete. Database save ho raha hai..."
     );
 
     const saved =
       await saveVideoMetadata(
-        cloudinaryData,
+        cloudinary,
         title,
         description
       );
 
-    /* STEP 4 */
-
     updateUploadProgress(
       100,
-      "Upload complete 🎉"
+      "Video successfully uploaded 🎉"
     );
 
-    if (saved.user) {
-      currentUser =
-        saved.user;
-
-      saveLocalUser();
-      updateUserUI();
-    } else {
-      await loadUser();
-    }
-
     showToast(
-      "🎉 Video successfully upload ho gaya!",
+      "Video successfully uploaded 🎉",
       "success"
     );
 
     resetUploadForm();
 
+    await loadUser();
+
     await loadVideos();
 
-    await loadMyVideos();
-
-    setTimeout(() => {
-      showPage("profile");
-    }, 700);
+    showPage(
+      "homeSection"
+    );
 
   } catch (error) {
+
     console.error(
-      "uploadUserVideo:",
+      "UPLOAD ERROR:",
       error
     );
 
@@ -1931,886 +2005,593 @@ async function uploadUserVideo() {
     );
 
   } finally {
-    uploadBusy = false;
 
-    const currentElements =
-      getUploadElements();
+    if (button) {
 
-    if (currentElements.uploadButton) {
-      currentElements.uploadButton.disabled =
-        false;
+      button.disabled = false;
 
-      currentElements.uploadButton.textContent =
+      button.textContent =
         "🎥 Upload Video";
+
     }
+
   }
 }
 
-/* ======================================================
-   ALIAS
-====================================================== */
-
-async function uploadVideo() {
-  return uploadUserVideo();
-}
-
-/* ======================================================
-   UPLOAD BUTTON
-====================================================== */
-
-function setupUploadButton() {
-  const button =
-    $("uploadVideoBtn");
-
-  if (!button) {
-    return;
-  }
-
-  if (
-    button.dataset.listenerAttached ===
-    "true"
-  ) {
-    return;
-  }
-
-  button.dataset.listenerAttached =
-    "true";
-
-  button.addEventListener(
-    "click",
-    function (event) {
-      event.preventDefault();
-
-      uploadUserVideo();
-    }
-  );
-}
 
 /* ======================================================
    MY VIDEOS
 ====================================================== */
 
 async function loadMyVideos() {
-  if (!currentUser?.id) {
-    return;
-  }
 
   const container =
-    $("myVideos") ||
     $("myVideosList");
 
-  if (!container) {
+  if (!container || !currentUser) {
     return;
   }
 
-  container.innerHTML = `
-    <div class="loading">
-      Aapke videos load ho rahe hain...
-    </div>
-  `;
+  container.innerHTML =
+    `<div class="loading-card">
+      Loading your videos...
+    </div>`;
 
   try {
+
     const data =
       await api(
-        "/api/videos?creator_id=" +
-        encodeURIComponent(
+        `/api/videos?creator_id=${encodeURIComponent(
           currentUser.id
-        )
+        )}`
       );
 
     const videos =
-      Array.isArray(data.videos)
-        ? data.videos
-        : [];
+      data.videos || [];
 
-    const ownVideos =
-      videos.filter(
-        (video) =>
-          String(
-            video.creator_id ??
-            video.user_id
-          ) ===
-          String(currentUser.id)
-      );
-
-    if (!ownVideos.length) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <div>🎥</div>
-
-          <h3>
-            Aapne abhi koi video upload nahi kiya
-          </h3>
-
-          <button
-            class="btn primary-btn"
-            onclick="showPage('upload')"
-          >
-            ⬆️ Video Upload Karein
-          </button>
-        </div>
-      `;
-
-      return;
-    }
-
-    container.innerHTML =
-      ownVideos
-        .map((video) =>
-          renderVideoCard(
-            video,
-            {
-              own: true
-            }
-          )
-        )
-        .join("");
-
-  } catch (error) {
-    console.error(
-      "loadMyVideos:",
-      error
+    renderMyVideos(
+      videos,
+      container
     );
 
-    container.innerHTML = `
-      <div class="empty-state">
-        My Videos load nahi ho paaye.
+  } catch (error) {
 
-        <button
-          class="btn primary-btn"
-          onclick="loadMyVideos()"
-        >
-          🔄 Retry
-        </button>
-      </div>
-    `;
+    container.innerHTML =
+      `<div class="empty-card">
+        ${escapeHTML(error.message)}
+      </div>`;
   }
 }
+
+
+function renderMyVideos(
+  videos,
+  container
+) {
+
+  if (!videos.length) {
+
+    container.innerHTML =
+      `<div class="empty-card">
+        <div class="empty-icon">🎥</div>
+        <h3>No uploaded videos</h3>
+        <p>Apna pehla video upload karein.</p>
+      </div>`;
+
+    return;
+  }
+
+  container.innerHTML =
+    videos.map(
+      (video) => {
+
+        return `
+          <div class="my-video-card">
+
+            <div
+              class="my-video-info"
+              onclick="openVideo(${video.id})"
+            >
+
+              <div class="mini-video-icon">
+                ▶
+              </div>
+
+              <div>
+
+                <strong>
+                  ${escapeHTML(video.title)}
+                </strong>
+
+                <small>
+                  👁️ ${formatNumber(video.views)}
+                  • ❤️ ${formatNumber(video.likes_count)}
+                </small>
+
+              </div>
+
+            </div>
+
+            <button
+              type="button"
+              class="delete-btn"
+              onclick="deleteVideo(${video.id})"
+            >
+              🗑️
+            </button>
+
+          </div>
+        `;
+
+      }
+    ).join("");
+}
+
 
 /* ======================================================
    DELETE VIDEO
 ====================================================== */
 
 async function deleteVideo(videoId) {
-  if (!videoId) return;
 
-  const confirmed =
-    window.confirm(
+  const confirmDelete =
+    confirm(
       "Kya aap ye video delete karna chahte hain?"
     );
 
-  if (!confirmed) {
+  if (!confirmDelete) {
     return;
   }
 
   try {
+
     await api(
-      "/api/videos/" +
-      encodeURIComponent(videoId),
+      `/api/videos/${videoId}`,
       {
-        method: "DELETE"
+        method: "DELETE",
       }
     );
 
     showToast(
-      "🗑️ Video deleted",
+      "Video deleted.",
       "success"
     );
 
     await loadMyVideos();
+
     await loadVideos();
 
   } catch (error) {
+
     showToast(
-      error.message ||
-      "Video delete nahi hua.",
+      error.message,
       "error"
     );
   }
 }
 
+
 /* ======================================================
-   POINTS HISTORY
+   CREATOR DASHBOARD
 ====================================================== */
 
-async function loadPointsHistory() {
-  if (!currentUser?.id) {
-    return;
-  }
+async function loadCreatorDashboard() {
 
   const container =
-    $("pointsHistory") ||
-    $("history");
+    $("creatorStats");
 
-  if (!container) {
+  if (!container || !currentUser) {
     return;
   }
 
-  container.innerHTML = `
-    <div class="loading">
-      Points history load ho rahi hai...
-    </div>
-  `;
+  container.innerHTML =
+    `<div class="loading-card">
+      Loading dashboard...
+    </div>`;
 
   try {
+
     const data =
       await api(
-        "/api/user/" +
-        encodeURIComponent(
-          currentUser.id
-        ) +
-        "/points/history"
-      );
-
-    const history =
-      Array.isArray(data.history)
-        ? data.history
-        : [];
-
-    if (!history.length) {
-      container.innerHTML = `
-        <div class="empty-state">
-          Abhi points history nahi hai.
-        </div>
-      `;
-
-      return;
-    }
-
-    container.innerHTML =
-      history
-        .map((item) => `
-          <div class="history-item">
-
-            <div>
-              <strong>
-                +${formatNumber(
-                  item.points
-                )}
-                points
-              </strong>
-
-              <div>
-                ${escapeHTML(
-                  item.reason ||
-                  "Reward"
-                )}
-              </div>
-            </div>
-
-            <small>
-              ${formatDate(
-                item.created_at
-              )}
-            </small>
-
-          </div>
-        `)
-        .join("");
-
-  } catch (error) {
-    console.error(
-      "loadPointsHistory:",
-      error
-    );
-
-    container.innerHTML = `
-      <div class="empty-state">
-        History load nahi ho paayi.
-      </div>
-    `;
-  }
-}
-
-/* ======================================================
-   ALIAS
-====================================================== */
-
-async function loadHistory() {
-  return loadPointsHistory();
-}
-
-/* ======================================================
-   DAILY REWARD
-====================================================== */
-
-async function claimDaily() {
-  if (!currentUser) {
-    showToast(
-      "Login required.",
-      "error"
-    );
-
-    return;
-  }
-
-  try {
-    const data =
-      await api(
-        "/api/daily/claim",
-        {
-          method: "POST"
-        }
-      );
-
-    if (data.user) {
-      currentUser =
-        data.user;
-
-      saveLocalUser();
-      updateUserUI();
-    }
-
-    showToast(
-      data.message ||
-      "🎁 Daily reward claimed!",
-      "success"
-    );
-
-    loadPointsHistory();
-
-  } catch (error) {
-    showToast(
-      error.message ||
-      "Daily reward failed.",
-      "error"
-    );
-  }
-}
-
-/* ======================================================
-   REWARDED AD
-====================================================== */
-
-async function rewardAd() {
-  if (!currentUser) {
-    showToast(
-      "Login required.",
-      "error"
-    );
-
-    return;
-  }
-
-  try {
-    const data =
-      await api(
-        "/api/rewarded-ad/complete",
-        {
-          method: "POST"
-        }
-      );
-
-    if (data.user) {
-      currentUser =
-        data.user;
-
-      saveLocalUser();
-      updateUserUI();
-    }
-
-    showToast(
-      data.message ||
-      "📺 Reward added!",
-      "success"
-    );
-
-    loadPointsHistory();
-
-  } catch (error) {
-    showToast(
-      error.message ||
-      "Reward failed.",
-      "error"
-    );
-  }
-}
-
-/* ======================================================
-   CREATOR STATS
-====================================================== */
-
-async function loadCreatorStats() {
-  if (!currentUser?.id) {
-    return;
-  }
-
-  try {
-    const data =
-      await api(
-        "/api/creator/" +
-        encodeURIComponent(
-          currentUser.id
-        )
+        `/api/creator/${currentUser.id}`
       );
 
     const creator =
       data.creator;
 
-    if (!creator) {
-      return;
-    }
+    container.innerHTML = `
 
-    const mappings = {
-      creatorVideos:
-        creator.video_count,
+      <div class="stat-card">
+        <strong>
+          ${formatNumber(
+            creator.video_count
+          )}
+        </strong>
+        <span>Videos</span>
+      </div>
 
-      creatorViews:
-        creator.total_views,
+      <div class="stat-card">
+        <strong>
+          ${formatNumber(
+            creator.total_views
+          )}
+        </strong>
+        <span>Views</span>
+      </div>
 
-      creatorFollowers:
-        creator.followers,
+      <div class="stat-card">
+        <strong>
+          ${formatNumber(
+            creator.total_likes
+          )}
+        </strong>
+        <span>Likes</span>
+      </div>
 
-      creatorPoints:
-        creator.points
-    };
+      <div class="stat-card">
+        <strong>
+          ${formatNumber(
+            creator.followers
+          )}
+        </strong>
+        <span>Followers</span>
+      </div>
 
-    Object.keys(mappings).forEach(
-      (id) => {
-        const element = $(id);
+      <div class="stat-card">
+        <strong>
+          ${formatNumber(
+            creator.total_comments
+          )}
+        </strong>
+        <span>Comments</span>
+      </div>
 
-        if (element) {
-          element.textContent =
-            formatNumber(
-              mappings[id]
-            );
-        }
-      }
-    );
+      <div class="stat-card">
+        <strong>
+          ₹${formatNumber(
+            creator.earnings
+          )}
+        </strong>
+        <span>Earnings</span>
+      </div>
+
+    `;
 
   } catch (error) {
-    console.error(
-      "loadCreatorStats:",
-      error
-    );
+
+    container.innerHTML =
+      `<div class="empty-card">
+        ${escapeHTML(error.message)}
+      </div>`;
   }
 }
 
-/* ======================================================
-   CREATOR MONETIZATION
-====================================================== */
-
-async function applyCreatorMonetization() {
-  if (!currentUser?.id) {
-    showToast(
-      "Login required.",
-      "error"
-    );
-
-    return;
-  }
-
-  try {
-    const data =
-      await api(
-        "/api/creator/" +
-        encodeURIComponent(
-          currentUser.id
-        ) +
-        "/monetization/apply",
-        {
-          method: "POST"
-        }
-      );
-
-    showToast(
-      data.message ||
-      "Monetization application submitted.",
-      "success"
-    );
-
-  } catch (error) {
-    showToast(
-      error.message ||
-      "Application failed.",
-      "error"
-    );
-  }
-}
 
 /* ======================================================
-   FOLLOW / UNFOLLOW
+   MONETIZATION
 ====================================================== */
 
-async function followCreator(
-  creatorId
-) {
-  if (!creatorId) return;
+async function applyMonetization() {
+
+  if (!currentUser) return;
 
   try {
+
     const data =
       await api(
-        "/api/follow/" +
-        encodeURIComponent(
-          creatorId
-        ),
-        {
-          method: "POST"
-        }
-      );
-
-    showToast(
-      data.following
-        ? "❤️ Following"
-        : "Following removed",
-      "success"
-    );
-
-    loadCreatorStats();
-
-  } catch (error) {
-    showToast(
-      error.message ||
-      "Follow failed.",
-      "error"
-    );
-  }
-}
-
-/* ======================================================
-   PAYOUT ACCOUNT
-====================================================== */
-
-async function savePayoutAccount(
-  method,
-  accountName,
-  accountValue
-) {
-  try {
-    const data =
-      await api(
-        "/api/payout-account",
+        `/api/creator/${currentUser.id}/monetization/apply`,
         {
           method: "POST",
-
-          body: {
-            method,
-            account_name:
-              accountName,
-
-            account_value:
-              accountValue
-          }
         }
       );
 
     showToast(
-      data.message ||
-      "Payout account saved.",
+      data.message,
       "success"
     );
 
-    return data;
+    await loadUser();
 
   } catch (error) {
+
     showToast(
-      error.message ||
-      "Payout account save failed.",
+      error.message,
       "error"
     );
-
-    throw error;
   }
 }
 
-/* ======================================================
-   PWA INSTALL
-====================================================== */
-
-window.addEventListener(
-  "beforeinstallprompt",
-  (event) => {
-    event.preventDefault();
-
-    deferredPrompt =
-      event;
-
-    const buttons =
-      document.querySelectorAll(
-        "[data-install-app]"
-      );
-
-    buttons.forEach(
-      (button) => {
-        button.classList.remove(
-          "hidden"
-        );
-      }
-    );
-  }
-);
-
-async function installApp() {
-  if (!deferredPrompt) {
-    showToast(
-      "Install option abhi available nahi hai."
-    );
-
-    return;
-  }
-
-  deferredPrompt.prompt();
-
-  try {
-    await deferredPrompt.userChoice;
-  } catch {
-    // ignore
-  }
-
-  deferredPrompt = null;
-}
-
-window.addEventListener(
-  "appinstalled",
-  () => {
-    deferredPrompt = null;
-
-    showToast(
-      "🎉 DekhoEarn install ho gaya!",
-      "success"
-    );
-  }
-);
 
 /* ======================================================
-   SERVICE WORKER
+   FORMATTERS
 ====================================================== */
 
-async function registerServiceWorker() {
-  if (
-    !("serviceWorker" in navigator)
-  ) {
-    return;
-  }
+function formatNumber(value) {
 
-  try {
-    await navigator.serviceWorker.register(
-      "/sw.js"
-    );
-  } catch (error) {
-    console.warn(
-      "Service worker:",
-      error
-    );
-  }
-}
+  const number =
+    Number(value || 0);
 
-/* ======================================================
-   UPLOAD DRAG / DROP
-====================================================== */
-
-function setupUploadDropZone() {
-  const elements =
-    getUploadElements();
-
-  const fileInput =
-    elements.file;
-
-  const picker =
-    document.querySelector(
-      ".video-picker"
-    ) ||
-    document.querySelector(
-      ".video-select-box"
-    );
-
-  if (!picker || !fileInput) {
-    return;
-  }
-
-  [
-    "dragenter",
-    "dragover"
-  ].forEach((eventName) => {
-    picker.addEventListener(
-      eventName,
-      (event) => {
-        event.preventDefault();
-
-        picker.classList.add(
-          "drag-active"
-        );
-      }
-    );
-  });
-
-  [
-    "dragleave",
-    "drop"
-  ].forEach((eventName) => {
-    picker.addEventListener(
-      eventName,
-      (event) => {
-        event.preventDefault();
-
-        picker.classList.remove(
-          "drag-active"
-        );
-      }
-    );
-  });
-
-  picker.addEventListener(
-    "drop",
-    (event) => {
-      const file =
-        event.dataTransfer?.files?.[0];
-
-      if (!file) return;
-
-      try {
-        const dataTransfer =
-          new DataTransfer();
-
-        dataTransfer.items.add(
-          file
-        );
-
-        fileInput.files =
-          dataTransfer.files;
-
-        fileInput.dispatchEvent(
-          new Event(
-            "change",
-            {
-              bubbles: true
-            }
-          )
-        );
-      } catch (error) {
-        console.warn(
-          "Drop file:",
-          error
-        );
-      }
-    }
+  return number.toLocaleString(
+    "en-IN"
   );
 }
 
+
+function formatVideoSize(bytes) {
+
+  if (!bytes) {
+    return "0 B";
+  }
+
+  const units = [
+    "B",
+    "KB",
+    "MB",
+    "GB",
+  ];
+
+  let size =
+    Number(bytes);
+
+  let index = 0;
+
+  while (
+    size >= 1024 &&
+    index < units.length - 1
+  ) {
+
+    size /= 1024;
+    index++;
+  }
+
+  return `${size.toFixed(
+    index === 0 ? 0 : 2
+  )} ${units[index]}`;
+}
+
+
+function formatDate(value) {
+
+  if (!value) {
+    return "";
+  }
+
+  try {
+
+    return new Date(value)
+      .toLocaleString(
+        "en-IN",
+        {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }
+      );
+
+  } catch {
+
+    return "";
+  }
+}
+
+
 /* ======================================================
-   GLOBAL UPLOAD HELPERS
+   BUTTON EVENTS
 ====================================================== */
 
-window.uploadUserVideo =
-  uploadUserVideo;
+function setupButtons() {
 
-window.uploadVideo =
-  uploadVideo;
+  $("loginBtn")
+    ?.addEventListener(
+      "click",
+      login
+    );
 
-window.openVideo =
-  openVideo;
+  $("registerBtn")
+    ?.addEventListener(
+      "click",
+      register
+    );
 
-window.likeVideo =
-  likeVideo;
+  $("logoutBtn")
+    ?.addEventListener(
+      "click",
+      logout
+    );
 
-window.sendComment =
-  sendComment;
+  $("refreshFeedBtn")
+    ?.addEventListener(
+      "click",
+      loadVideos
+    );
 
-window.reportVideo =
-  reportVideo;
+  $("likeVideoBtn")
+    ?.addEventListener(
+      "click",
+      likeCurrentVideo
+    );
 
-window.claimDaily =
-  claimDaily;
+  $("commentBtn")
+    ?.addEventListener(
+      "click",
+      addComment
+    );
 
-window.rewardAd =
-  rewardAd;
+  $("reportVideoBtn")
+    ?.addEventListener(
+      "click",
+      reportCurrentVideo
+    );
 
-window.deleteVideo =
-  deleteVideo;
+  $("followCreatorBtn")
+    ?.addEventListener(
+      "click",
+      followCreator
+    );
 
-window.loadMyVideos =
-  loadMyVideos;
+  $("dailyRewardBtn")
+    ?.addEventListener(
+      "click",
+      claimDailyReward
+    );
 
-window.loadVideos =
-  loadVideos;
+  $("rewardedAdBtn")
+    ?.addEventListener(
+      "click",
+      rewardedAd
+    );
 
-window.loadHistory =
-  loadHistory;
+  $("uploadVideoBtn")
+    ?.addEventListener(
+      "click",
+      uploadUserVideo
+    );
 
-window.loadPointsHistory =
-  loadPointsHistory;
+  $("myVideosBtn")
+    ?.addEventListener(
+      "click",
+      () => {
 
-window.applyCreatorMonetization =
-  applyCreatorMonetization;
+        $("myVideosContainer")
+          ?.classList.toggle(
+            "hidden"
+          );
 
-window.followCreator =
-  followCreator;
+        loadMyVideos();
 
-window.installApp =
-  installApp;
+      }
+    );
 
-window.showPage =
-  showPage;
+  $("creatorDashboardBtn")
+    ?.addEventListener(
+      "click",
+      () => {
+        showPage(
+          "creatorSection"
+        );
+      }
+    );
+
+  $("applyMonetizationBtn")
+    ?.addEventListener(
+      "click",
+      applyMonetization
+    );
+
+  $("backFromPlayerBtn")
+    ?.addEventListener(
+      "click",
+      () => {
+        if (watchTimer) {
+          clearInterval(
+            watchTimer
+          );
+          watchTimer = null;
+        }
+
+        showPage(
+          "homeSection"
+        );
+      }
+    );
+
+}
+
+
+/* ======================================================
+   ENTER KEY LOGIN
+====================================================== */
+
+function setupKeyboard() {
+
+  $("loginPassword")
+    ?.addEventListener(
+      "keydown",
+      (event) => {
+
+        if (
+          event.key === "Enter"
+        ) {
+          login();
+        }
+
+      }
+    );
+
+  $("registerPassword")
+    ?.addEventListener(
+      "keydown",
+      (event) => {
+
+        if (
+          event.key === "Enter"
+        ) {
+          register();
+        }
+
+      }
+    );
+
+  $("commentInput")
+    ?.addEventListener(
+      "keydown",
+      (event) => {
+
+        if (
+          event.key === "Enter"
+        ) {
+          addComment();
+        }
+
+      }
+    );
+
+}
+
 
 /* ======================================================
    START APP
 ====================================================== */
 
 async function startApp() {
-  console.log(
-    "DekhoEarn frontend starting..."
-  );
 
-  try {
-    setupNavigation();
+  setupAuthSwitches();
+  setupButtons();
+  setupNavigation();
+  setupKeyboard();
+  setupVideoFileInput();
 
-    /*
-      Important:
-      Upload elements DOM ready hone ke baad
-      resolve kiye ja rahe hain.
-      Isse script head mein hone par bhi
-      upload system break nahi hoga.
-    */
+  const savedUser =
+    getSavedUser();
 
-    setupVideoFileInput();
-    setupUploadButton();
-    setupUploadDropZone();
+  if (!savedUser?.id) {
 
-    await createUser();
+    showAuth();
 
-    updateUserUI();
-
-    await loadUser();
-
-    updateUserUI();
-
-    await loadVideos();
-
-    registerServiceWorker();
-
-    console.log(
-      "DekhoEarn frontend ready."
-    );
-
-  } catch (error) {
-    console.error(
-      "startApp:",
-      error
-    );
-
-    showToast(
-      error.message ||
-      "DekhoEarn start nahi ho paaya.",
-      "error"
-    );
+    return;
   }
+
+  currentUser =
+    savedUser;
+
+  showApp();
+
+  await loadUser();
+
+  if (!currentUser) {
+    return;
+  }
+
+  updateUserUI();
+
+  await loadVideos();
 }
+
 
 /* ======================================================
-   DOM READY
+   START
 ====================================================== */
 
-if (
-  document.readyState ===
-  "loading"
-) {
-  document.addEventListener(
-    "DOMContentLoaded",
-    startApp,
-    {
-      once: true
-    }
-  );
-} else {
-  startApp();
-}
+document.addEventListener(
+  "DOMContentLoaded",
+  startApp
+);
