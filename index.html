@@ -1,137 +1,790 @@
-<section id="uploadPage" class="page-section">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
 
-  <div class="section-header">
-    <div>
-      <h2>Upload Video 🎥</h2>
-      <p>Apna video DekhoEarn par share karein</p>
-    </div>
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+  />
+
+  <meta name="theme-color" content="#ffffff" />
+
+  <meta
+    name="description"
+    content="DekhoEarn - Watch videos, earn points and share your videos."
+  />
+
+  <link rel="manifest" href="/manifest.json" />
+
+  <title>DekhoEarn</title>
+
+  <link rel="stylesheet" href="/style.css" />
+</head>
+
+<body>
+
+<!-- ====================================================
+     AUTH SCREEN
+===================================================== -->
+
+<div id="authScreen" class="auth-screen">
+
+  <div class="auth-logo">
+    <div class="logo-circle">▶</div>
+    <h1>DekhoEarn</h1>
+    <p>Watch • Earn • Share</p>
   </div>
 
-  <div class="upload-card">
+  <!-- LOGIN -->
+
+  <div id="loginBox" class="auth-card">
+
+    <h2>Welcome Back 👋</h2>
+    <p class="auth-subtitle">
+      Login karke DekhoEarn continue karein
+    </p>
 
     <label class="upload-label">
-      Video Title
+      Username
     </label>
 
     <input
       type="text"
-      id="videoTitle"
+      id="loginUsername"
       class="input"
-      maxlength="120"
-      placeholder="Video ka title"
-      autocomplete="off"
+      placeholder="Username"
+      autocomplete="username"
     />
 
-
     <label class="upload-label">
-      Description
-    </label>
-
-    <textarea
-      id="videoDescription"
-      class="input textarea"
-      maxlength="1000"
-      placeholder="Video ke baare mein likhein..."
-    ></textarea>
-
-
-    <label class="upload-label">
-      Video Select Karein
-    </label>
-
-    <label
-      for="videoFile"
-      class="video-picker"
-    >
-
-      <div class="video-picker-icon">
-        🎥
-      </div>
-
-      <div class="video-picker-content">
-
-        <strong id="videoFileName">
-          Gallery se video choose karein
-        </strong>
-
-        <small>
-          MP4, MOV, WebM • Maximum 100 MB
-        </small>
-
-      </div>
-
+      Password
     </label>
 
     <input
-      type="file"
-      id="videoFile"
-      accept="video/*"
-      hidden
+      type="password"
+      id="loginPassword"
+      class="input"
+      placeholder="Password"
+      autocomplete="current-password"
     />
-
-
-    <!-- VIDEO PREVIEW -->
-
-    <div
-      id="uploadPreview"
-      class="upload-preview hidden"
-    >
-
-      <video
-        id="uploadPreviewVideo"
-        controls
-        playsinline
-      ></video>
-
-    </div>
-
-
-    <!-- PROGRESS -->
-
-    <div
-      id="uploadProgressBox"
-      class="upload-progress-box hidden"
-    >
-
-      <div class="upload-progress-text">
-
-        <span id="uploadProgressText">
-          Uploading...
-        </span>
-
-        <span id="uploadProgressPercent">
-          0%
-        </span>
-
-      </div>
-
-      <div class="progress-track">
-
-        <div
-          id="uploadProgressBar"
-          class="progress-bar"
-        ></div>
-
-      </div>
-
-    </div>
-
 
     <button
       type="button"
-      id="uploadVideoBtn"
+      id="loginBtn"
       class="primary-btn"
     >
-      🎥 Upload Video
+      🔐 Login
     </button>
 
-
-    <p class="upload-note">
-      Video Cloudinary par securely upload hoga.
-      Video ki information DekhoEarn ke Neon database
-      mein save hogi.
+    <p class="auth-switch">
+      New user?
+      <button type="button" id="showRegisterBtn">
+        Create Account
+      </button>
     </p>
 
   </div>
 
-</section>
+  <!-- REGISTER -->
+
+  <div
+    id="registerBox"
+    class="auth-card hidden"
+  >
+
+    <h2>Create Account 🚀</h2>
+
+    <p class="auth-subtitle">
+      Apna DekhoEarn account banayein
+    </p>
+
+    <label class="upload-label">
+      Name
+    </label>
+
+    <input
+      type="text"
+      id="registerName"
+      class="input"
+      placeholder="Your name"
+      autocomplete="name"
+    />
+
+    <label class="upload-label">
+      Username
+    </label>
+
+    <input
+      type="text"
+      id="registerUsername"
+      class="input"
+      placeholder="username"
+      autocomplete="username"
+    />
+
+    <label class="upload-label">
+      Password
+    </label>
+
+    <input
+      type="password"
+      id="registerPassword"
+      class="input"
+      placeholder="Minimum 6 characters"
+      autocomplete="new-password"
+    />
+
+    <label class="upload-label">
+      Referral Code
+      <span class="optional">(optional)</span>
+    </label>
+
+    <input
+      type="text"
+      id="registerReferral"
+      class="input"
+      placeholder="Referral code"
+      autocomplete="off"
+    />
+
+    <button
+      type="button"
+      id="registerBtn"
+      class="primary-btn"
+    >
+      🚀 Create Account
+    </button>
+
+    <p class="auth-switch">
+      Already have an account?
+      <button type="button" id="showLoginBtn">
+        Login
+      </button>
+    </p>
+
+  </div>
+
+</div>
+
+
+<!-- ====================================================
+     APP
+===================================================== -->
+
+<div id="appShell" class="app-shell hidden">
+
+  <!-- HEADER -->
+
+  <header class="top-header">
+
+    <div>
+      <div class="brand">
+        <span class="brand-icon">▶</span>
+        <span>DekhoEarn</span>
+      </div>
+
+      <small id="headerGreeting">
+        Welcome 👋
+      </small>
+    </div>
+
+    <div class="points-badge">
+      ⭐ <span id="headerPoints">0</span>
+    </div>
+
+  </header>
+
+
+  <!-- ==================================================
+       HOME
+  =================================================== -->
+
+  <main>
+
+    <section
+      id="homeSection"
+      class="page-section active"
+    >
+
+      <div class="section-header">
+
+        <div>
+          <h2>For You 🎬</h2>
+          <p>Videos dekhein aur points earn karein</p>
+        </div>
+
+        <button
+          type="button"
+          id="refreshFeedBtn"
+          class="icon-btn"
+        >
+          🔄
+        </button>
+
+      </div>
+
+      <div
+        id="videoFeed"
+        class="video-feed"
+      ></div>
+
+    </section>
+
+
+    <!-- =================================================
+         WATCH
+    ================================================== -->
+
+    <section
+      id="watchSection"
+      class="page-section"
+    >
+
+      <div class="section-header">
+
+        <div>
+          <h2>Watch History 👀</h2>
+          <p>Aapke watched videos</p>
+        </div>
+
+      </div>
+
+      <div id="watchHistoryList"></div>
+
+    </section>
+
+
+    <!-- =================================================
+         PLAYER
+    ================================================== -->
+
+    <section
+      id="playerSection"
+      class="page-section"
+    >
+
+      <div class="player-wrapper">
+
+        <button
+          type="button"
+          id="backFromPlayerBtn"
+          class="back-btn"
+        >
+          ← Back
+        </button>
+
+        <video
+          id="mainVideo"
+          class="main-video"
+          controls
+          playsinline
+          preload="metadata"
+        ></video>
+
+        <div class="player-info">
+
+          <h2 id="playerTitle">
+            Video
+          </h2>
+
+          <p id="playerDescription"></p>
+
+          <div class="player-stats">
+
+            <span>
+              👁️ <b id="playerViews">0</b>
+            </span>
+
+            <span>
+              ❤️ <b id="playerLikes">0</b>
+            </span>
+
+            <span>
+              💬 <b id="playerCommentsCount">0</b>
+            </span>
+
+          </div>
+
+          <div class="player-actions">
+
+            <button
+              type="button"
+              id="likeVideoBtn"
+              class="secondary-btn"
+            >
+              ❤️ Like
+            </button>
+
+            <button
+              type="button"
+              id="followCreatorBtn"
+              class="secondary-btn"
+            >
+              👤 Follow
+            </button>
+
+            <button
+              type="button"
+              id="reportVideoBtn"
+              class="secondary-btn"
+            >
+              🚩 Report
+            </button>
+
+          </div>
+
+        </div>
+
+        <div class="comments-box">
+
+          <h3>Comments 💬</h3>
+
+          <div
+            id="commentsList"
+            class="comments-list"
+          ></div>
+
+          <div class="comment-form">
+
+            <input
+              type="text"
+              id="commentInput"
+              class="input"
+              maxlength="500"
+              placeholder="Comment likhein..."
+            />
+
+            <button
+              type="button"
+              id="commentBtn"
+              class="primary-btn"
+            >
+              Send
+            </button>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+
+    <!-- =================================================
+         EARN
+    ================================================== -->
+
+    <section
+      id="earnSection"
+      class="page-section"
+    >
+
+      <div class="section-header">
+
+        <div>
+          <h2>Earn Points 💰</h2>
+          <p>Daily rewards aur bonus points</p>
+        </div>
+
+      </div>
+
+      <div class="earn-grid">
+
+        <div class="earn-card">
+
+          <div class="earn-icon">🎁</div>
+
+          <h3>Daily Reward</h3>
+
+          <p>
+            Roz login karke reward claim karein.
+          </p>
+
+          <button
+            type="button"
+            id="dailyRewardBtn"
+            class="primary-btn"
+          >
+            Claim +10
+          </button>
+
+        </div>
+
+
+        <div class="earn-card">
+
+          <div class="earn-icon">📺</div>
+
+          <h3>Rewarded Ad</h3>
+
+          <p>
+            Advertisement complete karke points earn karein.
+          </p>
+
+          <button
+            type="button"
+            id="rewardedAdBtn"
+            class="primary-btn"
+          >
+            Watch Ad +5
+          </button>
+
+        </div>
+
+      </div>
+
+      <div class="history-card">
+
+        <h3>Points History</h3>
+
+        <div id="pointsHistory"></div>
+
+      </div>
+
+    </section>
+
+
+    <!-- =================================================
+         UPLOAD
+    ================================================== -->
+
+    <section
+      id="uploadSection"
+      class="page-section"
+    >
+
+      <div class="section-header">
+
+        <div>
+          <h2>Upload Video 🎥</h2>
+          <p>Apna video DekhoEarn par share karein</p>
+        </div>
+
+      </div>
+
+      <div class="upload-card">
+
+        <label class="upload-label">
+          Video Title
+        </label>
+
+        <input
+          type="text"
+          id="videoTitle"
+          class="input"
+          maxlength="120"
+          placeholder="Video ka title"
+          autocomplete="off"
+        />
+
+        <label class="upload-label">
+          Description
+        </label>
+
+        <textarea
+          id="videoDescription"
+          class="input textarea"
+          maxlength="1000"
+          placeholder="Video ke baare mein likhein..."
+        ></textarea>
+
+        <label class="upload-label">
+          Video Select Karein
+        </label>
+
+        <label
+          for="videoFile"
+          class="video-picker"
+        >
+
+          <div class="video-picker-icon">
+            🎥
+          </div>
+
+          <div class="video-picker-content">
+
+            <strong id="videoFileName">
+              Gallery se video choose karein
+            </strong>
+
+            <small>
+              MP4, MOV, WebM • Maximum 100 MB
+            </small>
+
+          </div>
+
+        </label>
+
+        <input
+          type="file"
+          id="videoFile"
+          accept="video/*"
+          hidden
+        />
+
+
+        <div
+          id="uploadPreview"
+          class="upload-preview hidden"
+        >
+
+          <video
+            id="uploadPreviewVideo"
+            controls
+            playsinline
+          ></video>
+
+        </div>
+
+
+        <div
+          id="uploadProgressBox"
+          class="upload-progress-box hidden"
+        >
+
+          <div class="upload-progress-text">
+
+            <span id="uploadProgressText">
+              Uploading...
+            </span>
+
+            <span id="uploadProgressPercent">
+              0%
+            </span>
+
+          </div>
+
+          <div class="progress-track">
+
+            <div
+              id="uploadProgressBar"
+              class="progress-bar"
+            ></div>
+
+          </div>
+
+        </div>
+
+
+        <button
+          type="button"
+          id="uploadVideoBtn"
+          class="primary-btn"
+        >
+          🎥 Upload Video
+        </button>
+
+        <p class="upload-note">
+          Video Cloudinary par securely upload hoga.
+          Video ki information DekhoEarn ke Neon database mein
+          save hogi.
+        </p>
+
+      </div>
+
+    </section>
+
+
+    <!-- =================================================
+         PROFILE
+    ================================================== -->
+
+    <section
+      id="profileSection"
+      class="page-section"
+    >
+
+      <div class="profile-card">
+
+        <div class="profile-avatar">
+          👤
+        </div>
+
+        <h2 id="profileName">
+          User
+        </h2>
+
+        <p id="profileUsername">
+          @username
+        </p>
+
+        <div class="profile-stats">
+
+          <div>
+            <strong id="profilePoints">0</strong>
+            <span>Points</span>
+          </div>
+
+          <div>
+            <strong id="profileVideos">0</strong>
+            <span>Watched</span>
+          </div>
+
+          <div>
+            <strong id="profileEarned">0</strong>
+            <span>Earned</span>
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <div class="profile-menu">
+
+        <button
+          type="button"
+          id="myVideosBtn"
+          class="menu-btn"
+        >
+          🎥 My Videos
+          <span>›</span>
+        </button>
+
+        <button
+          type="button"
+          id="creatorDashboardBtn"
+          class="menu-btn"
+        >
+          📊 Creator Dashboard
+          <span>›</span>
+        </button>
+
+        <button
+          type="button"
+          id="logoutBtn"
+          class="menu-btn danger"
+        >
+          🚪 Logout
+          <span>›</span>
+        </button>
+
+      </div>
+
+
+      <div
+        id="myVideosContainer"
+        class="hidden"
+      >
+
+        <div class="section-header">
+
+          <h3>My Videos 🎬</h3>
+
+        </div>
+
+        <div id="myVideosList"></div>
+
+      </div>
+
+    </section>
+
+
+    <!-- =================================================
+         CREATOR
+    ================================================== -->
+
+    <section
+      id="creatorSection"
+      class="page-section"
+    >
+
+      <div class="section-header">
+
+        <div>
+          <h2>Creator Dashboard 📊</h2>
+          <p>Apne content ka performance dekhein</p>
+        </div>
+
+      </div>
+
+      <div
+        id="creatorStats"
+        class="stats-grid"
+      ></div>
+
+      <button
+        type="button"
+        id="applyMonetizationBtn"
+        class="primary-btn"
+      >
+        💰 Apply for Monetization
+      </button>
+
+    </section>
+
+  </main>
+
+
+  <!-- ==================================================
+       BOTTOM NAV
+  =================================================== -->
+
+  <nav class="bottom-nav">
+
+    <button
+      type="button"
+      data-page="homeSection"
+      class="nav-btn active"
+    >
+      <span>🏠</span>
+      <small>Home</small>
+    </button>
+
+    <button
+      type="button"
+      data-page="watchSection"
+      class="nav-btn"
+    >
+      <span>👀</span>
+      <small>Watch</small>
+    </button>
+
+    <button
+      type="button"
+      data-page="earnSection"
+      class="nav-btn"
+    >
+      <span>💰</span>
+      <small>Earn</small>
+    </button>
+
+    <button
+      type="button"
+      data-page="uploadSection"
+      class="nav-btn upload-nav"
+    >
+      <span>➕</span>
+      <small>Upload</small>
+    </button>
+
+    <button
+      type="button"
+      data-page="profileSection"
+      class="nav-btn"
+    >
+      <span>👤</span>
+      <small>Profile</small>
+    </button>
+
+  </nav>
+
+</div>
+
+
+<!-- ====================================================
+     TOAST
+===================================================== -->
+
+<div
+  id="toast"
+  class="toast hidden"
+></div>
+
+
+<script src="/app.js"></script>
+
+</body>
+</html>
