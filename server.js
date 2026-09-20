@@ -1,7 +1,7 @@
 /*
 =========================================================
  DEKHOEARN SERVER
- Version 2.2.0
+ Version 2.3.0
 
  Dekho. Earn Karo. Reward Lo.
 
@@ -36,6 +36,8 @@
  - Duplicate URL warning
  - Health endpoint
  - Static frontend
+ - Cloudinary signed upload
+ - 100 MB upload compatibility
 =========================================================
 */
 
@@ -54,7 +56,7 @@ const app = express();
 // CONFIG
 // =========================================================
 
-const SERVER_VERSION = "2.2.0";
+const SERVER_VERSION = "2.3.0";
 
 const PORT =
   process.env.PORT || 10000;
@@ -91,6 +93,14 @@ const CREATOR_MIN_WATCH_HOURS = 1000;
 
 
 // =========================================================
+// UPLOAD SETTINGS
+// =========================================================
+
+const MAX_VIDEO_SIZE =
+  100 * 1024 * 1024;
+
+
+// =========================================================
 // CLOUDINARY
 // =========================================================
 
@@ -108,6 +118,9 @@ const CLOUDINARY_API_SECRET =
 // EXPRESS
 // =========================================================
 
+app.disable("x-powered-by");
+
+
 app.use(
   cors({
     origin: true,
@@ -116,9 +129,24 @@ app.use(
 );
 
 
+/*
+IMPORTANT:
+
+JSON body is only used for metadata/API requests.
+
+The actual video file goes directly:
+
+Browser
+   ↓
+Cloudinary
+
+So Express does NOT receive the 100 MB video file.
+*/
+
+
 app.use(
   express.json({
-    limit: "1mb"
+    limit: "2mb"
   })
 );
 
@@ -126,8 +154,36 @@ app.use(
 app.use(
   express.urlencoded({
     extended: true,
-    limit: "1mb"
+    limit: "2mb"
   })
+);
+
+
+// =========================================================
+// STATIC FRONTEND
+// =========================================================
+
+/*
+This was missing from the previous server.
+
+It allows Render/Express to serve:
+
+index.html
+app.js
+style.css
+icons
+images
+etc.
+*/
+
+app.use(
+  express.static(
+    __dirname,
+    {
+      index: false,
+      maxAge: "1h"
+    }
+  )
 );
 
 
@@ -137,10 +193,13 @@ app.use(
 
 let pool = null;
 
+
 if (DATABASE_URL) {
 
   pool = new Pool({
-    connectionString: DATABASE_URL,
+
+    connectionString:
+      DATABASE_URL,
 
     ssl: {
       rejectUnauthorized: false
@@ -148,9 +207,12 @@ if (DATABASE_URL) {
 
     max: 5,
 
-    idleTimeoutMillis: 30000,
+    idleTimeoutMillis:
+      30000,
 
-    connectionTimeoutMillis: 10000
+    connectionTimeoutMillis:
+      10000
+
   });
 
 }
@@ -162,15 +224,18 @@ async function dbQuery(
 ) {
 
   if (!pool) {
+
     throw new Error(
       "DATABASE_URL is not configured."
     );
+
   }
 
   return pool.query(
     text,
     params
   );
+
 }
 
 
@@ -187,12 +252,15 @@ function cleanString(
     value === undefined ||
     value === null
   ) {
+
     return "";
+
   }
 
   return String(value)
     .trim()
     .slice(0, maxLength);
+
 }
 
 
@@ -210,6 +278,7 @@ function safeInteger(
   return Number.isFinite(n)
     ? n
     : fallback;
+
 }
 
 
@@ -224,6 +293,7 @@ function safeNumber(
   return Number.isFinite(n)
     ? n
     : fallback;
+
 }
 
 
@@ -240,6 +310,7 @@ function todayIndia() {
   ).format(
     new Date()
   );
+
 }
 
 
@@ -262,6 +333,7 @@ function isValidHttpUrl(
     return false;
 
   }
+
 }
 
 
@@ -275,6 +347,7 @@ function getUserId(
     req.headers["x-user-id"],
     100
   );
+
 }
 
 
@@ -301,6 +374,7 @@ function adminAuthorized(
     headerKey === ADMIN_KEY ||
     bearer === ADMIN_KEY
   );
+
 }
 
 
@@ -313,9 +387,12 @@ function requireAdmin(
   if (!ADMIN_KEY) {
 
     return res.status(503).json({
+
       ok: false,
+
       error:
         "ADMIN_KEY is not configured."
+
     });
 
   }
@@ -323,14 +400,18 @@ function requireAdmin(
   if (!adminAuthorized(req)) {
 
     return res.status(401).json({
+
       ok: false,
+
       error:
         "Unauthorized."
+
     });
 
   }
 
   next();
+
 }
 
 
@@ -350,6 +431,10 @@ async function initDatabase() {
 
   }
 
+
+  // =======================================================
+  // USERS
+  // =======================================================
 
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_users (
@@ -371,6 +456,10 @@ async function initDatabase() {
   `);
 
 
+  // =======================================================
+  // VIDEOS
+  // =======================================================
+
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_videos (
       id BIGSERIAL PRIMARY KEY,
@@ -381,6 +470,9 @@ async function initDatabase() {
       thumbnail_url TEXT DEFAULT '',
       cloudinary_public_id TEXT DEFAULT '',
       cloudinary_resource_type TEXT DEFAULT 'video',
+      cloudinary_format TEXT DEFAULT '',
+      duration NUMERIC(12,3),
+      bytes BIGINT,
       views BIGINT NOT NULL DEFAULT 0,
       likes_count BIGINT NOT NULL DEFAULT 0,
       comments_count BIGINT NOT NULL DEFAULT 0,
@@ -394,6 +486,10 @@ async function initDatabase() {
   `);
 
 
+  // =======================================================
+  // VIDEO VIEWS
+  // =======================================================
+
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_video_views (
       id BIGSERIAL PRIMARY KEY,
@@ -406,6 +502,10 @@ async function initDatabase() {
   `);
 
 
+  // =======================================================
+  // LIKES
+  // =======================================================
+
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_likes (
       id BIGSERIAL PRIMARY KEY,
@@ -417,6 +517,10 @@ async function initDatabase() {
   `);
 
 
+  // =======================================================
+  // COMMENTS
+  // =======================================================
+
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_comments (
       id BIGSERIAL PRIMARY KEY,
@@ -427,6 +531,10 @@ async function initDatabase() {
     )
   `);
 
+
+  // =======================================================
+  // REPORTS
+  // =======================================================
 
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_reports (
@@ -440,6 +548,10 @@ async function initDatabase() {
   `);
 
 
+  // =======================================================
+  // FOLLOWS
+  // =======================================================
+
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_follows (
       id BIGSERIAL PRIMARY KEY,
@@ -450,6 +562,10 @@ async function initDatabase() {
     )
   `);
 
+
+  // =======================================================
+  // POINTS LEDGER
+  // =======================================================
 
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_points_ledger (
@@ -464,6 +580,10 @@ async function initDatabase() {
   `);
 
 
+  // =======================================================
+  // DAILY REWARDS
+  // =======================================================
+
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_daily_rewards (
       id BIGSERIAL PRIMARY KEY,
@@ -476,6 +596,10 @@ async function initDatabase() {
   `);
 
 
+  // =======================================================
+  // REWARDED ADS
+  // =======================================================
+
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_rewarded_ads (
       id BIGSERIAL PRIMARY KEY,
@@ -486,6 +610,10 @@ async function initDatabase() {
     )
   `);
 
+
+  // =======================================================
+  // REFERRALS
+  // =======================================================
 
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_referrals (
@@ -498,6 +626,10 @@ async function initDatabase() {
     )
   `);
 
+
+  // =======================================================
+  // CREATOR EARNINGS
+  // =======================================================
 
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_creator_earnings (
@@ -514,6 +646,10 @@ async function initDatabase() {
   `);
 
 
+  // =======================================================
+  // PAYOUT ACCOUNTS
+  // =======================================================
+
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_payout_accounts (
       id BIGSERIAL PRIMARY KEY,
@@ -527,6 +663,10 @@ async function initDatabase() {
     )
   `);
 
+
+  // =======================================================
+  // ADMIN ACTIONS
+  // =======================================================
 
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_admin_actions (
@@ -546,62 +686,115 @@ async function initDatabase() {
 
   const migrations = [
 
-    `ALTER TABLE dekhoearn_users
-      ADD COLUMN IF NOT EXISTS username TEXT DEFAULT ''`,
+    `
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS username TEXT DEFAULT ''
+    `,
 
-    `ALTER TABLE dekhoearn_users
-      ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT ''`,
+    `
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS avatar_url TEXT DEFAULT ''
+    `,
 
-    `ALTER TABLE dekhoearn_users
-      ADD COLUMN IF NOT EXISTS points BIGINT NOT NULL DEFAULT 0`,
+    `
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS points BIGINT NOT NULL DEFAULT 0
+    `,
 
-    `ALTER TABLE dekhoearn_users
-      ADD COLUMN IF NOT EXISTS followers_count INTEGER NOT NULL DEFAULT 0`,
+    `
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS followers_count INTEGER NOT NULL DEFAULT 0
+    `,
 
-    `ALTER TABLE dekhoearn_users
-      ADD COLUMN IF NOT EXISTS following_count INTEGER NOT NULL DEFAULT 0`,
+    `
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS following_count INTEGER NOT NULL DEFAULT 0
+    `,
 
-    `ALTER TABLE dekhoearn_users
-      ADD COLUMN IF NOT EXISTS total_watch_seconds BIGINT NOT NULL DEFAULT 0`,
+    `
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS total_watch_seconds BIGINT NOT NULL DEFAULT 0
+    `,
 
-    `ALTER TABLE dekhoearn_users
-      ADD COLUMN IF NOT EXISTS total_videos INTEGER NOT NULL DEFAULT 0`,
+    `
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS total_videos INTEGER NOT NULL DEFAULT 0
+    `,
 
-    `ALTER TABLE dekhoearn_users
-      ADD COLUMN IF NOT EXISTS creator_status TEXT NOT NULL DEFAULT 'not_eligible'`,
+    `
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS creator_status TEXT NOT NULL DEFAULT 'not_eligible'
+    `,
 
-    `ALTER TABLE dekhoearn_users
-      ADD COLUMN IF NOT EXISTS creator_applied BOOLEAN NOT NULL DEFAULT FALSE`,
+    `
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS creator_applied BOOLEAN NOT NULL DEFAULT FALSE
+    `,
 
-    `ALTER TABLE dekhoearn_videos
-      ADD COLUMN IF NOT EXISTS thumbnail_url TEXT DEFAULT ''`,
+    `
+    ALTER TABLE dekhoearn_videos
+    ADD COLUMN IF NOT EXISTS thumbnail_url TEXT DEFAULT ''
+    `,
 
-    `ALTER TABLE dekhoearn_videos
-      ADD COLUMN IF NOT EXISTS cloudinary_public_id TEXT DEFAULT ''`,
+    `
+    ALTER TABLE dekhoearn_videos
+    ADD COLUMN IF NOT EXISTS cloudinary_public_id TEXT DEFAULT ''
+    `,
 
-    `ALTER TABLE dekhoearn_videos
-      ADD COLUMN IF NOT EXISTS cloudinary_resource_type TEXT DEFAULT 'video'`,
+    `
+    ALTER TABLE dekhoearn_videos
+    ADD COLUMN IF NOT EXISTS cloudinary_resource_type TEXT DEFAULT 'video'
+    `,
 
-    `ALTER TABLE dekhoearn_videos
-      ADD COLUMN IF NOT EXISTS views BIGINT NOT NULL DEFAULT 0`,
+    `
+    ALTER TABLE dekhoearn_videos
+    ADD COLUMN IF NOT EXISTS cloudinary_format TEXT DEFAULT ''
+    `,
 
-    `ALTER TABLE dekhoearn_videos
-      ADD COLUMN IF NOT EXISTS likes_count BIGINT NOT NULL DEFAULT 0`,
+    `
+    ALTER TABLE dekhoearn_videos
+    ADD COLUMN IF NOT EXISTS duration NUMERIC(12,3)
+    `,
 
-    `ALTER TABLE dekhoearn_videos
-      ADD COLUMN IF NOT EXISTS comments_count BIGINT NOT NULL DEFAULT 0`,
+    `
+    ALTER TABLE dekhoearn_videos
+    ADD COLUMN IF NOT EXISTS bytes BIGINT
+    `,
 
-    `ALTER TABLE dekhoearn_videos
-      ADD COLUMN IF NOT EXISTS watch_seconds BIGINT NOT NULL DEFAULT 0`,
+    `
+    ALTER TABLE dekhoearn_videos
+    ADD COLUMN IF NOT EXISTS views BIGINT NOT NULL DEFAULT 0
+    `,
 
-    `ALTER TABLE dekhoearn_videos
-      ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'published'`,
+    `
+    ALTER TABLE dekhoearn_videos
+    ADD COLUMN IF NOT EXISTS likes_count BIGINT NOT NULL DEFAULT 0
+    `,
 
-    `ALTER TABLE dekhoearn_videos
-      ADD COLUMN IF NOT EXISTS moderation_status TEXT NOT NULL DEFAULT 'normal'`,
+    `
+    ALTER TABLE dekhoearn_videos
+    ADD COLUMN IF NOT EXISTS comments_count BIGINT NOT NULL DEFAULT 0
+    `,
 
-    `ALTER TABLE dekhoearn_videos
-      ADD COLUMN IF NOT EXISTS duplicate_warning BOOLEAN NOT NULL DEFAULT FALSE`
+    `
+    ALTER TABLE dekhoearn_videos
+    ADD COLUMN IF NOT EXISTS watch_seconds BIGINT NOT NULL DEFAULT 0
+    `,
+
+    `
+    ALTER TABLE dekhoearn_videos
+    ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'published'
+    `,
+
+    `
+    ALTER TABLE dekhoearn_videos
+    ADD COLUMN IF NOT EXISTS moderation_status TEXT NOT NULL DEFAULT 'normal'
+    `,
+
+    `
+    ALTER TABLE dekhoearn_videos
+    ADD COLUMN IF NOT EXISTS duplicate_warning BOOLEAN NOT NULL DEFAULT FALSE
+    `
 
   ];
 
@@ -668,7 +861,8 @@ app.get(
 
       ok: true,
 
-      app: "DekhoEarn",
+      app:
+        "DekhoEarn",
 
       version:
         SERVER_VERSION,
@@ -687,8 +881,54 @@ app.get(
           CLOUDINARY_API_SECRET
         ),
 
+      frontend:
+        true,
+
+      max_video_size_mb:
+        MAX_VIDEO_SIZE /
+        1024 /
+        1024,
+
       timestamp:
         new Date().toISOString()
+
+    });
+
+  }
+);
+
+
+// =========================================================
+// CLOUDINARY CONFIG CHECK
+// =========================================================
+
+app.get(
+  "/api/cloudinary/status",
+  (req, res) => {
+
+    return res.json({
+
+      ok: true,
+
+      configured:
+        Boolean(
+          CLOUDINARY_CLOUD_NAME &&
+          CLOUDINARY_API_KEY &&
+          CLOUDINARY_API_SECRET
+        ),
+
+      cloud_name:
+        CLOUDINARY_CLOUD_NAME
+          ? CLOUDINARY_CLOUD_NAME
+          : "",
+
+      resource_type:
+        "video",
+
+      max_video_size_mb:
+        MAX_VIDEO_SIZE /
+        1024 /
+        1024
 
     });
 
@@ -712,6 +952,10 @@ app.post(
         !CLOUDINARY_API_SECRET
       ) {
 
+        console.error(
+          "Cloudinary environment variables missing."
+        );
+
         return res.status(503).json({
 
           ok: false,
@@ -730,6 +974,18 @@ app.post(
         );
 
 
+      /*
+      We are signing only timestamp.
+
+      Browser will send:
+
+      file
+      api_key
+      timestamp
+      signature
+      */
+
+
       const stringToSign =
         `timestamp=${timestamp}`;
 
@@ -742,6 +998,15 @@ app.post(
             CLOUDINARY_API_SECRET
           )
           .digest("hex");
+
+
+      const uploadUrl =
+        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`;
+
+
+      console.log(
+        "Cloudinary signature generated."
+      );
 
 
       return res.json({
@@ -759,7 +1024,10 @@ app.post(
         signature,
 
         resource_type:
-          "video"
+          "video",
+
+        upload_url:
+          uploadUrl
 
       });
 
@@ -859,8 +1127,11 @@ app.post(
           )
           VALUES
           ($1,$2,$3,$4,$5)
+
           ON CONFLICT (id)
+
           DO UPDATE SET
+
             name =
               CASE
                 WHEN EXCLUDED.name <> ''
@@ -889,7 +1160,8 @@ app.post(
                 ELSE dekhoearn_users.avatar_url
               END,
 
-            updated_at = NOW()
+            updated_at =
+              NOW()
 
           RETURNING *
           `,
@@ -1146,7 +1418,8 @@ app.post(
 
       const userId =
         cleanString(
-          req.body.user_id,
+          req.body.user_id ||
+          req.body.creator_id,
           100
         );
 
@@ -1186,6 +1459,35 @@ app.post(
         );
 
 
+      const cloudinaryResourceType =
+        cleanString(
+          req.body.cloudinary_resource_type ||
+          "video",
+          50
+        );
+
+
+      const cloudinaryFormat =
+        cleanString(
+          req.body.cloudinary_format,
+          50
+        );
+
+
+      const duration =
+        safeNumber(
+          req.body.duration,
+          0
+        );
+
+
+      const bytes =
+        safeNumber(
+          req.body.bytes,
+          0
+        );
+
+
       if (
         !userId ||
         !title ||
@@ -1216,6 +1518,30 @@ app.post(
 
           error:
             "Invalid video URL."
+
+        });
+
+      }
+
+
+      /*
+      Basic protection.
+
+      Only allow Cloudinary URLs for the new
+      direct-upload flow, while keeping support
+      for normal HTTPS URLs.
+      */
+
+      if (
+        bytes > MAX_VIDEO_SIZE
+      ) {
+
+        return res.status(413).json({
+
+          ok: false,
+
+          error:
+            "Video exceeds the 100 MB limit."
 
         });
 
@@ -1279,10 +1605,27 @@ app.post(
             thumbnail_url,
             cloudinary_public_id,
             cloudinary_resource_type,
+            cloudinary_format,
+            duration,
+            bytes,
             duplicate_warning
           )
+
           VALUES
-          ($1,$2,$3,$4,$5,$6,'video',$7)
+          (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            NULLIF($9, 0),
+            NULLIF($10, 0),
+            $11
+          )
+
           RETURNING *
           `,
           [
@@ -1292,6 +1635,10 @@ app.post(
             videoUrl,
             thumbnailUrl,
             cloudinaryPublicId,
+            cloudinaryResourceType,
+            cloudinaryFormat,
+            duration,
+            bytes,
             duplicateWarning
           ]
         );
@@ -1300,10 +1647,14 @@ app.post(
       await dbQuery(
         `
         UPDATE dekhoearn_users
+
         SET
           total_videos =
             total_videos + 1,
-          updated_at = NOW()
+
+          updated_at =
+            NOW()
+
         WHERE id = $1
         `,
         [userId]
@@ -1359,9 +1710,12 @@ app.get(
 
       const limit =
         Math.min(
-          safeInteger(
-            req.query.limit,
-            30
+          Math.max(
+            safeInteger(
+              req.query.limit,
+              30
+            ),
+            1
           ),
           100
         );
@@ -1382,18 +1736,28 @@ app.get(
           `
           SELECT
             v.*,
+
             u.name AS creator_name,
+
             u.username AS creator_username,
+
             u.avatar_url AS creator_avatar
+
           FROM dekhoearn_videos v
+
           LEFT JOIN dekhoearn_users u
             ON u.id = v.user_id
+
           WHERE
             v.status = 'published'
+
             AND v.moderation_status <> 'removed'
+
           ORDER BY
             v.created_at DESC
+
           LIMIT $1
+
           OFFSET $2
           `,
           [
@@ -1445,21 +1809,33 @@ app.get(
 
     try {
 
+      const videoId =
+        safeInteger(
+          req.params.id
+        );
+
+
       const result =
         await dbQuery(
           `
           SELECT
             v.*,
+
             u.name AS creator_name,
+
             u.username AS creator_username,
+
             u.avatar_url AS creator_avatar
+
           FROM dekhoearn_videos v
+
           LEFT JOIN dekhoearn_users u
             ON u.id = v.user_id
+
           WHERE v.id = $1
           `,
           [
-            req.params.id
+            videoId
           ]
         );
 
@@ -1488,6 +1864,12 @@ app.get(
       });
 
     } catch (error) {
+
+      console.error(
+        "Single video error:",
+        error
+      );
+
 
       return res.status(500).json({
 
@@ -1559,8 +1941,13 @@ app.post(
       const videoResult =
         await dbQuery(
           `
-          SELECT id, user_id, status
+          SELECT
+            id,
+            user_id,
+            status
+
           FROM dekhoearn_videos
+
           WHERE id = $1
           `,
           [videoId]
@@ -1603,10 +1990,6 @@ app.post(
         MIN_WATCH_SECONDS;
 
 
-      // ---------------------------------------------------
-      // Count view
-      // ---------------------------------------------------
-
       await dbQuery(
         `
         INSERT INTO dekhoearn_video_views
@@ -1616,6 +1999,7 @@ app.post(
           watch_seconds,
           reward_granted
         )
+
         VALUES
         ($1,$2,$3,$4)
         `,
@@ -1631,6 +2015,7 @@ app.post(
       await dbQuery(
         `
         UPDATE dekhoearn_videos
+
         SET
           views =
             views + 1,
@@ -1640,6 +2025,7 @@ app.post(
 
           updated_at =
             NOW()
+
         WHERE id = $1
         `,
         [
@@ -1652,12 +2038,14 @@ app.post(
       await dbQuery(
         `
         UPDATE dekhoearn_users
+
         SET
           total_watch_seconds =
             total_watch_seconds + $2,
 
           updated_at =
             NOW()
+
         WHERE id = $1
         `,
         [
@@ -1667,21 +2055,19 @@ app.post(
       );
 
 
-      // ---------------------------------------------------
-      // Reward
-      // ---------------------------------------------------
-
       if (rewardEligible) {
 
         await dbQuery(
           `
           UPDATE dekhoearn_users
+
           SET
             points =
               points + $2,
 
             updated_at =
               NOW()
+
           WHERE id = $1
           `,
           [
@@ -1701,6 +2087,7 @@ app.post(
             reference_id,
             description
           )
+
           VALUES
           ($1,$2,'watch',$3,$4)
           `,
@@ -1719,7 +2106,9 @@ app.post(
         await dbQuery(
           `
           SELECT points
+
           FROM dekhoearn_users
+
           WHERE id = $1
           `,
           [userId]
@@ -1810,9 +2199,12 @@ app.post(
         await dbQuery(
           `
           SELECT id
+
           FROM dekhoearn_likes
+
           WHERE
             video_id = $1
+
             AND user_id = $2
           `,
           [
@@ -1827,8 +2219,10 @@ app.post(
         await dbQuery(
           `
           DELETE FROM dekhoearn_likes
+
           WHERE
             video_id = $1
+
             AND user_id = $2
           `,
           [
@@ -1841,12 +2235,14 @@ app.post(
         await dbQuery(
           `
           UPDATE dekhoearn_videos
+
           SET
             likes_count =
               GREATEST(
                 likes_count - 1,
                 0
               )
+
           WHERE id = $1
           `,
           [videoId]
@@ -1864,34 +2260,53 @@ app.post(
       }
 
 
-      await dbQuery(
-        `
-        INSERT INTO dekhoearn_likes
-        (
-          video_id,
-          user_id
-        )
-        VALUES
-        ($1,$2)
-        ON CONFLICT DO NOTHING
-        `,
-        [
-          videoId,
-          userId
-        ]
-      );
+      const insertResult =
+        await dbQuery(
+          `
+          INSERT INTO dekhoearn_likes
+          (
+            video_id,
+            user_id
+          )
+
+          VALUES
+          ($1,$2)
+
+          ON CONFLICT
+          (
+            video_id,
+            user_id
+          )
+
+          DO NOTHING
+
+          RETURNING id
+          `,
+          [
+            videoId,
+            userId
+          ]
+        );
 
 
-      await dbQuery(
-        `
-        UPDATE dekhoearn_videos
-        SET
-          likes_count =
-            likes_count + 1
-        WHERE id = $1
-        `,
-        [videoId]
-      );
+      if (
+        insertResult.rows.length
+      ) {
+
+        await dbQuery(
+          `
+          UPDATE dekhoearn_videos
+
+          SET
+            likes_count =
+              likes_count + 1
+
+          WHERE id = $1
+          `,
+          [videoId]
+        );
+
+      }
 
 
       return res.json({
@@ -1981,8 +2396,10 @@ app.post(
             user_id,
             comment
           )
+
           VALUES
           ($1,$2,$3)
+
           RETURNING *
           `,
           [
@@ -1996,9 +2413,11 @@ app.post(
       await dbQuery(
         `
         UPDATE dekhoearn_videos
+
         SET
           comments_count =
             comments_count + 1
+
         WHERE id = $1
         `,
         [videoId]
@@ -2015,6 +2434,12 @@ app.post(
       });
 
     } catch (error) {
+
+      console.error(
+        "Comment error:",
+        error
+      );
+
 
       return res.status(500).json({
 
@@ -2042,14 +2467,23 @@ app.get(
           `
           SELECT
             c.*,
+
             u.name,
+
             u.username,
+
             u.avatar_url
+
           FROM dekhoearn_comments c
+
           LEFT JOIN dekhoearn_users u
             ON u.id = c.user_id
+
           WHERE c.video_id = $1
-          ORDER BY c.created_at ASC
+
+          ORDER BY
+            c.created_at ASC
+
           LIMIT 200
           `,
           [
@@ -2137,14 +2571,18 @@ app.post(
             user_id,
             reason
           )
+
           VALUES
           ($1,$2,$3)
+
           ON CONFLICT
           (
             video_id,
             user_id
           )
+
           DO NOTHING
+
           RETURNING *
           `,
           [
@@ -2265,14 +2703,18 @@ app.post(
             follower_id,
             following_id
           )
+
           VALUES
           ($1,$2)
+
           ON CONFLICT
           (
             follower_id,
             following_id
           )
+
           DO NOTHING
+
           RETURNING id
           `,
           [
@@ -2300,9 +2742,11 @@ app.post(
       await dbQuery(
         `
         UPDATE dekhoearn_users
+
         SET
           following_count =
             following_count + 1
+
         WHERE id = $1
         `,
         [followerId]
@@ -2312,9 +2756,11 @@ app.post(
       await dbQuery(
         `
         UPDATE dekhoearn_users
+
         SET
           followers_count =
             followers_count + 1
+
         WHERE id = $1
         `,
         [followingId]
@@ -2330,6 +2776,12 @@ app.post(
       });
 
     } catch (error) {
+
+      console.error(
+        "Follow error:",
+        error
+      );
+
 
       return res.status(500).json({
 
@@ -2370,13 +2822,33 @@ app.post(
         );
 
 
+      if (
+        !followerId ||
+        !followingId
+      ) {
+
+        return res.status(400).json({
+
+          ok: false,
+
+          error:
+            "Invalid user."
+
+        });
+
+      }
+
+
       const result =
         await dbQuery(
           `
           DELETE FROM dekhoearn_follows
+
           WHERE
             follower_id = $1
+
             AND following_id = $2
+
           RETURNING id
           `,
           [
@@ -2402,12 +2874,14 @@ app.post(
       await dbQuery(
         `
         UPDATE dekhoearn_users
+
         SET
           following_count =
             GREATEST(
               following_count - 1,
               0
             )
+
         WHERE id = $1
         `,
         [followerId]
@@ -2417,12 +2891,14 @@ app.post(
       await dbQuery(
         `
         UPDATE dekhoearn_users
+
         SET
           followers_count =
             GREATEST(
               followers_count - 1,
               0
             )
+
         WHERE id = $1
         `,
         [followingId]
@@ -2464,6 +2940,13 @@ app.get(
 
     try {
 
+      const creatorId =
+        cleanString(
+          req.params.id,
+          100
+        );
+
+
       const userResult =
         await dbQuery(
           `
@@ -2479,11 +2962,13 @@ app.get(
             creator_status,
             creator_applied,
             created_at
+
           FROM dekhoearn_users
+
           WHERE id = $1
           `,
           [
-            req.params.id
+            creatorId
           ]
         );
 
@@ -2506,16 +2991,23 @@ app.get(
         await dbQuery(
           `
           SELECT *
+
           FROM dekhoearn_videos
+
           WHERE
             user_id = $1
+
             AND status = 'published'
+
             AND moderation_status <> 'removed'
-          ORDER BY created_at DESC
+
+          ORDER BY
+            created_at DESC
+
           LIMIT 100
           `,
           [
-            req.params.id
+            creatorId
           ]
         );
 
@@ -2639,6 +3131,7 @@ app.get(
       const eligible =
         followers >=
         CREATOR_MIN_FOLLOWERS &&
+
         watchHours >=
         CREATOR_MIN_WATCH_HOURS;
 
@@ -2651,8 +3144,7 @@ app.get(
 
           ...row,
 
-          followers:
-            followers,
+          followers,
 
           watch_hours:
             Number(
@@ -2734,7 +3226,9 @@ app.post(
             total_watch_seconds,
             creator_status,
             creator_applied
+
           FROM dekhoearn_users
+
           WHERE id = $1
           `,
           [
@@ -2776,6 +3270,7 @@ app.post(
       if (
         followers <
         CREATOR_MIN_FOLLOWERS ||
+
         watchHours <
         CREATOR_MIN_WATCH_HOURS
       ) {
@@ -2818,15 +3313,20 @@ app.post(
       await dbQuery(
         `
         UPDATE dekhoearn_users
+
         SET
           creator_applied = TRUE,
 
           creator_status =
             CASE
+
               WHEN creator_status =
                 'approved'
+
               THEN 'approved'
+
               ELSE 'pending'
+
             END,
 
           updated_at =
@@ -2880,9 +3380,14 @@ app.get(
         await dbQuery(
           `
           SELECT *
+
           FROM dekhoearn_creator_earnings
+
           WHERE creator_id = $1
-          ORDER BY created_at DESC
+
+          ORDER BY
+            created_at DESC
+
           LIMIT 200
           `,
           [
@@ -2951,7 +3456,7 @@ app.get(
 
 
 // =========================================================
-// PAYOUT ACCOUNT FOUNDATION
+// PAYOUT ACCOUNT
 // =========================================================
 
 app.post(
@@ -3012,10 +3517,12 @@ app.post(
             account_holder_name,
             provider_reference
           )
+
           VALUES
           ($1,$2,$3,$4)
 
           ON CONFLICT (user_id)
+
           DO UPDATE SET
 
             account_type =
@@ -3035,6 +3542,7 @@ app.post(
             user_id,
             account_type,
             account_holder_name,
+            provider_reference,
             status,
             created_at,
             updated_at
@@ -3096,7 +3604,9 @@ app.get(
             status,
             created_at,
             updated_at
+
           FROM dekhoearn_payout_accounts
+
           WHERE user_id = $1
           `,
           [
@@ -3176,6 +3686,7 @@ app.post(
             reward_date,
             points
           )
+
           VALUES
           ($1,$2,$3)
 
@@ -3184,6 +3695,7 @@ app.post(
             user_id,
             reward_date
           )
+
           DO NOTHING
 
           RETURNING *
@@ -3215,6 +3727,7 @@ app.post(
       await dbQuery(
         `
         UPDATE dekhoearn_users
+
         SET
           points =
             points + $2,
@@ -3240,6 +3753,7 @@ app.post(
           type,
           description
         )
+
         VALUES
         (
           $1,
@@ -3315,13 +3829,13 @@ app.post(
 
 
       /*
-        IMPORTANT:
+      IMPORTANT:
 
-        This endpoint should be called only after
-        a genuine rewarded-ad completion event
-        from the ad provider.
+      This endpoint should only be called after
+      a genuine rewarded-ad completion event
+      from the actual ad provider.
 
-        Never reward ad clicks.
+      Never reward ad clicks.
       */
 
 
@@ -3333,6 +3847,7 @@ app.post(
           reward_date,
           points
         )
+
         VALUES
         ($1,$2,$3)
         `,
@@ -3347,6 +3862,7 @@ app.post(
       await dbQuery(
         `
         UPDATE dekhoearn_users
+
         SET
           points =
             points + $2,
@@ -3372,6 +3888,7 @@ app.post(
           type,
           description
         )
+
         VALUES
         (
           $1,
@@ -3481,6 +3998,7 @@ app.post(
             reward_points,
             rewarded
           )
+
           VALUES
           ($1,$2,$3,TRUE)
 
@@ -3488,6 +4006,7 @@ app.post(
           (
             referred_id
           )
+
           DO NOTHING
 
           RETURNING *
@@ -3519,9 +4038,11 @@ app.post(
       await dbQuery(
         `
         UPDATE dekhoearn_users
+
         SET
           points =
             points + $2
+
         WHERE id = $1
         `,
         [
@@ -3541,6 +4062,7 @@ app.post(
           reference_id,
           description
         )
+
         VALUES
         (
           $1,
@@ -3604,7 +4126,7 @@ app.delete(
 
       const userId =
         cleanString(
-          req.body.user_id ||
+          req.body?.user_id ||
           req.headers["x-user-id"],
           100
         );
@@ -3631,10 +4153,13 @@ app.delete(
 
           SET
             status = 'deleted',
-            updated_at = NOW()
+
+            updated_at =
+              NOW()
 
           WHERE
             id = $1
+
             AND user_id = $2
 
           RETURNING *
@@ -3663,12 +4188,14 @@ app.delete(
       await dbQuery(
         `
         UPDATE dekhoearn_users
+
         SET
           total_videos =
             GREATEST(
               total_videos - 1,
               0
             )
+
         WHERE id = $1
         `,
         [userId]
@@ -3720,7 +4247,9 @@ app.get(
       const users =
         await dbQuery(
           `
-          SELECT COUNT(*)::BIGINT AS count
+          SELECT
+            COUNT(*)::BIGINT AS count
+
           FROM dekhoearn_users
           `
         );
@@ -3729,8 +4258,11 @@ app.get(
       const videos =
         await dbQuery(
           `
-          SELECT COUNT(*)::BIGINT AS count
+          SELECT
+            COUNT(*)::BIGINT AS count
+
           FROM dekhoearn_videos
+
           WHERE status <> 'deleted'
           `
         );
@@ -3740,10 +4272,12 @@ app.get(
         await dbQuery(
           `
           SELECT
+
             COALESCE(
               SUM(views),
               0
             ) AS count
+
           FROM dekhoearn_videos
           `
         );
@@ -3752,7 +4286,9 @@ app.get(
       const reports =
         await dbQuery(
           `
-          SELECT COUNT(*)::BIGINT AS count
+          SELECT
+            COUNT(*)::BIGINT AS count
+
           FROM dekhoearn_reports
           `
         );
@@ -3761,8 +4297,11 @@ app.get(
       const pendingCreators =
         await dbQuery(
           `
-          SELECT COUNT(*)::BIGINT AS count
+          SELECT
+            COUNT(*)::BIGINT AS count
+
           FROM dekhoearn_users
+
           WHERE
             creator_status = 'pending'
           `
@@ -3836,9 +4375,11 @@ app.get(
         await dbQuery(
           `
           SELECT
+
             r.*,
 
             v.title AS video_title,
+
             v.video_url,
 
             u.name AS reporter_name
@@ -3957,6 +4498,7 @@ app.post(
           target_id,
           reason
         )
+
         VALUES
         (
           'remove_video',
@@ -4062,6 +4604,7 @@ app.post(
           target_id,
           reason
         )
+
         VALUES
         (
           'restore_video',
@@ -4171,6 +4714,7 @@ app.post(
           target_id,
           reason
         )
+
         VALUES
         (
           'approve_creator',
@@ -4277,6 +4821,7 @@ app.post(
           target_id,
           reason
         )
+
         VALUES
         (
           'reject_creator',
@@ -4333,9 +4878,12 @@ app.get(
 
       const limit =
         Math.min(
-          safeInteger(
-            req.query.limit,
-            100
+          Math.max(
+            safeInteger(
+              req.query.limit,
+              100
+            ),
+            1
           ),
           500
         );
@@ -4357,8 +4905,12 @@ app.get(
             creator_status,
             creator_applied,
             created_at
+
           FROM dekhoearn_users
-          ORDER BY created_at DESC
+
+          ORDER BY
+            created_at DESC
+
           LIMIT $1
           `,
           [
@@ -4408,14 +4960,21 @@ app.get(
         await dbQuery(
           `
           SELECT
+
             v.*,
+
             u.name AS creator_name,
+
             u.username AS creator_username
+
           FROM dekhoearn_videos v
+
           LEFT JOIN dekhoearn_users u
             ON u.id = v.user_id
+
           ORDER BY
             v.created_at DESC
+
           LIMIT 500
           `
         );
@@ -4448,7 +5007,7 @@ app.get(
 
 
 // =========================================================
-// FRONTEND
+// FRONTEND ROOT
 // =========================================================
 
 app.get(
@@ -4474,12 +5033,15 @@ app.use(
   "/api",
   (req, res) => {
 
-    res.status(404).json({
+    return res.status(404).json({
 
       ok: false,
 
       error:
-        "API endpoint not found."
+        "API endpoint not found.",
+
+      path:
+        req.originalUrl
 
     });
 
@@ -4571,6 +5133,22 @@ async function startServer() {
               ? "configured"
               : "missing"
           }`
+        );
+
+        console.log(
+          `Max video size: ${
+            MAX_VIDEO_SIZE /
+            1024 /
+            1024
+          } MB`
+        );
+
+        console.log(
+          "Static frontend: enabled"
+        );
+
+        console.log(
+          "Cloudinary signed upload: enabled"
         );
 
         console.log(
