@@ -1,22 +1,25 @@
 /*
 =========================================================
  DEKHOEARN SERVER
- Version 3.1.0
+ Version 3.1.0 FINAL
  --------------------------------------------------------
- Login / Register / Secure Session
+ Secure Authentication
  Neon PostgreSQL
- Cloudinary Video Upload
+ Cloudinary Signed Upload
  Video Feed
  Watch Rewards
  Likes / Comments / Reports
  Follow System
  Daily Rewards
- Rewarded Ads
+ Rewarded Ads Demo
  Points History
+ Watch History
  Creator Dashboard
  Monetization
  Payout Accounts
  Admin
+ PWA
+ Database Migrations
 =========================================================
 */
 
@@ -34,6 +37,7 @@ const SERVER_VERSION = "3.1.0";
 const PORT = Number(process.env.PORT || 10000);
 
 const DATABASE_URL = process.env.DATABASE_URL || "";
+
 const ADMIN_KEY = process.env.ADMIN_KEY || "";
 
 const CLOUDINARY_CLOUD_NAME =
@@ -48,7 +52,8 @@ const CLOUDINARY_API_SECRET =
 const CLOUDINARY_FOLDER =
   process.env.CLOUDINARY_FOLDER || "dekhoearn/videos";
 
-const SESSION_DAYS = 30;
+const AUTH_TOKEN_DAYS = 30;
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
 
 app.disable("x-powered-by");
 
@@ -59,12 +64,18 @@ app.use(
   })
 );
 
-app.use(express.json({ limit: "2mb" }));
-app.use(express.urlencoded({ extended: true, limit: "2mb" }));
+app.use(
+  express.json({
+    limit: "2mb"
+  })
+);
 
-/* ======================================================
-   DATABASE
-====================================================== */
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "2mb"
+  })
+);
 
 let pool = null;
 
@@ -73,17 +84,20 @@ if (DATABASE_URL) {
     connectionString: DATABASE_URL,
     ssl: {
       rejectUnauthorized: false
-    }
-  });
-
-  pool.on("error", (err) => {
-    console.error("PostgreSQL pool error:", err.message);
+    },
+    max: 5,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000
   });
 }
 
+/* ======================================================
+   DATABASE
+====================================================== */
+
 async function dbQuery(text, params = []) {
   if (!pool) {
-    throw new Error("Database is not configured.");
+    throw new Error("DATABASE_URL is not configured");
   }
 
   return pool.query(text, params);
@@ -93,8 +107,15 @@ async function dbQuery(text, params = []) {
    HELPERS
 ====================================================== */
 
-function randomId() {
-  return crypto.randomBytes(18).toString("hex");
+function randomId(bytes = 16) {
+  return crypto.randomBytes(bytes).toString("hex");
+}
+
+function cleanText(value, max = 5000) {
+  return String(value || "")
+    .replace(/\u0000/g, "")
+    .trim()
+    .slice(0, max);
 }
 
 function normalizeUsername(value) {
@@ -102,84 +123,89 @@ function normalizeUsername(value) {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9_.-]/g, "")
-    .slice(0, 40);
+    .slice(0, 30);
 }
 
-function cleanText(value, max = 1000) {
-  return String(value || "")
-    .trim()
-    .slice(0, max);
+function isValidUsername(username) {
+  return /^[a-z0-9_.-]{3,30}$/.test(username);
 }
 
-/* ======================================================
-   PASSWORD
-====================================================== */
+function isValidPassword(password) {
+  return typeof password === "string" && password.length >= 6;
+}
 
-function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString("hex");
+function hashPassword(password, saltHex) {
+  const salt = saltHex
+    ? Buffer.from(saltHex, "hex")
+    : crypto.randomBytes(16);
 
-  const hash = crypto
-    .scryptSync(String(password), salt, 64)
-    .toString("hex");
+  const hash = crypto.scryptSync(
+    password,
+    salt,
+    64
+  );
 
   return {
-    salt,
-    hash
+    salt: salt.toString("hex"),
+    hash: hash.toString("hex")
   };
 }
 
-function verifyPassword(password, salt, storedHash) {
+function verifyPassword(password, saltHex, storedHashHex) {
   try {
-    const hash = crypto
-      .scryptSync(String(password), salt, 64)
-      .toString("hex");
+    const salt = Buffer.from(saltHex, "hex");
 
-    const a = Buffer.from(hash, "hex");
-    const b = Buffer.from(storedHash, "hex");
+    const storedHash = Buffer.from(
+      storedHashHex,
+      "hex"
+    );
 
-    if (a.length !== b.length) {
-      return false;
-    }
+    const calculatedHash = crypto.scryptSync(
+      password,
+      salt,
+      storedHash.length
+    );
 
-    return crypto.timingSafeEqual(a, b);
+    return crypto.timingSafeEqual(
+      calculatedHash,
+      storedHash
+    );
   } catch {
     return false;
   }
 }
 
-/* ======================================================
-   SESSION TOKEN
-====================================================== */
+function createAuthToken() {
+  const token = crypto
+    .randomBytes(32)
+    .toString("hex");
 
-function createRawToken() {
-  return crypto.randomBytes(48).toString("hex");
+  const tokenHash = crypto
+    .createHash("sha256")
+    .update(token)
+    .digest("hex");
+
+  const expiresAt = new Date(
+    Date.now() +
+      AUTH_TOKEN_DAYS *
+        24 *
+        60 *
+        60 *
+        1000
+  );
+
+  return {
+    token,
+    tokenHash,
+    expiresAt
+  };
 }
 
 function hashToken(token) {
   return crypto
     .createHash("sha256")
-    .update(String(token))
+    .update(token)
     .digest("hex");
-}
-
-async function createSession(userId) {
-  const token = createRawToken();
-  const tokenHash = hashToken(token);
-
-  await dbQuery(
-    `
-    UPDATE dekhoearn_users
-    SET
-      auth_token_hash=$1,
-      auth_token_expires_at=NOW() + INTERVAL '${SESSION_DAYS} days',
-      last_login_at=NOW(),
-      updated_at=NOW()
-    WHERE id=$2
-    `,
-    [tokenHash, userId]
-  );
-
-  return token;
 }
 
 function getBearerToken(req) {
@@ -187,99 +213,35 @@ function getBearerToken(req) {
     req.headers.authorization || ""
   );
 
-  if (!header.toLowerCase().startsWith("bearer ")) {
-    return "";
+  if (header.startsWith("Bearer ")) {
+    return header
+      .slice(7)
+      .trim();
   }
 
-  return header.slice(7).trim();
-}
-
-async function getAuthenticatedUser(req) {
-  if (!pool) return null;
-
-  const token = getBearerToken(req);
-
-  if (!token) return null;
-
-  const tokenHash = hashToken(token);
-
-  const result = await dbQuery(
-    `
-    SELECT *
-    FROM dekhoearn_users
-    WHERE
-      auth_token_hash=$1
-      AND auth_token_expires_at > NOW()
-    LIMIT 1
-    `,
-    [tokenHash]
-  );
-
-  return result.rows[0] || null;
-}
-
-async function requireAuth(req, res, next) {
-  try {
-    const user = await getAuthenticatedUser(req);
-
-    if (!user) {
-      return res.status(401).json({
-        ok: false,
-        message: "Please login first.",
-        code: "AUTH_REQUIRED"
-      });
-    }
-
-    req.user = user;
-    req.userId = user.id;
-
-    next();
-  } catch (error) {
-    console.error("AUTH ERROR:", error);
-
-    res.status(401).json({
-      ok: false,
-      message: "Authentication failed."
-    });
-  }
-}
-
-/*
- Old x-user-id support is intentionally only kept for
- harmless read operations. Protected write operations
- use requireAuth.
-*/
-
-function getUserId(req) {
   return String(
-    req.headers["x-user-id"] ||
-    req.body?.user_id ||
-    req.query?.user_id ||
-    ""
+    req.headers["x-auth-token"] || ""
   ).trim();
 }
 
-function signCloudinaryParams(params) {
-  const keys = Object.keys(params).sort();
-
-  const query = keys
-    .filter(
-      (key) =>
-        params[key] !== undefined &&
-        params[key] !== null &&
-        params[key] !== ""
-    )
-    .map(
-      (key) =>
-        `${key}=${params[key]}`
-    )
-    .join("&");
-
-  return crypto
-    .createHash("sha1")
-    .update(query + CLOUDINARY_API_SECRET)
-    .digest("hex");
+function generateReferralCode() {
+  return (
+    "DEKHO" +
+    crypto
+      .randomBytes(5)
+      .toString("hex")
+      .toUpperCase()
+  );
 }
+
+function safeNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/* ======================================================
+   SAFE USER
+====================================================== */
 
 function safeUser(row) {
   if (!row) return null;
@@ -288,12 +250,12 @@ function safeUser(row) {
     id: row.id,
     username: row.username,
     first_name: row.first_name || "",
-    points: Number(row.points || 0),
-    watched_videos: Number(row.watched_videos || 0),
-    today_earned: Number(row.today_earned || 0),
-    total_earned: Number(row.total_earned || 0),
-    followers_count: Number(row.followers_count || 0),
-    following_count: Number(row.following_count || 0),
+    points: safeNumber(row.points),
+    total_earned: safeNumber(row.total_earned),
+    watched_videos: safeNumber(row.watched_videos),
+    today_earned: safeNumber(row.today_earned),
+    followers_count: safeNumber(row.followers_count),
+    following_count: safeNumber(row.following_count),
     is_creator: Boolean(row.is_creator),
     monetization_status:
       row.monetization_status || "not_applied",
@@ -302,6 +264,39 @@ function safeUser(row) {
   };
 }
 
+async function getSafeUserById(id) {
+  const result = await dbQuery(
+    `
+    SELECT
+      u.*,
+      (
+        SELECT COUNT(*)
+        FROM dekhoearn_follows f
+        WHERE f.creator_id = u.id
+      ) AS followers_count,
+      (
+        SELECT COUNT(*)
+        FROM dekhoearn_follows f
+        WHERE f.follower_id = u.id
+      ) AS following_count
+    FROM dekhoearn_users u
+    WHERE u.id = $1
+    LIMIT 1
+    `,
+    [id]
+  );
+
+  if (!result.rows.length) {
+    return null;
+  }
+
+  return safeUser(result.rows[0]);
+}
+
+/* ======================================================
+   SAFE VIDEO
+====================================================== */
+
 function safeVideo(row) {
   if (!row) return null;
 
@@ -309,9 +304,9 @@ function safeVideo(row) {
     id: row.id,
     user_id: row.user_id,
     creator_id: row.creator_id || row.user_id,
-    title: row.title,
+    title: row.title || "",
     description: row.description || "",
-    video_url: row.video_url,
+    video_url: row.video_url || "",
     thumbnail_url: row.thumbnail_url || "",
     cloudinary_public_id:
       row.cloudinary_public_id || "",
@@ -319,17 +314,15 @@ function safeVideo(row) {
       row.cloudinary_resource_type || "video",
     cloudinary_format:
       row.cloudinary_format || "",
-    duration: Number(row.duration || 0),
-    bytes: Number(row.bytes || 0),
-    views: Number(row.views || 0),
-    likes_count: Number(row.likes_count || 0),
-    comments_count:
-      Number(row.comments_count || 0),
-    watch_seconds:
-      Number(row.watch_seconds || 0),
-    status: row.status,
+    duration: safeNumber(row.duration),
+    bytes: safeNumber(row.bytes),
+    views: safeNumber(row.views),
+    likes_count: safeNumber(row.likes_count),
+    comments_count: safeNumber(row.comments_count),
+    watch_seconds: safeNumber(row.watch_seconds),
+    status: row.status || "published",
     moderation_status:
-      row.moderation_status,
+      row.moderation_status || "normal",
     duplicate_warning:
       Boolean(row.duplicate_warning),
     creator_username:
@@ -341,16 +334,128 @@ function safeVideo(row) {
 }
 
 /* ======================================================
+   AUTHENTICATION
+====================================================== */
+
+async function getAuthenticatedUser(req) {
+  const token = getBearerToken(req);
+
+  if (!token || !pool) {
+    return null;
+  }
+
+  const tokenHash = hashToken(token);
+
+  const result = await dbQuery(
+    `
+    SELECT *
+    FROM dekhoearn_users
+    WHERE auth_token_hash = $1
+      AND auth_token_expires_at > NOW()
+    LIMIT 1
+    `,
+    [tokenHash]
+  );
+
+  return result.rows[0] || null;
+}
+
+async function requireUser(req, res, next) {
+  try {
+    const user = await getAuthenticatedUser(req);
+
+    if (!user) {
+      return res.status(401).json({
+        ok: false,
+        message: "Login required"
+      });
+    }
+
+    req.user = user;
+    req.userId = user.id;
+
+    next();
+  } catch (error) {
+    console.error("AUTH ERROR:", error);
+
+    return res.status(500).json({
+      ok: false,
+      message: "Authentication failed"
+    });
+  }
+}
+
+/* ======================================================
+   ADMIN
+====================================================== */
+
+function requireAdmin(req, res, next) {
+  const suppliedKey = String(
+    req.headers["x-admin-key"] ||
+      req.query.admin_key ||
+      ""
+  );
+
+  if (!ADMIN_KEY) {
+    return res.status(503).json({
+      ok: false,
+      message: "Admin system is not configured"
+    });
+  }
+
+  if (!suppliedKey || suppliedKey !== ADMIN_KEY) {
+    return res.status(403).json({
+      ok: false,
+      message: "Admin access denied"
+    });
+  }
+
+  next();
+}
+
+/* ======================================================
+   CLOUDINARY
+====================================================== */
+
+function signCloudinaryParams(params) {
+  const entries = Object.entries(params)
+    .filter(
+      ([, value]) =>
+        value !== undefined &&
+        value !== null &&
+        value !== ""
+    )
+    .sort(([a], [b]) =>
+      a.localeCompare(b)
+    );
+
+  const serialized = entries
+    .map(
+      ([key, value]) =>
+        `${key}=${value}`
+    )
+    .join("&");
+
+  return crypto
+    .createHash("sha1")
+    .update(
+      serialized + CLOUDINARY_API_SECRET
+    )
+    .digest("hex");
+}
+
+/* ======================================================
    DATABASE INITIALIZATION
 ====================================================== */
 
 async function initDatabase() {
   if (!pool) {
-    console.log("⚠️ DATABASE_URL not configured.");
-    return;
+    throw new Error(
+      "DATABASE_URL is missing"
+    );
   }
 
-  console.log("📦 Initializing DekhoEarn database...");
+  console.log("Initializing database...");
 
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_users (
@@ -359,7 +464,7 @@ async function initDatabase() {
       first_name TEXT DEFAULT '',
       password_hash TEXT,
       password_salt TEXT,
-      auth_token_hash TEXT,
+      auth_token_hash TEXT DEFAULT '',
       auth_token_expires_at TIMESTAMPTZ,
       last_login_at TIMESTAMPTZ,
       points BIGINT NOT NULL DEFAULT 0,
@@ -375,34 +480,75 @@ async function initDatabase() {
     )
   `);
 
-  const userColumns = [
-    `ALTER TABLE dekhoearn_users ADD COLUMN IF NOT EXISTS password_hash TEXT`,
-    `ALTER TABLE dekhoearn_users ADD COLUMN IF NOT EXISTS password_salt TEXT`,
-    `ALTER TABLE dekhoearn_users ADD COLUMN IF NOT EXISTS auth_token_hash TEXT`,
-    `ALTER TABLE dekhoearn_users ADD COLUMN IF NOT EXISTS auth_token_expires_at TIMESTAMPTZ`,
-    `ALTER TABLE dekhoearn_users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ`,
-    `ALTER TABLE dekhoearn_users ADD COLUMN IF NOT EXISTS total_earned BIGINT NOT NULL DEFAULT 0`,
-    `ALTER TABLE dekhoearn_users ADD COLUMN IF NOT EXISTS watched_videos BIGINT NOT NULL DEFAULT 0`,
-    `ALTER TABLE dekhoearn_users ADD COLUMN IF NOT EXISTS today_earned BIGINT NOT NULL DEFAULT 0`,
-    `ALTER TABLE dekhoearn_users ADD COLUMN IF NOT EXISTS is_creator BOOLEAN NOT NULL DEFAULT FALSE`,
-    `ALTER TABLE dekhoearn_users ADD COLUMN IF NOT EXISTS monetization_status TEXT NOT NULL DEFAULT 'not_applied'`
-  ];
-
-  for (const sql of userColumns) {
-    await dbQuery(sql);
-  }
+  await dbQuery(`
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS password_hash TEXT
+  `);
 
   await dbQuery(`
-    CREATE UNIQUE INDEX IF NOT EXISTS
-    idx_dekhoearn_users_token
-    ON dekhoearn_users(auth_token_hash)
-    WHERE auth_token_hash IS NOT NULL
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS password_salt TEXT
   `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS auth_token_hash TEXT DEFAULT ''
+  `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS auth_token_expires_at TIMESTAMPTZ
+  `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ
+  `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS total_earned BIGINT NOT NULL DEFAULT 0
+  `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS watched_videos BIGINT NOT NULL DEFAULT 0
+  `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS today_earned BIGINT NOT NULL DEFAULT 0
+  `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS is_creator BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS monetization_status TEXT NOT NULL DEFAULT 'not_applied'
+  `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS referral_code TEXT
+  `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_users
+    ADD COLUMN IF NOT EXISTS referred_by TEXT
+  `);
+
+  /* ----------------------------------------------------
+     VIDEOS
+  ---------------------------------------------------- */
 
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_videos (
       id BIGSERIAL PRIMARY KEY,
       user_id TEXT NOT NULL,
+      creator_id TEXT,
       title TEXT NOT NULL,
       description TEXT DEFAULT '',
       video_url TEXT NOT NULL,
@@ -424,6 +570,27 @@ async function initDatabase() {
     )
   `);
 
+  /*
+   IMPORTANT:
+   Existing database may already have dekhoearn_videos
+   without creator_id.
+
+   Therefore this migration MUST happen before
+   creator_id index creation.
+  */
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_videos
+    ADD COLUMN IF NOT EXISTS creator_id TEXT
+  `);
+
+  await dbQuery(`
+    UPDATE dekhoearn_videos
+    SET creator_id = user_id
+    WHERE creator_id IS NULL
+       OR creator_id = ''
+  `);
+
   await dbQuery(`
     ALTER TABLE dekhoearn_videos
     ADD COLUMN IF NOT EXISTS cloudinary_format TEXT DEFAULT ''
@@ -440,6 +607,20 @@ async function initDatabase() {
   `);
 
   await dbQuery(`
+    ALTER TABLE dekhoearn_videos
+    ADD COLUMN IF NOT EXISTS moderation_status TEXT NOT NULL DEFAULT 'normal'
+  `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_videos
+    ADD COLUMN IF NOT EXISTS duplicate_warning BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+
+  /* ----------------------------------------------------
+     VIEWS
+  ---------------------------------------------------- */
+
+  await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_video_views (
       id BIGSERIAL PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -451,6 +632,10 @@ async function initDatabase() {
     )
   `);
 
+  /* ----------------------------------------------------
+     LIKES
+  ---------------------------------------------------- */
+
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_likes (
       id BIGSERIAL PRIMARY KEY,
@@ -460,6 +645,10 @@ async function initDatabase() {
       UNIQUE(user_id, video_id)
     )
   `);
+
+  /* ----------------------------------------------------
+     COMMENTS
+  ---------------------------------------------------- */
 
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_comments (
@@ -471,16 +660,24 @@ async function initDatabase() {
     )
   `);
 
+  /* ----------------------------------------------------
+     REPORTS
+  ---------------------------------------------------- */
+
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_reports (
       id BIGSERIAL PRIMARY KEY,
       user_id TEXT NOT NULL,
       video_id BIGINT NOT NULL,
       reason TEXT DEFAULT '',
-      status TEXT NOT NULL DEFAULT 'pending',
+      status TEXT NOT NULL DEFAULT 'open',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+
+  /* ----------------------------------------------------
+     FOLLOWS
+  ---------------------------------------------------- */
 
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_follows (
@@ -492,11 +689,15 @@ async function initDatabase() {
     )
   `);
 
+  /* ----------------------------------------------------
+     POINTS LEDGER
+  ---------------------------------------------------- */
+
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_points_ledger (
       id BIGSERIAL PRIMARY KEY,
       user_id TEXT NOT NULL,
-      points BIGINT NOT NULL,
+      points BIGINT NOT NULL DEFAULT 0,
       type TEXT NOT NULL,
       description TEXT DEFAULT '',
       reference_id TEXT DEFAULT '',
@@ -504,16 +705,24 @@ async function initDatabase() {
     )
   `);
 
+  /* ----------------------------------------------------
+     DAILY REWARDS
+  ---------------------------------------------------- */
+
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_daily_rewards (
       id BIGSERIAL PRIMARY KEY,
       user_id TEXT NOT NULL,
       reward_points BIGINT NOT NULL DEFAULT 10,
-      reward_date DATE NOT NULL,
+      reward_date DATE NOT NULL DEFAULT CURRENT_DATE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE(user_id, reward_date)
     )
   `);
+
+  /* ----------------------------------------------------
+     REWARDED ADS
+  ---------------------------------------------------- */
 
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_rewarded_ads (
@@ -523,6 +732,10 @@ async function initDatabase() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+
+  /* ----------------------------------------------------
+     REFERRALS
+  ---------------------------------------------------- */
 
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_referrals (
@@ -534,16 +747,24 @@ async function initDatabase() {
     )
   `);
 
+  /* ----------------------------------------------------
+     CREATOR EARNINGS
+  ---------------------------------------------------- */
+
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_creator_earnings (
       id BIGSERIAL PRIMARY KEY,
       creator_id TEXT NOT NULL,
       video_id BIGINT,
-      amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+      amount NUMERIC(18,4) NOT NULL DEFAULT 0,
       source TEXT DEFAULT '',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+
+  /* ----------------------------------------------------
+     PAYOUT ACCOUNTS
+  ---------------------------------------------------- */
 
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_payout_accounts (
@@ -556,6 +777,10 @@ async function initDatabase() {
     )
   `);
 
+  /* ----------------------------------------------------
+     ADMIN ACTIONS
+  ---------------------------------------------------- */
+
   await dbQuery(`
     CREATE TABLE IF NOT EXISTS dekhoearn_admin_actions (
       id BIGSERIAL PRIMARY KEY,
@@ -566,37 +791,41 @@ async function initDatabase() {
     )
   `);
 
+  /* ----------------------------------------------------
+     INDEXES
+  ---------------------------------------------------- */
+
   await dbQuery(`
-    CREATE INDEX IF NOT EXISTS
-    idx_dekhoearn_videos_created
+    CREATE INDEX IF NOT EXISTS dekhoearn_videos_created_idx
     ON dekhoearn_videos(created_at DESC)
   `);
 
   await dbQuery(`
-    CREATE INDEX IF NOT EXISTS
-    idx_dekhoearn_videos_user
+    CREATE INDEX IF NOT EXISTS dekhoearn_videos_user_idx
     ON dekhoearn_videos(user_id)
   `);
 
   await dbQuery(`
-    CREATE INDEX IF NOT EXISTS
-    idx_dekhoearn_comments_video
+    CREATE INDEX IF NOT EXISTS dekhoearn_videos_creator_idx
+    ON dekhoearn_videos(creator_id)
+  `);
+
+  await dbQuery(`
+    CREATE INDEX IF NOT EXISTS dekhoearn_comments_video_idx
     ON dekhoearn_comments(video_id)
   `);
 
   await dbQuery(`
-    CREATE INDEX IF NOT EXISTS
-    idx_dekhoearn_points_user
-    ON dekhoearn_points_ledger(user_id,created_at DESC)
+    CREATE INDEX IF NOT EXISTS dekhoearn_points_user_idx
+    ON dekhoearn_points_ledger(user_id, created_at DESC)
   `);
 
   await dbQuery(`
-    CREATE INDEX IF NOT EXISTS
-    idx_dekhoearn_follows_creator
-    ON dekhoearn_follows(creator_id)
+    CREATE INDEX IF NOT EXISTS dekhoearn_auth_token_idx
+    ON dekhoearn_users(auth_token_hash)
   `);
 
-  console.log("✅ Database ready.");
+  console.log("Database initialized successfully.");
 }
 
 /* ======================================================
@@ -610,7 +839,9 @@ app.get("/health", async (req, res) => {
     try {
       await dbQuery("SELECT 1");
       database = true;
-    } catch {}
+    } catch {
+      database = false;
+    }
   }
 
   res.json({
@@ -619,336 +850,514 @@ app.get("/health", async (req, res) => {
     version: SERVER_VERSION,
     status: database ? "healthy" : "degraded",
     database,
-    cloudinary: Boolean(
-      CLOUDINARY_CLOUD_NAME &&
-      CLOUDINARY_API_KEY &&
-      CLOUDINARY_API_SECRET
-    )
+    cloudinary:
+      Boolean(
+        CLOUDINARY_CLOUD_NAME &&
+        CLOUDINARY_API_KEY &&
+        CLOUDINARY_API_SECRET
+      ),
+    timestamp: new Date().toISOString()
   });
 });
 
 /* ======================================================
-   REGISTER
+   AUTH REGISTER
 ====================================================== */
 
-app.post("/api/auth/register", async (req, res) => {
-  try {
-    if (!pool) {
-      return res.status(503).json({
-        ok: false,
-        message: "Database is not configured."
-      });
-    }
+app.post(
+  "/api/auth/register",
+  async (req, res) => {
+    try {
+      const firstName = cleanText(
+        req.body.first_name ||
+          req.body.name,
+        80
+      );
 
-    const username = normalizeUsername(
-      req.body.username
-    );
+      const username = normalizeUsername(
+        req.body.username
+      );
 
-    const firstName = cleanText(
-      req.body.first_name,
-      80
-    );
+      const password = String(
+        req.body.password || ""
+      );
 
-    const password = String(
-      req.body.password || ""
-    );
+      const referralCode = cleanText(
+        req.body.referral_code ||
+          req.body.referral,
+        50
+      ).toUpperCase();
 
-    const referralCode = cleanText(
-      req.body.referral_code,
-      80
-    );
+      if (!firstName) {
+        return res.status(400).json({
+          ok: false,
+          message: "Name is required"
+        });
+      }
 
-    if (username.length < 3) {
-      return res.status(400).json({
-        ok: false,
-        message: "Username must be at least 3 characters."
-      });
-    }
+      if (!isValidUsername(username)) {
+        return res.status(400).json({
+          ok: false,
+          message:
+            "Username must be 3-30 characters"
+        });
+      }
 
-    if (password.length < 6) {
-      return res.status(400).json({
-        ok: false,
-        message: "Password must be at least 6 characters."
-      });
-    }
+      if (!isValidPassword(password)) {
+        return res.status(400).json({
+          ok: false,
+          message:
+            "Password must be at least 6 characters"
+        });
+      }
 
-    const existing = await dbQuery(
-      `
-      SELECT id
-      FROM dekhoearn_users
-      WHERE LOWER(username)=LOWER($1)
-      LIMIT 1
-      `,
-      [username]
-    );
-
-    if (existing.rows.length) {
-      return res.status(409).json({
-        ok: false,
-        message: "Username already exists."
-      });
-    }
-
-    let referredBy = null;
-
-    if (referralCode) {
-      const ref = await dbQuery(
+      const existing = await dbQuery(
         `
         SELECT id
         FROM dekhoearn_users
-        WHERE referral_code=$1
+        WHERE username = $1
         LIMIT 1
         `,
-        [referralCode]
+        [username]
       );
 
-      if (ref.rows.length) {
-        referredBy = ref.rows[0].id;
+      if (existing.rows.length) {
+        return res.status(409).json({
+          ok: false,
+          message: "Username already exists"
+        });
       }
+
+      const id = randomId(16);
+
+      const passwordData =
+        hashPassword(password);
+
+      let referralOwner = null;
+
+      if (referralCode) {
+        const refResult = await dbQuery(
+          `
+          SELECT id
+          FROM dekhoearn_users
+          WHERE referral_code = $1
+          LIMIT 1
+          `,
+          [referralCode]
+        );
+
+        referralOwner =
+          refResult.rows[0] || null;
+      }
+
+      let userReferralCode = "";
+
+      for (let i = 0; i < 5; i++) {
+        const candidate =
+          generateReferralCode();
+
+        const check = await dbQuery(
+          `
+          SELECT id
+          FROM dekhoearn_users
+          WHERE referral_code = $1
+          LIMIT 1
+          `,
+          [candidate]
+        );
+
+        if (!check.rows.length) {
+          userReferralCode =
+            candidate;
+          break;
+        }
+      }
+
+      if (!userReferralCode) {
+        userReferralCode =
+          generateReferralCode() +
+          Date.now()
+            .toString()
+            .slice(-4);
+      }
+
+      const auth =
+        createAuthToken();
+
+      const client =
+        await pool.connect();
+
+      try {
+        await client.query("BEGIN");
+
+        const userResult =
+          await client.query(
+            `
+            INSERT INTO dekhoearn_users (
+              id,
+              username,
+              first_name,
+              password_hash,
+              password_salt,
+              auth_token_hash,
+              auth_token_expires_at,
+              last_login_at,
+              referral_code,
+              referred_by
+            )
+            VALUES (
+              $1,$2,$3,$4,$5,$6,$7,NOW(),$8,$9
+            )
+            RETURNING *
+            `,
+            [
+              id,
+              username,
+              firstName,
+              passwordData.hash,
+              passwordData.salt,
+              auth.tokenHash,
+              auth.expiresAt,
+              userReferralCode,
+              referralOwner
+                ? referralOwner.id
+                : null
+            ]
+          );
+
+        if (referralOwner) {
+          await client.query(
+            `
+            INSERT INTO dekhoearn_referrals (
+              referrer_id,
+              referred_id,
+              reward_points
+            )
+            VALUES ($1,$2,10)
+            ON CONFLICT (referred_id)
+            DO NOTHING
+            `,
+            [
+              referralOwner.id,
+              id
+            ]
+          );
+
+          await client.query(
+            `
+            UPDATE dekhoearn_users
+            SET
+              points = points + 10,
+              total_earned = total_earned + 10,
+              updated_at = NOW()
+            WHERE id = $1
+            `,
+            [referralOwner.id]
+          );
+
+          await client.query(
+            `
+            INSERT INTO dekhoearn_points_ledger (
+              user_id,
+              points,
+              type,
+              description,
+              reference_id
+            )
+            VALUES (
+              $1,10,'referral',
+              'Referral reward',$2
+            )
+            `,
+            [
+              referralOwner.id,
+              id
+            ]
+          );
+        }
+
+        await client.query("COMMIT");
+
+        const user =
+          await getSafeUserById(id);
+
+        return res.json({
+          ok: true,
+          message:
+            "Registration successful",
+          user,
+          token: auth.token
+        });
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error(
+        "REGISTER ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        ok: false,
+        message:
+          "Registration failed"
+      });
     }
+  }
+);
 
-    const id = randomId();
-    const passwordData = hashPassword(password);
+/* ======================================================
+   AUTH LOGIN
+====================================================== */
 
-    const cleanReferralBase =
-      username
-        .replace(/[^a-z0-9]/g, "")
-        .slice(0, 12) ||
-      "user";
+app.post(
+  "/api/auth/login",
+  async (req, res) => {
+    try {
+      const username =
+        normalizeUsername(
+          req.body.username
+        );
 
-    const userReferralCode =
-      cleanReferralBase +
-      crypto.randomBytes(4).toString("hex");
+      const password = String(
+        req.body.password || ""
+      );
 
-    const result = await dbQuery(
-      `
-      INSERT INTO dekhoearn_users
-      (
-        id,
-        username,
-        first_name,
-        password_hash,
-        password_salt,
-        referral_code,
-        referred_by
-      )
-      VALUES($1,$2,$3,$4,$5,$6,$7)
-      RETURNING *
-      `,
-      [
-        id,
-        username,
-        firstName,
-        passwordData.hash,
-        passwordData.salt,
-        userReferralCode,
-        referredBy
-      ]
-    );
+      if (!username || !password) {
+        return res.status(400).json({
+          ok: false,
+          message:
+            "Username and password are required"
+        });
+      }
 
-    if (referredBy && referredBy !== id) {
+      const result = await dbQuery(
+        `
+        SELECT *
+        FROM dekhoearn_users
+        WHERE username = $1
+        LIMIT 1
+        `,
+        [username]
+      );
+
+      if (!result.rows.length) {
+        return res.status(401).json({
+          ok: false,
+          message:
+            "Invalid username or password"
+        });
+      }
+
+      const userRow =
+        result.rows[0];
+
+      if (
+        !userRow.password_hash ||
+        !userRow.password_salt
+      ) {
+        return res.status(401).json({
+          ok: false,
+          message:
+            "This account needs to be registered again with a password"
+        });
+      }
+
+      const valid =
+        verifyPassword(
+          password,
+          userRow.password_salt,
+          userRow.password_hash
+        );
+
+      if (!valid) {
+        return res.status(401).json({
+          ok: false,
+          message:
+            "Invalid username or password"
+        });
+      }
+
+      const auth =
+        createAuthToken();
+
       await dbQuery(
         `
-        INSERT INTO dekhoearn_referrals
-        (referrer_id,referred_id,reward_points)
-        VALUES($1,$2,0)
-        ON CONFLICT(referred_id)
-        DO NOTHING
+        UPDATE dekhoearn_users
+        SET
+          auth_token_hash = $1,
+          auth_token_expires_at = $2,
+          last_login_at = NOW(),
+          updated_at = NOW()
+        WHERE id = $3
         `,
-        [referredBy, id]
+        [
+          auth.tokenHash,
+          auth.expiresAt,
+          userRow.id
+        ]
       );
+
+      const user =
+        await getSafeUserById(
+          userRow.id
+        );
+
+      return res.json({
+        ok: true,
+        message: "Login successful",
+        user,
+        token: auth.token
+      });
+    } catch (error) {
+      console.error(
+        "LOGIN ERROR:",
+        error
+      );
+
+      return res.status(500).json({
+        ok: false,
+        message: "Login failed"
+      });
     }
-
-    const token = await createSession(id);
-
-    const freshUser = await dbQuery(
-      `SELECT * FROM dekhoearn_users WHERE id=$1`,
-      [id]
-    );
-
-    res.json({
-      ok: true,
-      message: "Registration successful.",
-      token,
-      user: safeUser(
-        freshUser.rows[0] ||
-        result.rows[0]
-      )
-    });
-  } catch (error) {
-    console.error("REGISTER ERROR:", error);
-
-    res.status(500).json({
-      ok: false,
-      message: "Registration failed."
-    });
   }
-});
+);
 
 /* ======================================================
-   LOGIN
+   AUTH ME
 ====================================================== */
 
-app.post("/api/auth/login", async (req, res) => {
-  try {
-    if (!pool) {
-      return res.status(503).json({
+app.get(
+  "/api/auth/me",
+  requireUser,
+  async (req, res) => {
+    try {
+      const user =
+        await getSafeUserById(
+          req.userId
+        );
+
+      if (!user) {
+        return res.status(401).json({
+          ok: false,
+          message: "User not found"
+        });
+      }
+
+      res.json({
+        ok: true,
+        user
+      });
+    } catch (error) {
+      console.error(
+        "ME ERROR:",
+        error
+      );
+
+      res.status(500).json({
         ok: false,
-        message: "Database is not configured."
+        message:
+          "Unable to load session"
       });
     }
-
-    const username = normalizeUsername(
-      req.body.username
-    );
-
-    const password = String(
-      req.body.password || ""
-    );
-
-    if (!username || !password) {
-      return res.status(400).json({
-        ok: false,
-        message: "Username and password are required."
-      });
-    }
-
-    const result = await dbQuery(
-      `
-      SELECT *
-      FROM dekhoearn_users
-      WHERE LOWER(username)=LOWER($1)
-      LIMIT 1
-      `,
-      [username]
-    );
-
-    if (!result.rows.length) {
-      return res.status(401).json({
-        ok: false,
-        message: "Invalid username or password."
-      });
-    }
-
-    const user = result.rows[0];
-
-    if (
-      !user.password_hash ||
-      !user.password_salt ||
-      !verifyPassword(
-        password,
-        user.password_salt,
-        user.password_hash
-      )
-    ) {
-      return res.status(401).json({
-        ok: false,
-        message: "Invalid username or password."
-      });
-    }
-
-    const token = await createSession(user.id);
-
-    const fresh = await dbQuery(
-      `SELECT * FROM dekhoearn_users WHERE id=$1`,
-      [user.id]
-    );
-
-    res.json({
-      ok: true,
-      message: "Login successful.",
-      token,
-      user: safeUser(fresh.rows[0])
-    });
-  } catch (error) {
-    console.error("LOGIN ERROR:", error);
-
-    res.status(500).json({
-      ok: false,
-      message: "Login failed."
-    });
   }
-});
+);
 
 /* ======================================================
-   CURRENT SESSION
+   AUTH LOGOUT
 ====================================================== */
 
-app.get("/api/auth/me", requireAuth, async (req, res) => {
-  res.json({
-    ok: true,
-    user: safeUser(req.user)
-  });
-});
+app.post(
+  "/api/auth/logout",
+  async (req, res) => {
+    try {
+      const token =
+        getBearerToken(req);
 
-/* ======================================================
-   LOGOUT
-====================================================== */
+      if (token) {
+        await dbQuery(
+          `
+          UPDATE dekhoearn_users
+          SET
+            auth_token_hash = '',
+            auth_token_expires_at = NULL,
+            updated_at = NOW()
+          WHERE auth_token_hash = $1
+          `,
+          [hashToken(token)]
+        );
+      }
 
-app.post("/api/auth/logout", requireAuth, async (req, res) => {
-  try {
-    await dbQuery(
-      `
-      UPDATE dekhoearn_users
-      SET
-        auth_token_hash=NULL,
-        auth_token_expires_at=NULL,
-        updated_at=NOW()
-      WHERE id=$1
-      `,
-      [req.userId]
-    );
+      res.json({
+        ok: true,
+        message: "Logged out"
+      });
+    } catch (error) {
+      console.error(
+        "LOGOUT ERROR:",
+        error
+      );
 
-    res.json({
-      ok: true,
-      message: "Logged out successfully."
-    });
-  } catch (error) {
-    console.error("LOGOUT ERROR:", error);
-
-    res.status(500).json({
-      ok: false,
-      message: "Logout failed."
-    });
-  }
-});
-
-/* ======================================================
-   USER
-====================================================== */
-
-app.get("/api/user/:id", async (req, res) => {
-  try {
-    const result = await dbQuery(
-      `
-      SELECT *
-      FROM dekhoearn_users
-      WHERE id=$1
-      LIMIT 1
-      `,
-      [req.params.id]
-    );
-
-    if (!result.rows.length) {
-      return res.status(404).json({
-        ok: false,
-        message: "User not found."
+      res.json({
+        ok: true,
+        message: "Logged out"
       });
     }
-
-    res.json({
-      ok: true,
-      user: safeUser(result.rows[0])
-    });
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      ok: false,
-      message: "Could not load user."
-    });
   }
-});
+);
+
+/* ======================================================
+   CURRENT USER
+====================================================== */
+
+app.get(
+  "/api/user/:id",
+  requireUser,
+  async (req, res) => {
+    try {
+      if (
+        String(req.params.id) !==
+        String(req.userId)
+      ) {
+        return res.status(403).json({
+          ok: false,
+          message: "Access denied"
+        });
+      }
+
+      const user =
+        await getSafeUserById(
+          req.userId
+        );
+
+      if (!user) {
+        return res.status(404).json({
+          ok: false,
+          message: "User not found"
+        });
+      }
+
+      res.json({
+        ok: true,
+        user
+      });
+    } catch (error) {
+      console.error(
+        "USER ERROR:",
+        error
+      );
+
+      res.status(500).json({
+        ok: false,
+        message:
+          "Unable to load user"
+      });
+    }
+  }
+);
 
 /* ======================================================
    CLOUDINARY SIGNATURE
@@ -956,7 +1365,7 @@ app.get("/api/user/:id", async (req, res) => {
 
 app.post(
   "/api/cloudinary/signature",
-  requireAuth,
+  requireUser,
   async (req, res) => {
     try {
       if (
@@ -966,12 +1375,15 @@ app.post(
       ) {
         return res.status(503).json({
           ok: false,
-          message: "Cloudinary is not configured."
+          message:
+            "Cloudinary is not configured"
         });
       }
 
       const timestamp =
-        Math.floor(Date.now() / 1000);
+        Math.floor(
+          Date.now() / 1000
+        );
 
       const params = {
         timestamp,
@@ -979,7 +1391,9 @@ app.post(
       };
 
       const signature =
-        signCloudinaryParams(params);
+        signCloudinaryParams(
+          params
+        );
 
       res.json({
         ok: true,
@@ -1002,203 +1416,119 @@ app.post(
       res.status(500).json({
         ok: false,
         message:
-          "Could not create upload signature."
+          "Unable to create upload signature"
       });
     }
   }
 );
 
 /* ======================================================
-   VIDEO FEED
+   VIDEOS FEED
 ====================================================== */
 
-app.get("/api/videos", async (req, res) => {
-  try {
-    const creatorId =
-      req.query.creator_id ||
-      req.query.user_id ||
-      "";
-
-    let result;
-
-    if (creatorId) {
-      result = await dbQuery(
-        `
-        SELECT
-          v.*,
-          u.username AS creator_username,
-          u.first_name AS creator_name
-        FROM dekhoearn_videos v
-        LEFT JOIN dekhoearn_users u
-          ON u.id=v.user_id
-        WHERE
-          v.user_id=$1
-          AND v.status='published'
-        ORDER BY v.created_at DESC
-        LIMIT 100
-        `,
-        [creatorId]
-      );
-    } else {
-      result = await dbQuery(
-        `
-        SELECT
-          v.*,
-          u.username AS creator_username,
-          u.first_name AS creator_name
-        FROM dekhoearn_videos v
-        LEFT JOIN dekhoearn_users u
-          ON u.id=v.user_id
-        WHERE v.status='published'
-        ORDER BY v.created_at DESC
-        LIMIT 100
-        `
-      );
-    }
-
-    res.json({
-      ok: true,
-      videos: result.rows.map(safeVideo)
-    });
-  } catch (error) {
-    console.error(
-      "VIDEO FEED ERROR:",
-      error
-    );
-
-    res.status(500).json({
-      ok: false,
-      message: "Could not load videos."
-    });
-  }
-});
-
-/* ======================================================
-   CREATE VIDEO
-====================================================== */
-
-app.post(
+app.get(
   "/api/videos",
-  requireAuth,
   async (req, res) => {
     try {
-      const title = cleanText(
-        req.body.title,
-        120
-      );
+      const creatorId =
+        cleanText(
+          req.query.creator_id,
+          100
+        );
 
-      const description = cleanText(
-        req.body.description,
-        1000
-      );
+      const mine =
+        String(
+          req.query.mine || ""
+        ) === "1";
 
-      const videoUrl = String(
-        req.body.video_url || ""
-      ).trim();
+      if (creatorId && mine) {
+        const user =
+          await getAuthenticatedUser(
+            req
+          );
 
-      const thumbnailUrl = String(
-        req.body.thumbnail_url || ""
-      ).trim();
+        if (
+          !user ||
+          String(user.id) !==
+            String(creatorId)
+        ) {
+          return res.status(403).json({
+            ok: false,
+            message: "Access denied"
+          });
+        }
 
-      const publicId = String(
-        req.body.cloudinary_public_id || ""
-      ).trim();
+        const result =
+          await dbQuery(
+            `
+            SELECT
+              v.*,
+              u.username AS creator_username,
+              u.first_name AS creator_name
+            FROM dekhoearn_videos v
+            LEFT JOIN dekhoearn_users u
+              ON u.id = v.creator_id
+            WHERE v.creator_id = $1
+            ORDER BY v.created_at DESC
+            LIMIT 100
+            `,
+            [creatorId]
+          );
 
-      const resourceType = String(
-        req.body.cloudinary_resource_type ||
-        "video"
-      ).trim();
-
-      const format = String(
-        req.body.cloudinary_format || ""
-      ).trim();
-
-      const duration = Number(
-        req.body.duration || 0
-      );
-
-      const bytes = Number(
-        req.body.bytes || 0
-      );
-
-      if (!title) {
-        return res.status(400).json({
-          ok: false,
-          message: "Video title is required."
+        return res.json({
+          ok: true,
+          videos:
+            result.rows.map(
+              safeVideo
+            )
         });
       }
 
-      if (!videoUrl) {
-        return res.status(400).json({
-          ok: false,
-          message: "Video URL is required."
-        });
-      }
+      const where =
+        creatorId
+          ? `WHERE v.creator_id = $1
+             AND v.status = 'published'`
+          : `WHERE v.status = 'published'`;
 
-      if (
-        !Number.isFinite(bytes) ||
-        bytes < 0 ||
-        bytes > 100 * 1024 * 1024
-      ) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            "Video cannot exceed 100 MB."
-        });
-      }
+      const params =
+        creatorId
+          ? [creatorId]
+          : [];
 
-      const result = await dbQuery(
-        `
-        INSERT INTO dekhoearn_videos
-        (
-          user_id,
-          title,
-          description,
-          video_url,
-          thumbnail_url,
-          cloudinary_public_id,
-          cloudinary_resource_type,
-          cloudinary_format,
-          duration,
-          bytes
-        )
-        VALUES
-        ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-        RETURNING *
-        `,
-        [
-          req.userId,
-          title,
-          description,
-          videoUrl,
-          thumbnailUrl,
-          publicId,
-          resourceType,
-          format,
-          Number.isFinite(duration)
-            ? duration
-            : 0,
-          bytes
-        ]
-      );
+      const result =
+        await dbQuery(
+          `
+          SELECT
+            v.*,
+            u.username AS creator_username,
+            u.first_name AS creator_name
+          FROM dekhoearn_videos v
+          LEFT JOIN dekhoearn_users u
+            ON u.id = v.creator_id
+          ${where}
+          ORDER BY v.created_at DESC
+          LIMIT 100
+          `,
+          params
+        );
 
       res.json({
         ok: true,
-        message:
-          "Video uploaded successfully.",
-        video: safeVideo(
-          result.rows[0]
-        )
+        videos:
+          result.rows.map(
+            safeVideo
+          )
       });
     } catch (error) {
       console.error(
-        "CREATE VIDEO ERROR:",
+        "VIDEO FEED ERROR:",
         error
       );
 
       res.status(500).json({
         ok: false,
-        message: "Could not save video."
+        message:
+          "Unable to load videos"
       });
     }
   }
@@ -1212,40 +1542,214 @@ app.get(
   "/api/videos/:id",
   async (req, res) => {
     try {
-      const result = await dbQuery(
-        `
-        SELECT
-          v.*,
-          u.username AS creator_username,
-          u.first_name AS creator_name
-        FROM dekhoearn_videos v
-        LEFT JOIN dekhoearn_users u
-          ON u.id=v.user_id
-        WHERE v.id=$1
-        LIMIT 1
-        `,
-        [req.params.id]
-      );
+      const result =
+        await dbQuery(
+          `
+          SELECT
+            v.*,
+            u.username AS creator_username,
+            u.first_name AS creator_name
+          FROM dekhoearn_videos v
+          LEFT JOIN dekhoearn_users u
+            ON u.id = v.creator_id
+          WHERE v.id = $1
+          LIMIT 1
+          `,
+          [req.params.id]
+        );
 
       if (!result.rows.length) {
         return res.status(404).json({
           ok: false,
-          message: "Video not found."
+          message: "Video not found"
         });
       }
 
       res.json({
         ok: true,
-        video: safeVideo(
-          result.rows[0]
-        )
+        video:
+          safeVideo(
+            result.rows[0]
+          )
       });
     } catch (error) {
-      console.error(error);
+      console.error(
+        "VIDEO ERROR:",
+        error
+      );
 
       res.status(500).json({
         ok: false,
-        message: "Could not load video."
+        message:
+          "Unable to load video"
+      });
+    }
+  }
+);
+
+/* ======================================================
+   CREATE VIDEO METADATA
+====================================================== */
+
+app.post(
+  "/api/videos",
+  requireUser,
+  async (req, res) => {
+    try {
+      const title =
+        cleanText(
+          req.body.title,
+          150
+        );
+
+      const description =
+        cleanText(
+          req.body.description,
+          3000
+        );
+
+      const videoUrl =
+        cleanText(
+          req.body.video_url,
+          2000
+        );
+
+      const thumbnailUrl =
+        cleanText(
+          req.body.thumbnail_url,
+          2000
+        );
+
+      const publicId =
+        cleanText(
+          req.body.cloudinary_public_id,
+          500
+        );
+
+      const resourceType =
+        cleanText(
+          req.body.cloudinary_resource_type ||
+            "video",
+          50
+        );
+
+      const format =
+        cleanText(
+          req.body.cloudinary_format,
+          30
+        );
+
+      const duration =
+        Math.max(
+          0,
+          Math.min(
+            safeNumber(
+              req.body.duration
+            ),
+            86400
+          )
+        );
+
+      const bytes =
+        Math.max(
+          0,
+          safeNumber(
+            req.body.bytes
+          )
+        );
+
+      if (!title) {
+        return res.status(400).json({
+          ok: false,
+          message: "Video title is required"
+        });
+      }
+
+      if (
+        !videoUrl.startsWith(
+          "https://res.cloudinary.com/"
+        )
+      ) {
+        return res.status(400).json({
+          ok: false,
+          message:
+            "Only Cloudinary video URLs are allowed"
+        });
+      }
+
+      if (!publicId) {
+        return res.status(400).json({
+          ok: false,
+          message:
+            "Cloudinary public ID is required"
+        });
+      }
+
+      if (bytes > MAX_VIDEO_BYTES) {
+        return res.status(400).json({
+          ok: false,
+          message:
+            "Maximum video size is 100 MB"
+        });
+      }
+
+      const result =
+        await dbQuery(
+          `
+          INSERT INTO dekhoearn_videos (
+            user_id,
+            creator_id,
+            title,
+            description,
+            video_url,
+            thumbnail_url,
+            cloudinary_public_id,
+            cloudinary_resource_type,
+            cloudinary_format,
+            duration,
+            bytes,
+            status,
+            moderation_status
+          )
+          VALUES (
+            $1,$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+            'published','normal'
+          )
+          RETURNING *
+          `,
+          [
+            req.userId,
+            title,
+            description,
+            videoUrl,
+            thumbnailUrl,
+            publicId,
+            resourceType,
+            format,
+            duration,
+            bytes
+          ]
+        );
+
+      res.json({
+        ok: true,
+        message:
+          "Video published successfully",
+        video:
+          safeVideo(
+            result.rows[0]
+          )
+      });
+    } catch (error) {
+      console.error(
+        "CREATE VIDEO ERROR:",
+        error
+      );
+
+      res.status(500).json({
+        ok: false,
+        message:
+          "Unable to save video"
       });
     }
   }
@@ -1257,39 +1761,46 @@ app.get(
 
 app.delete(
   "/api/videos/:id",
-  requireAuth,
+  requireUser,
   async (req, res) => {
     try {
-      const result = await dbQuery(
-        `
-        DELETE FROM dekhoearn_videos
-        WHERE id=$1 AND user_id=$2
-        RETURNING id
-        `,
-        [
-          req.params.id,
-          req.userId
-        ]
-      );
+      const result =
+        await dbQuery(
+          `
+          DELETE FROM dekhoearn_videos
+          WHERE id = $1
+            AND creator_id = $2
+          RETURNING id
+          `,
+          [
+            req.params.id,
+            req.userId
+          ]
+        );
 
       if (!result.rows.length) {
         return res.status(404).json({
           ok: false,
           message:
-            "Video not found or not owned by you."
+            "Video not found or access denied"
         });
       }
 
       res.json({
         ok: true,
-        message: "Video deleted."
+        message:
+          "Video deleted successfully"
       });
     } catch (error) {
-      console.error(error);
+      console.error(
+        "DELETE VIDEO ERROR:",
+        error
+      );
 
       res.status(500).json({
         ok: false,
-        message: "Could not delete video."
+        message:
+          "Unable to delete video"
       });
     }
   }
@@ -1301,67 +1812,79 @@ app.delete(
 
 app.post(
   "/api/watch/complete",
-  requireAuth,
+  requireUser,
   async (req, res) => {
-    if (!pool) {
-      return res.status(503).json({
-        ok: false,
-        message: "Database unavailable."
-      });
-    }
-
-    const client = await pool.connect();
+    const client =
+      await pool.connect();
 
     try {
       const videoId =
-        Number(req.body.video_id);
+        Number(
+          req.body.video_id
+        );
 
-      const watchSeconds = Math.max(
-        0,
-        Math.min(
-          86400,
-          Number(
-            req.body.watch_seconds || 0
+      const watchSeconds =
+        Math.max(
+          0,
+          Math.min(
+            Math.floor(
+              safeNumber(
+                req.body.watch_seconds
+              )
+            ),
+            86400
           )
-        )
-      );
+        );
 
-      if (!videoId) {
+      if (
+        !Number.isInteger(
+          videoId
+        )
+      ) {
         return res.status(400).json({
           ok: false,
-          message: "Invalid video."
+          message: "Invalid video"
         });
       }
 
       await client.query("BEGIN");
 
-      const video = await client.query(
-        `
-        SELECT *
-        FROM dekhoearn_videos
-        WHERE id=$1
-        FOR UPDATE
-        `,
-        [videoId]
-      );
+      const videoResult =
+        await client.query(
+          `
+          SELECT *
+          FROM dekhoearn_videos
+          WHERE id = $1
+          FOR UPDATE
+          `,
+          [videoId]
+        );
 
-      if (!video.rows.length) {
-        await client.query("ROLLBACK");
-
-        return res.status(404).json({
-          ok: false,
-          message: "Video not found."
-        });
+      if (!videoResult.rows.length) {
+        throw new Error(
+          "Video not found"
+        );
       }
 
-      const existing =
+      const video =
+        videoResult.rows[0];
+
+      if (
+        video.status !==
+        "published"
+      ) {
+        throw new Error(
+          "Video is not available"
+        );
+      }
+
+      const existingResult =
         await client.query(
           `
           SELECT *
           FROM dekhoearn_video_views
-          WHERE
-            user_id=$1
-            AND video_id=$2
+          WHERE user_id = $1
+            AND video_id = $2
           FOR UPDATE
           `,
           [
@@ -1372,19 +1895,20 @@ app.post(
 
       let reward = 0;
 
-      if (!existing.rows.length) {
+      if (
+        !existingResult.rows.length
+      ) {
         reward = 1;
 
         await client.query(
           `
-          INSERT INTO dekhoearn_video_views
-          (
+          INSERT INTO dekhoearn_video_views (
             user_id,
             video_id,
             watch_seconds,
             reward_points
           )
-          VALUES($1,$2,$3,$4)
+          VALUES ($1,$2,$3,$4)
           `,
           [
             req.userId,
@@ -1398,10 +1922,11 @@ app.post(
           `
           UPDATE dekhoearn_videos
           SET
-            views=views+1,
-            watch_seconds=watch_seconds+$1,
-            updated_at=NOW()
-          WHERE id=$2
+            views = views + 1,
+            watch_seconds =
+              watch_seconds + $1,
+            updated_at = NOW()
+          WHERE id = $2
           `,
           [
             watchSeconds,
@@ -1413,76 +1938,85 @@ app.post(
           `
           UPDATE dekhoearn_users
           SET
-            points=points+$1,
-            total_earned=total_earned+$1,
-            watched_videos=watched_videos+1,
-            today_earned=today_earned+$1,
-            updated_at=NOW()
-          WHERE id=$2
+            points = points + 1,
+            total_earned =
+              total_earned + 1,
+            watched_videos =
+              watched_videos + 1,
+            today_earned =
+              today_earned + 1,
+            updated_at = NOW()
+          WHERE id = $1
           `,
-          [
-            reward,
-            req.userId
-          ]
+          [req.userId]
         );
 
         await client.query(
           `
-          INSERT INTO dekhoearn_points_ledger
-          (
+          INSERT INTO dekhoearn_points_ledger (
             user_id,
             points,
             type,
             description,
             reference_id
           )
-          VALUES
-          ($1,$2,'watch','Video watch reward',$3)
+          VALUES (
+            $1,1,'watch',
+            'Video watch reward',$2
+          )
           `,
           [
             req.userId,
-            reward,
             String(videoId)
           ]
         );
       } else {
-        const previous =
-          Number(
-            existing.rows[0]
-              .watch_seconds || 0
+        const oldSeconds =
+          safeNumber(
+            existingResult
+              .rows[0]
+              .watch_seconds
           );
 
-        const extra = Math.max(
-          0,
-          watchSeconds - previous
+        const newSeconds =
+          Math.max(
+            oldSeconds,
+            watchSeconds
+          );
+
+        const delta =
+          Math.max(
+            0,
+            newSeconds -
+              oldSeconds
+          );
+
+        await client.query(
+          `
+          UPDATE dekhoearn_video_views
+          SET watch_seconds = $1
+          WHERE user_id = $2
+            AND video_id = $3
+          `,
+          [
+            newSeconds,
+            req.userId,
+            videoId
+          ]
         );
 
-        if (extra > 0) {
-          await client.query(
-            `
-            UPDATE dekhoearn_video_views
-            SET watch_seconds=$1
-            WHERE
-              user_id=$2
-              AND video_id=$3
-            `,
-            [
-              watchSeconds,
-              req.userId,
-              videoId
-            ]
-          );
-
+        if (delta > 0) {
           await client.query(
             `
             UPDATE dekhoearn_videos
             SET
-              watch_seconds=watch_seconds+$1,
-              updated_at=NOW()
-            WHERE id=$2
+              watch_seconds =
+                watch_seconds + $1,
+              updated_at = NOW()
+            WHERE id = $2
             `,
             [
-              extra,
+              delta,
               videoId
             ]
           );
@@ -1491,28 +2025,31 @@ app.post(
 
       await client.query("COMMIT");
 
+      const user =
+        await getSafeUserById(
+          req.userId
+        );
+
       res.json({
         ok: true,
         reward,
-        message:
-          reward > 0
-            ? `You earned ${reward} point.`
-            : "Watch already rewarded."
+        user
       });
     } catch (error) {
-      await client
-        .query("ROLLBACK")
-        .catch(() => {});
+      await client.query(
+        "ROLLBACK"
+      );
 
       console.error(
         "WATCH ERROR:",
         error
       );
 
-      res.status(500).json({
+      res.status(400).json({
         ok: false,
         message:
-          "Watch reward failed."
+          error.message ||
+          "Unable to complete watch"
       });
     } finally {
       client.release();
@@ -1521,200 +2058,414 @@ app.post(
 );
 
 /* ======================================================
-   LIKE
+   WATCH HISTORY
 ====================================================== */
 
-app.post(
-  "/api/videos/:id/like",
-  requireAuth,
+app.get(
+  "/api/user/:id/watch-history",
+  requireUser,
   async (req, res) => {
     try {
-      const videoId =
-        Number(req.params.id);
-
-      const inserted = await dbQuery(
-        `
-        INSERT INTO dekhoearn_likes
-        (user_id,video_id)
-        VALUES($1,$2)
-        ON CONFLICT(user_id,video_id)
-        DO NOTHING
-        RETURNING id
-        `,
-        [
-          req.userId,
-          videoId
-        ]
-      );
-
-      let liked = false;
-
-      if (inserted.rows.length) {
-        liked = true;
-
-        await dbQuery(
-          `
-          UPDATE dekhoearn_videos
-          SET
-            likes_count=likes_count+1,
-            updated_at=NOW()
-          WHERE id=$1
-          `,
-          [videoId]
-        );
-      } else {
-        const deleted = await dbQuery(
-          `
-          DELETE FROM dekhoearn_likes
-          WHERE
-            user_id=$1
-            AND video_id=$2
-          RETURNING id
-          `,
-          [
-            req.userId,
-            videoId
-          ]
-        );
-
-        if (deleted.rows.length) {
-          await dbQuery(
-            `
-            UPDATE dekhoearn_videos
-            SET
-              likes_count=
-                GREATEST(0,likes_count-1),
-              updated_at=NOW()
-            WHERE id=$1
-            `,
-            [videoId]
-          );
-        }
+      if (
+        String(req.params.id) !==
+        String(req.userId)
+      ) {
+        return res.status(403).json({
+          ok: false,
+          message: "Access denied"
+        });
       }
 
-      const result = await dbQuery(
-        `
-        SELECT likes_count
-        FROM dekhoearn_videos
-        WHERE id=$1
-        `,
-        [videoId]
-      );
+      const result =
+        await dbQuery(
+          `
+          SELECT
+            v.*,
+            vv.watch_seconds AS user_watch_seconds,
+            vv.reward_points AS user_reward_points,
+            vv.created_at AS watched_at,
+            u.username AS creator_username,
+            u.first_name AS creator_name
+          FROM dekhoearn_video_views vv
+          JOIN dekhoearn_videos v
+            ON v.id = vv.video_id
+          LEFT JOIN dekhoearn_users u
+            ON u.id = v.creator_id
+          WHERE vv.user_id = $1
+          ORDER BY vv.created_at DESC
+          LIMIT 100
+          `,
+          [req.userId]
+        );
 
       res.json({
         ok: true,
-        liked,
-        likes_count:
-          Number(
-            result.rows[0]?.likes_count || 0
+        history:
+          result.rows.map(
+            row => ({
+              ...safeVideo(row),
+              user_watch_seconds:
+                safeNumber(
+                  row.user_watch_seconds
+                ),
+              user_reward_points:
+                safeNumber(
+                  row.user_reward_points
+                ),
+              watched_at:
+                row.watched_at
+            })
           )
       });
     } catch (error) {
-      console.error(error);
+      console.error(
+        "WATCH HISTORY ERROR:",
+        error
+      );
 
       res.status(500).json({
         ok: false,
-        message: "Like failed."
+        message:
+          "Unable to load watch history"
       });
     }
   }
 );
 
 /* ======================================================
-   COMMENTS
+   LIKE TOGGLE
+====================================================== */
+
+app.post(
+  "/api/videos/:id/like",
+  requireUser,
+  async (req, res) => {
+    const client =
+      await pool.connect();
+
+    try {
+      await client.query(
+        "BEGIN"
+      );
+
+      const video =
+        await client.query(
+          `
+          SELECT id
+          FROM dekhoearn_videos
+          WHERE id = $1
+          FOR UPDATE
+          `,
+          [req.params.id]
+        );
+
+      if (!video.rows.length) {
+        throw new Error(
+          "Video not found"
+        );
+      }
+
+      const existing =
+        await client.query(
+          `
+          SELECT id
+          FROM dekhoearn_likes
+          WHERE user_id = $1
+            AND video_id = $2
+          LIMIT 1
+          `,
+          [
+            req.userId,
+            req.params.id
+          ]
+        );
+
+      let liked = false;
+
+      if (existing.rows.length) {
+        await client.query(
+          `
+          DELETE FROM dekhoearn_likes
+          WHERE user_id = $1
+            AND video_id = $2
+          `,
+          [
+            req.userId,
+            req.params.id
+          ]
+        );
+
+        await client.query(
+          `
+          UPDATE dekhoearn_videos
+          SET likes_count =
+            GREATEST(0, likes_count - 1)
+          WHERE id = $1
+          `,
+          [req.params.id]
+        );
+      } else {
+        liked = true;
+
+        await client.query(
+          `
+          INSERT INTO dekhoearn_likes (
+            user_id,
+            video_id
+          )
+          VALUES ($1,$2)
+          `,
+          [
+            req.userId,
+            req.params.id
+          ]
+        );
+
+        await client.query(
+          `
+          UPDATE dekhoearn_videos
+          SET likes_count =
+            likes_count + 1
+          WHERE id = $1
+          `,
+          [req.params.id]
+        );
+      }
+
+      const count =
+        await client.query(
+          `
+          SELECT likes_count
+          FROM dekhoearn_videos
+          WHERE id = $1
+          `,
+          [req.params.id]
+        );
+
+      await client.query(
+        "COMMIT"
+      );
+
+      res.json({
+        ok: true,
+        liked,
+        likes_count:
+          safeNumber(
+            count.rows[0]
+              .likes_count
+          )
+      });
+    } catch (error) {
+      await client.query(
+        "ROLLBACK"
+      );
+
+      console.error(
+        "LIKE ERROR:",
+        error
+      );
+
+      res.status(400).json({
+        ok: false,
+        message:
+          error.message ||
+          "Unable to update like"
+      });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+/* ======================================================
+   LIKE STATUS
+====================================================== */
+
+app.get(
+  "/api/videos/:id/like/status",
+  requireUser,
+  async (req, res) => {
+    try {
+      const result =
+        await dbQuery(
+          `
+          SELECT 1
+          FROM dekhoearn_likes
+          WHERE user_id = $1
+            AND video_id = $2
+          LIMIT 1
+          `,
+          [
+            req.userId,
+            req.params.id
+          ]
+        );
+
+      res.json({
+        ok: true,
+        liked:
+          result.rows.length > 0
+      });
+    } catch (error) {
+      res.status(500).json({
+        ok: false,
+        message:
+          "Unable to check like"
+      });
+    }
+  }
+);
+
+/* ======================================================
+   COMMENTS GET
 ====================================================== */
 
 app.get(
   "/api/videos/:id/comments",
   async (req, res) => {
     try {
-      const result = await dbQuery(
-        `
-        SELECT
-          c.*,
-          u.username,
-          u.first_name
-        FROM dekhoearn_comments c
-        LEFT JOIN dekhoearn_users u
-          ON u.id=c.user_id
-        WHERE c.video_id=$1
-        ORDER BY c.created_at ASC
-        LIMIT 200
-        `,
-        [req.params.id]
-      );
+      const result =
+        await dbQuery(
+          `
+          SELECT
+            c.id,
+            c.user_id,
+            c.video_id,
+            c.comment,
+            c.created_at,
+            u.username,
+            u.first_name
+          FROM dekhoearn_comments c
+          LEFT JOIN dekhoearn_users u
+            ON u.id = c.user_id
+          WHERE c.video_id = $1
+          ORDER BY c.created_at DESC
+          LIMIT 100
+          `,
+          [req.params.id]
+        );
 
       res.json({
         ok: true,
-        comments: result.rows
+        comments:
+          result.rows.map(
+            row => ({
+              id: row.id,
+              user_id:
+                row.user_id,
+              video_id:
+                row.video_id,
+              comment:
+                row.comment,
+              username:
+                row.username || "user",
+              first_name:
+                row.first_name || "",
+              created_at:
+                row.created_at
+            })
+          )
       });
     } catch (error) {
-      console.error(error);
+      console.error(
+        "COMMENTS ERROR:",
+        error
+      );
 
       res.status(500).json({
         ok: false,
         message:
-          "Could not load comments."
+          "Unable to load comments"
       });
     }
   }
 );
 
+/* ======================================================
+   COMMENT POST
+====================================================== */
+
 app.post(
   "/api/videos/:id/comments",
-  requireAuth,
+  requireUser,
   async (req, res) => {
     try {
-      const comment = cleanText(
-        req.body.comment,
-        500
-      );
+      const comment =
+        cleanText(
+          req.body.comment,
+          1000
+        );
 
       if (!comment) {
         return res.status(400).json({
           ok: false,
           message:
-            "Comment cannot be empty."
+            "Comment cannot be empty"
         });
       }
 
-      const result = await dbQuery(
-        `
-        INSERT INTO dekhoearn_comments
-        (user_id,video_id,comment)
-        VALUES($1,$2,$3)
-        RETURNING *
-        `,
-        [
-          req.userId,
-          req.params.id,
-          comment
-        ]
-      );
+      const video =
+        await dbQuery(
+          `
+          SELECT id
+          FROM dekhoearn_videos
+          WHERE id = $1
+            AND status = 'published'
+          LIMIT 1
+          `,
+          [req.params.id]
+        );
+
+      if (!video.rows.length) {
+        return res.status(404).json({
+          ok: false,
+          message: "Video not found"
+        });
+      }
+
+      const result =
+        await dbQuery(
+          `
+          INSERT INTO dekhoearn_comments (
+            user_id,
+            video_id,
+            comment
+          )
+          VALUES ($1,$2,$3)
+          RETURNING *
+          `,
+          [
+            req.userId,
+            req.params.id,
+            comment
+          ]
+        );
 
       await dbQuery(
         `
         UPDATE dekhoearn_videos
-        SET
-          comments_count=
-            comments_count+1,
-          updated_at=NOW()
-        WHERE id=$1
+        SET comments_count =
+          comments_count + 1
+        WHERE id = $1
         `,
         [req.params.id]
       );
 
       res.json({
         ok: true,
-        comment: result.rows[0]
+        comment:
+          result.rows[0]
       });
     } catch (error) {
-      console.error(error);
+      console.error(
+        "COMMENT ERROR:",
+        error
+      );
 
       res.status(500).json({
         ok: false,
         message:
-          "Could not add comment."
+          "Unable to add comment"
       });
     }
   }
@@ -1726,19 +2477,24 @@ app.post(
 
 app.post(
   "/api/videos/:id/report",
-  requireAuth,
+  requireUser,
   async (req, res) => {
     try {
-      const reason = cleanText(
-        req.body.reason,
-        500
-      );
+      const reason =
+        cleanText(
+          req.body.reason ||
+            "Reported by user",
+          1000
+        );
 
       await dbQuery(
         `
-        INSERT INTO dekhoearn_reports
-        (user_id,video_id,reason)
-        VALUES($1,$2,$3)
+        INSERT INTO dekhoearn_reports (
+          user_id,
+          video_id,
+          reason
+        )
+        VALUES ($1,$2,$3)
         `,
         [
           req.userId,
@@ -1749,15 +2505,19 @@ app.post(
 
       res.json({
         ok: true,
-        message: "Report submitted."
+        message:
+          "Report submitted"
       });
     } catch (error) {
-      console.error(error);
+      console.error(
+        "REPORT ERROR:",
+        error
+      );
 
       res.status(500).json({
         ok: false,
         message:
-          "Could not submit report."
+          "Unable to submit report"
       });
     }
   }
@@ -1769,177 +2529,215 @@ app.post(
 
 app.post(
   "/api/daily/claim",
-  requireAuth,
+  requireUser,
   async (req, res) => {
-    try {
-      const reward = 10;
+    const client =
+      await pool.connect();
 
-      const result = await dbQuery(
-        `
-        INSERT INTO dekhoearn_daily_rewards
-        (
-          user_id,
-          reward_points,
-          reward_date
-        )
-        VALUES
-        ($1,$2,CURRENT_DATE)
-        ON CONFLICT(user_id,reward_date)
-        DO NOTHING
-        RETURNING id
-        `,
-        [
-          req.userId,
-          reward
-        ]
+    try {
+      await client.query(
+        "BEGIN"
       );
 
-      if (!result.rows.length) {
-        return res.json({
-          ok: true,
-          claimed: false,
-          reward: 0,
+      const reward =
+        await client.query(
+          `
+          INSERT INTO dekhoearn_daily_rewards (
+            user_id,
+            reward_points
+          )
+          VALUES ($1,10)
+          ON CONFLICT (user_id,reward_date)
+          DO NOTHING
+          RETURNING id
+          `,
+          [req.userId]
+        );
+
+      if (!reward.rows.length) {
+        await client.query(
+          "ROLLBACK"
+        );
+
+        return res.status(409).json({
+          ok: false,
           message:
-            "Daily reward already claimed."
+            "Daily reward already claimed"
         });
       }
 
-      await dbQuery(
+      await client.query(
         `
         UPDATE dekhoearn_users
         SET
-          points=points+$1,
-          total_earned=total_earned+$1,
-          today_earned=today_earned+$1,
-          updated_at=NOW()
-        WHERE id=$2
+          points = points + 10,
+          total_earned =
+            total_earned + 10,
+          today_earned =
+            today_earned + 10,
+          updated_at = NOW()
+        WHERE id = $1
         `,
-        [
-          reward,
-          req.userId
-        ]
+        [req.userId]
       );
 
-      await dbQuery(
+      await client.query(
         `
-        INSERT INTO dekhoearn_points_ledger
-        (
+        INSERT INTO dekhoearn_points_ledger (
           user_id,
           points,
           type,
           description
         )
-        VALUES
-        ($1,$2,'daily','Daily reward')
+        VALUES (
+          $1,10,'daily',
+          'Daily reward'
+        )
         `,
-        [
-          req.userId,
-          reward
-        ]
+        [req.userId]
       );
+
+      await client.query(
+        "COMMIT"
+      );
+
+      const user =
+        await getSafeUserById(
+          req.userId
+        );
 
       res.json({
         ok: true,
-        claimed: true,
-        reward,
-        message:
-          `Daily reward: +${reward} points`
+        reward: 10,
+        user
       });
     } catch (error) {
-      console.error(error);
+      await client.query(
+        "ROLLBACK"
+      );
+
+      console.error(
+        "DAILY ERROR:",
+        error
+      );
 
       res.status(500).json({
         ok: false,
         message:
-          "Daily reward failed."
+          "Unable to claim daily reward"
       });
+    } finally {
+      client.release();
     }
   }
 );
 
 /* ======================================================
-   REWARDED AD
+   REWARDED AD DEMO
 ====================================================== */
 
 app.post(
   "/api/rewarded-ad/complete",
-  requireAuth,
+  requireUser,
   async (req, res) => {
-    try {
-      const reward = 5;
+    const client =
+      await pool.connect();
 
-      await dbQuery(
-        `
-        INSERT INTO dekhoearn_rewarded_ads
-        (user_id,reward_points)
-        VALUES($1,$2)
-        `,
-        [
-          req.userId,
-          reward
-        ]
+    try {
+      /*
+       This is a DEMO reward endpoint.
+       A real ad network should be connected later.
+      */
+
+      await client.query(
+        "BEGIN"
       );
 
-      await dbQuery(
+      await client.query(
+        `
+        INSERT INTO dekhoearn_rewarded_ads (
+          user_id,
+          reward_points
+        )
+        VALUES ($1,5)
+        `,
+        [req.userId]
+      );
+
+      await client.query(
         `
         UPDATE dekhoearn_users
         SET
-          points=points+$1,
-          total_earned=total_earned+$1,
-          today_earned=today_earned+$1,
-          updated_at=NOW()
-        WHERE id=$2
+          points = points + 5,
+          total_earned =
+            total_earned + 5,
+          today_earned =
+            today_earned + 5,
+          updated_at = NOW()
+        WHERE id = $1
         `,
-        [
-          reward,
-          req.userId
-        ]
+        [req.userId]
       );
 
-      await dbQuery(
+      await client.query(
         `
-        INSERT INTO dekhoearn_points_ledger
-        (
+        INSERT INTO dekhoearn_points_ledger (
           user_id,
           points,
           type,
           description
         )
-        VALUES
-        ($1,$2,'rewarded_ad',
-        'Rewarded advertisement')
+        VALUES (
+          $1,5,'rewarded_ad',
+          'Rewarded ad demo reward'
+        )
         `,
-        [
-          req.userId,
-          reward
-        ]
+        [req.userId]
       );
+
+      await client.query(
+        "COMMIT"
+      );
+
+      const user =
+        await getSafeUserById(
+          req.userId
+        );
 
       res.json({
         ok: true,
-        reward,
-        message:
-          `Ad reward: +${reward} points`
+        reward: 5,
+        demo: true,
+        user
       });
     } catch (error) {
-      console.error(error);
+      await client.query(
+        "ROLLBACK"
+      );
+
+      console.error(
+        "REWARDED AD ERROR:",
+        error
+      );
 
       res.status(500).json({
         ok: false,
         message:
-          "Ad reward failed."
+          "Unable to add reward"
       });
+    } finally {
+      client.release();
     }
   }
 );
 
 /* ======================================================
-   POINT HISTORY
+   POINTS HISTORY
 ====================================================== */
 
 app.get(
   "/api/user/:id/points/history",
-  requireAuth,
+  requireUser,
   async (req, res) => {
     try {
       if (
@@ -1948,246 +2746,303 @@ app.get(
       ) {
         return res.status(403).json({
           ok: false,
-          message: "Access denied."
+          message: "Access denied"
         });
       }
 
-      const result = await dbQuery(
-        `
-        SELECT *
-        FROM dekhoearn_points_ledger
-        WHERE user_id=$1
-        ORDER BY created_at DESC
-        LIMIT 100
-        `,
-        [req.userId]
-      );
+      const result =
+        await dbQuery(
+          `
+          SELECT
+            id,
+            points,
+            type,
+            description,
+            reference_id,
+            created_at
+          FROM dekhoearn_points_ledger
+          WHERE user_id = $1
+          ORDER BY created_at DESC
+          LIMIT 100
+          `,
+          [req.userId]
+        );
 
       res.json({
         ok: true,
-        history: result.rows
+        history:
+          result.rows.map(
+            row => ({
+              id: row.id,
+              points:
+                safeNumber(
+                  row.points
+                ),
+              type:
+                row.type,
+              description:
+                row.description,
+              reference_id:
+                row.reference_id,
+              created_at:
+                row.created_at
+            })
+          )
       });
     } catch (error) {
-      console.error(error);
+      console.error(
+        "POINTS HISTORY ERROR:",
+        error
+      );
 
       res.status(500).json({
         ok: false,
         message:
-          "Could not load points history."
+          "Unable to load points history"
       });
     }
   }
 );
 
 /* ======================================================
-   CREATOR DASHBOARD
+   CREATOR STATS
 ====================================================== */
 
 app.get(
   "/api/creator/:id",
+  requireUser,
   async (req, res) => {
     try {
-      const user = await dbQuery(
-        `
-        SELECT *
-        FROM dekhoearn_users
-        WHERE id=$1
-        `,
-        [req.params.id]
-      );
+      const user =
+        await getSafeUserById(
+          req.params.id
+        );
 
-      if (!user.rows.length) {
+      if (!user) {
         return res.status(404).json({
           ok: false,
           message:
-            "Creator not found."
+            "Creator not found"
         });
       }
 
-      const videos = await dbQuery(
-        `
-        SELECT
-          COUNT(*) AS video_count,
-          COALESCE(SUM(views),0)
-            AS total_views,
-          COALESCE(SUM(likes_count),0)
-            AS total_likes,
-          COALESCE(SUM(comments_count),0)
-            AS total_comments
-        FROM dekhoearn_videos
-        WHERE user_id=$1
-        `,
-        [req.params.id]
-      );
+      const videoStats =
+        await dbQuery(
+          `
+          SELECT
+            COUNT(*) AS video_count,
+            COALESCE(SUM(views),0) AS total_views,
+            COALESCE(SUM(likes_count),0) AS total_likes,
+            COALESCE(SUM(comments_count),0)
+              AS total_comments
+          FROM dekhoearn_videos
+          WHERE creator_id = $1
+          `,
+          [req.params.id]
+        );
 
-      const followers = await dbQuery(
-        `
-        SELECT COUNT(*) AS count
-        FROM dekhoearn_follows
-        WHERE creator_id=$1
-        `,
-        [req.params.id]
-      );
+      const followers =
+        await dbQuery(
+          `
+          SELECT COUNT(*) AS count
+          FROM dekhoearn_follows
+          WHERE creator_id = $1
+          `,
+          [req.params.id]
+        );
 
-      const earnings = await dbQuery(
-        `
-        SELECT COALESCE(SUM(amount),0)
-          AS total
-        FROM dekhoearn_creator_earnings
-        WHERE creator_id=$1
-        `,
-        [req.params.id]
-      );
+      const earnings =
+        await dbQuery(
+          `
+          SELECT
+            COALESCE(
+              SUM(amount),
+              0
+            ) AS earnings
+          FROM dekhoearn_creator_earnings
+          WHERE creator_id = $1
+          `,
+          [req.params.id]
+        );
 
       res.json({
         ok: true,
-        creator: {
-          user:
-            safeUser(user.rows[0]),
+        creator: user,
+        stats: {
           video_count:
-            Number(
-              videos.rows[0]?.video_count || 0
+            safeNumber(
+              videoStats.rows[0]
+                .video_count
             ),
           total_views:
-            Number(
-              videos.rows[0]?.total_views || 0
+            safeNumber(
+              videoStats.rows[0]
+                .total_views
             ),
           total_likes:
-            Number(
-              videos.rows[0]?.total_likes || 0
+            safeNumber(
+              videoStats.rows[0]
+                .total_likes
             ),
           total_comments:
-            Number(
-              videos.rows[0]?.total_comments || 0
+            safeNumber(
+              videoStats.rows[0]
+                .total_comments
             ),
           followers:
-            Number(
-              followers.rows[0]?.count || 0
+            safeNumber(
+              followers.rows[0]
+                .count
             ),
           earnings:
-            Number(
-              earnings.rows[0]?.total || 0
+            safeNumber(
+              earnings.rows[0]
+                .earnings
             )
         }
       });
     } catch (error) {
-      console.error(error);
+      console.error(
+        "CREATOR STATS ERROR:",
+        error
+      );
 
       res.status(500).json({
         ok: false,
         message:
-          "Could not load creator dashboard."
+          "Unable to load creator dashboard"
       });
     }
   }
 );
 
 /* ======================================================
-   MONETIZATION
+   MONETIZATION APPLY
 ====================================================== */
 
-async function applyMonetization(req, res) {
+async function applyMonetization(
+  req,
+  res
+) {
   try {
+    const creatorId =
+      String(req.params.id);
+
     if (
-      String(req.params.id) !==
+      creatorId !==
       String(req.userId)
     ) {
       return res.status(403).json({
         ok: false,
-        message: "Access denied."
+        message:
+          "You can only apply for your own account"
       });
     }
 
-    const result = await dbQuery(
+    await dbQuery(
       `
       UPDATE dekhoearn_users
       SET
-        is_creator=TRUE,
-        monetization_status='pending',
-        updated_at=NOW()
-      WHERE id=$1
-      RETURNING *
+        is_creator = TRUE,
+        monetization_status = 'pending',
+        updated_at = NOW()
+      WHERE id = $1
       `,
       [req.userId]
     );
 
+    const user =
+      await getSafeUserById(
+        req.userId
+      );
+
     res.json({
       ok: true,
       message:
-        "Monetization application submitted.",
-      user:
-        safeUser(result.rows[0])
+        "Monetization application submitted",
+      user
     });
   } catch (error) {
-    console.error(error);
+    console.error(
+      "MONETIZATION ERROR:",
+      error
+    );
 
     res.status(500).json({
       ok: false,
       message:
-        "Monetization application failed."
+        "Unable to apply for monetization"
     });
   }
 }
 
 app.post(
   "/api/creator/:id/monetization/apply",
-  requireAuth,
+  requireUser,
   applyMonetization
 );
 
 app.post(
   "/api/creator/:id/apply",
-  requireAuth,
+  requireUser,
   applyMonetization
 );
 
 /* ======================================================
-   FOLLOW
+   FOLLOW TOGGLE
 ====================================================== */
 
 app.post(
   "/api/creator/:id/follow",
-  requireAuth,
+  requireUser,
   async (req, res) => {
-    try {
-      const creatorId =
-        String(req.params.id);
+    const creatorId =
+      String(req.params.id);
 
-      if (creatorId === req.userId) {
-        return res.status(400).json({
-          ok: false,
-          message:
-            "You cannot follow yourself."
-        });
-      }
+    if (
+      creatorId ===
+      String(req.userId)
+    ) {
+      return res.status(400).json({
+        ok: false,
+        message:
+          "You cannot follow yourself"
+      });
+    }
+
+    const client =
+      await pool.connect();
+
+    try {
+      await client.query(
+        "BEGIN"
+      );
 
       const creator =
-        await dbQuery(
+        await client.query(
           `
           SELECT id
           FROM dekhoearn_users
-          WHERE id=$1
+          WHERE id = $1
+          LIMIT 1
           `,
           [creatorId]
         );
 
       if (!creator.rows.length) {
-        return res.status(404).json({
-          ok: false,
-          message:
-            "Creator not found."
-        });
+        throw new Error(
+          "Creator not found"
+        );
       }
 
-      const inserted =
-        await dbQuery(
+      const existing =
+        await client.query(
           `
-          INSERT INTO dekhoearn_follows
-          (follower_id,creator_id)
-          VALUES($1,$2)
-          ON CONFLICT(follower_id,creator_id)
-          DO NOTHING
-          RETURNING id
+          SELECT id
+          FROM dekhoearn_follows
+          WHERE follower_id = $1
+            AND creator_id = $2
+          LIMIT 1
           `,
           [
             req.userId,
@@ -2195,88 +3050,168 @@ app.post(
           ]
         );
 
-      if (inserted.rows.length) {
-        return res.json({
-          ok: true,
-          following: true,
-          message: "Following."
-        });
+      let following = false;
+
+      if (existing.rows.length) {
+        await client.query(
+          `
+          DELETE FROM dekhoearn_follows
+          WHERE follower_id = $1
+            AND creator_id = $2
+          `,
+          [
+            req.userId,
+            creatorId
+          ]
+        );
+      } else {
+        following = true;
+
+        await client.query(
+          `
+          INSERT INTO dekhoearn_follows (
+            follower_id,
+            creator_id
+          )
+          VALUES ($1,$2)
+          ON CONFLICT DO NOTHING
+          `,
+          [
+            req.userId,
+            creatorId
+          ]
+        );
       }
 
-      await dbQuery(
-        `
-        DELETE FROM dekhoearn_follows
-        WHERE
-          follower_id=$1
-          AND creator_id=$2
-        `,
-        [
-          req.userId,
-          creatorId
-        ]
+      const count =
+        await client.query(
+          `
+          SELECT COUNT(*) AS count
+          FROM dekhoearn_follows
+          WHERE creator_id = $1
+          `,
+          [creatorId]
+        );
+
+      await client.query(
+        "COMMIT"
       );
 
       res.json({
         ok: true,
-        following: false,
-        message: "Unfollowed."
+        following,
+        followers:
+          safeNumber(
+            count.rows[0].count
+          )
       });
     } catch (error) {
-      console.error(error);
+      await client.query(
+        "ROLLBACK"
+      );
 
+      console.error(
+        "FOLLOW ERROR:",
+        error
+      );
+
+      res.status(400).json({
+        ok: false,
+        message:
+          error.message ||
+          "Unable to update follow"
+      });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+/* ======================================================
+   FOLLOW STATUS
+====================================================== */
+
+app.get(
+  "/api/creator/:id/follow/status",
+  requireUser,
+  async (req, res) => {
+    try {
+      const result =
+        await dbQuery(
+          `
+          SELECT 1
+          FROM dekhoearn_follows
+          WHERE follower_id = $1
+            AND creator_id = $2
+          LIMIT 1
+          `,
+          [
+            req.userId,
+            req.params.id
+          ]
+        );
+
+      res.json({
+        ok: true,
+        following:
+          result.rows.length > 0
+      });
+    } catch (error) {
       res.status(500).json({
         ok: false,
         message:
-          "Follow action failed."
+          "Unable to check follow"
       });
     }
   }
 );
 
 /* ======================================================
-   PAYOUT
+   PAYOUT ACCOUNT
 ====================================================== */
 
 app.post(
-  "/api/payout/account",
-  requireAuth,
+  "/api/payout-account",
+  requireUser,
   async (req, res) => {
     try {
-      const method = cleanText(
-        req.body.method,
-        50
-      );
+      const method =
+        cleanText(
+          req.body.method,
+          50
+        );
 
       const accountDetails =
         cleanText(
           req.body.account_details,
-          1000
+          2000
         );
 
-      if (!method || !accountDetails) {
+      if (
+        !method ||
+        !accountDetails
+      ) {
         return res.status(400).json({
           ok: false,
           message:
-            "Payout details are required."
+            "Payout method and account details are required"
         });
       }
 
-      const result = await dbQuery(
+      await dbQuery(
         `
-        INSERT INTO dekhoearn_payout_accounts
-        (
+        INSERT INTO dekhoearn_payout_accounts (
           user_id,
           method,
           account_details
         )
-        VALUES($1,$2,$3)
-        ON CONFLICT(user_id)
+        VALUES ($1,$2,$3)
+        ON CONFLICT (user_id)
         DO UPDATE SET
-          method=EXCLUDED.method,
-          account_details=
+          method = EXCLUDED.method,
+          account_details =
             EXCLUDED.account_details,
-          updated_at=NOW()
-        RETURNING *
+          updated_at = NOW()
         `,
         [
           req.userId,
@@ -2287,122 +3222,191 @@ app.post(
 
       res.json({
         ok: true,
-        account:
-          result.rows[0]
+        message:
+          "Payout account saved"
       });
     } catch (error) {
-      console.error(error);
+      console.error(
+        "PAYOUT ERROR:",
+        error
+      );
 
       res.status(500).json({
         ok: false,
         message:
-          "Could not save payout account."
+          "Unable to save payout account"
       });
     }
   }
 );
 
 /* ======================================================
-   ADMIN
+   ADMIN - USERS
 ====================================================== */
 
-function requireAdmin(req, res, next) {
-  const key =
-    req.headers["x-admin-key"] ||
-    req.query.admin_key ||
-    "";
+app.get(
+  "/api/admin/users",
+  requireAdmin,
+  async (req, res) => {
+    try {
+      const result =
+        await dbQuery(
+          `
+          SELECT
+            id,
+            username,
+            first_name,
+            points,
+            total_earned,
+            watched_videos,
+            is_creator,
+            monetization_status,
+            created_at
+          FROM dekhoearn_users
+          ORDER BY created_at DESC
+          LIMIT 500
+          `
+        );
 
-  if (!ADMIN_KEY || key !== ADMIN_KEY) {
-    return res.status(403).json({
-      ok: false,
-      message:
-        "Admin access denied."
-    });
+      res.json({
+        ok: true,
+        users:
+          result.rows
+      });
+    } catch (error) {
+      console.error(
+        "ADMIN USERS ERROR:",
+        error
+      );
+
+      res.status(500).json({
+        ok: false,
+        message:
+          "Unable to load users"
+      });
+    }
   }
+);
 
-  next();
-}
+/* ======================================================
+   ADMIN - REPORTS
+====================================================== */
 
 app.get(
   "/api/admin/reports",
   requireAdmin,
   async (req, res) => {
     try {
-      const result = await dbQuery(`
-        SELECT
-          r.*,
-          v.title,
-          u.username
-        FROM dekhoearn_reports r
-        LEFT JOIN dekhoearn_videos v
-          ON v.id=r.video_id
-        LEFT JOIN dekhoearn_users u
-          ON u.id=r.user_id
-        ORDER BY r.created_at DESC
-        LIMIT 200
-      `);
+      const result =
+        await dbQuery(
+          `
+          SELECT
+            r.*,
+            v.title,
+            u.username
+          FROM dekhoearn_reports r
+          LEFT JOIN dekhoearn_videos v
+            ON v.id = r.video_id
+          LEFT JOIN dekhoearn_users u
+            ON u.id = r.user_id
+          ORDER BY r.created_at DESC
+          LIMIT 500
+          `
+        );
 
       res.json({
         ok: true,
-        reports: result.rows
+        reports:
+          result.rows
       });
     } catch (error) {
-      console.error(error);
-
       res.status(500).json({
         ok: false,
         message:
-          "Could not load reports."
+          "Unable to load reports"
       });
     }
   }
 );
 
+/* ======================================================
+   ADMIN - MODERATION
+====================================================== */
+
 app.post(
-  "/api/admin/action",
+  "/api/admin/video/:id/moderate",
   requireAdmin,
   async (req, res) => {
     try {
-      const action = cleanText(
-        req.body.action,
-        100
-      );
+      const status =
+        cleanText(
+          req.body.status ||
+            "normal",
+          50
+        );
 
-      const targetId = cleanText(
-        req.body.target_id,
-        100
-      );
+      const videoStatus =
+        cleanText(
+          req.body.video_status ||
+            "published",
+          50
+        );
 
-      const details = cleanText(
-        req.body.details,
-        2000
+      await dbQuery(
+        `
+        UPDATE dekhoearn_videos
+        SET
+          moderation_status = $1,
+          status = $2,
+          updated_at = NOW()
+        WHERE id = $3
+        `,
+        [
+          status,
+          videoStatus,
+          req.params.id
+        ]
       );
 
       await dbQuery(
         `
-        INSERT INTO dekhoearn_admin_actions
-        (action,target_id,details)
-        VALUES($1,$2,$3)
+        INSERT INTO dekhoearn_admin_actions (
+          action,
+          target_id,
+          details
+        )
+        VALUES (
+          'video_moderation',
+          $1,
+          $2
+        )
         `,
         [
-          action,
-          targetId,
-          details
+          String(req.params.id),
+          JSON.stringify({
+            moderation_status:
+              status,
+            status:
+              videoStatus
+          })
         ]
       );
 
       res.json({
         ok: true,
         message:
-          "Admin action recorded."
+          "Video moderation updated"
       });
     } catch (error) {
-      console.error(error);
+      console.error(
+        "ADMIN MODERATION ERROR:",
+        error
+      );
 
       res.status(500).json({
         ok: false,
         message:
-          "Admin action failed."
+          "Unable to update moderation"
       });
     }
   }
@@ -2413,51 +3417,83 @@ app.post(
 ====================================================== */
 
 app.use(
-  express.static(__dirname, {
-    index: false
-  })
+  express.static(
+    __dirname,
+    {
+      index: false,
+      dotfiles: "ignore"
+    }
+  )
 );
 
-app.get("/", (req, res) => {
-  res.sendFile(
-    path.join(__dirname, "index.html")
-  );
-});
+app.get(
+  "/",
+  (req, res) => {
+    res.sendFile(
+      path.join(
+        __dirname,
+        "index.html"
+      )
+    );
+  }
+);
+
+/*
+ Express 5 compatible SPA fallback without
+ an unnamed '*' wildcard route.
+*/
+
+app.use(
+  (req, res, next) => {
+    if (
+      req.method !== "GET"
+    ) {
+      return next();
+    }
+
+    if (
+      req.path.startsWith(
+        "/api/"
+      )
+    ) {
+      return res.status(404).json({
+        ok: false,
+        message:
+          "API route not found"
+      });
+    }
+
+    res.sendFile(
+      path.join(
+        __dirname,
+        "index.html"
+      )
+    );
+  }
+);
 
 /* ======================================================
-   404
+   ERROR HANDLER
 ====================================================== */
 
-app.use((req, res) => {
-  if (req.path.startsWith("/api/")) {
-    return res.status(404).json({
+app.use(
+  (error, req, res, next) => {
+    console.error(
+      "UNHANDLED ERROR:",
+      error
+    );
+
+    if (res.headersSent) {
+      return next(error);
+    }
+
+    res.status(500).json({
       ok: false,
       message:
-        "API route not found."
+        "Internal server error"
     });
   }
-
-  res.sendFile(
-    path.join(__dirname, "index.html")
-  );
-});
-
-/* ======================================================
-   ERROR
-====================================================== */
-
-app.use((err, req, res, next) => {
-  console.error(
-    "SERVER ERROR:",
-    err
-  );
-
-  res.status(500).json({
-    ok: false,
-    message:
-      "Internal server error."
-  });
-});
+);
 
 /* ======================================================
    START
@@ -2465,34 +3501,23 @@ app.use((err, req, res, next) => {
 
 async function startServer() {
   try {
+    if (!DATABASE_URL) {
+      throw new Error(
+        "DATABASE_URL environment variable is required"
+      );
+    }
+
     await initDatabase();
 
-    app.listen(PORT, () => {
-      console.log("=================================================");
-      console.log("service is live 🎉");
-      console.log("=================================================");
-      console.log("📁 Static frontend: Enabled");
-      console.log(
-        "☁️ Cloudinary:",
-        CLOUDINARY_CLOUD_NAME
-          ? "Configured"
-          : "Not configured"
-      );
-      console.log(
-        "📦 Database:",
-        pool
-          ? "Configured"
-          : "Not configured"
-      );
-      console.log("🔐 Secure Auth: Enabled");
-      console.log(
-        `🌐 Port: ${PORT}`
-      );
-      console.log(
-        `🚀 DekhoEarn Server v${SERVER_VERSION}`
-      );
-      console.log("=================================================");
-    });
+    app.listen(
+      PORT,
+      "0.0.0.0",
+      () => {
+        console.log(
+          `🚀 DekhoEarn ${SERVER_VERSION} running on port ${PORT}`
+        );
+      }
+    );
   } catch (error) {
     console.error(
       "❌ Startup failed:",
@@ -2503,24 +3528,34 @@ async function startServer() {
   }
 }
 
-process.on("SIGTERM", async () => {
-  console.log("SIGTERM received.");
+process.on(
+  "SIGTERM",
+  async () => {
+    console.log(
+      "SIGTERM received"
+    );
 
-  if (pool) {
-    await pool.end().catch(() => {});
+    if (pool) {
+      await pool.end();
+    }
+
+    process.exit(0);
   }
+);
 
-  process.exit(0);
-});
+process.on(
+  "SIGINT",
+  async () => {
+    console.log(
+      "SIGINT received"
+    );
 
-process.on("SIGINT", async () => {
-  console.log("SIGINT received.");
+    if (pool) {
+      await pool.end();
+    }
 
-  if (pool) {
-    await pool.end().catch(() => {});
+    process.exit(0);
   }
-
-  process.exit(0);
-});
+);
 
 startServer();
