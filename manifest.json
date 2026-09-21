@@ -1,12 +1,16 @@
 {
   "name": "DekhoEarn",
   "short_name": "DekhoEarn",
-  "description": "Dekho. Earn Karo. Reward Lo.",
+  "description": "Watch videos, earn points and share.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#16a34a",
   "orientation": "portrait",
-  "icons": []
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "categories": [
+    "entertainment",
+    "social",
+    "video"
+  ]
 }
