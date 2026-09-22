@@ -1,18 +1,25 @@
 /*
 =========================================================
  DEKHOEARN SERVICE WORKER
- Version 3.1.0
+ Version 3.1.1
+ --------------------------------------------------------
+ - Network-first app shell
+ - API always network
+ - Old cache cleanup
+ - Cache-busted app.js/style.css
 =========================================================
 */
 
+"use strict";
+
 const CACHE_NAME =
-  "dekhoearn-shell-v3";
+  "dekhoearn-shell-v3.1.1";
 
 const APP_SHELL = [
   "/",
   "/index.html",
-  "/style.css",
-  "/app.js",
+  "/style.css?v=3.1.1",
+  "/app.js?v=3.1.1",
   "/manifest.json"
 ];
 
@@ -26,14 +33,12 @@ self.addEventListener(
     event.waitUntil(
       caches
         .open(CACHE_NAME)
-        .then(cache =>
-          cache.addAll(
-            APP_SHELL
-          )
-        )
-        .then(() =>
-          self.skipWaiting()
-        )
+        .then(cache => {
+          return cache.addAll(APP_SHELL);
+        })
+        .then(() => {
+          return self.skipWaiting();
+        })
     );
   }
 );
@@ -48,24 +53,20 @@ self.addEventListener(
     event.waitUntil(
       caches
         .keys()
-        .then(keys =>
-          Promise.all(
+        .then(keys => {
+          return Promise.all(
             keys
-              .filter(
-                key =>
-                  key !==
-                  CACHE_NAME
-              )
-              .map(key =>
-                caches.delete(
-                  key
-                )
-              )
-          )
-        )
-        .then(() =>
-          self.clients.claim()
-        )
+              .filter(key => {
+                return key !== CACHE_NAME;
+              })
+              .map(key => {
+                return caches.delete(key);
+              })
+          );
+        })
+        .then(() => {
+          return self.clients.claim();
+        })
     );
   }
 );
@@ -77,20 +78,26 @@ self.addEventListener(
 self.addEventListener(
   "fetch",
   event => {
+
     const request =
       event.request;
 
+    /* -----------------------------------------------
+       Only GET requests are cached.
+    ----------------------------------------------- */
+
     if (
-      request.method !==
-      "GET"
+      request.method !== "GET"
     ) {
       return;
     }
 
     const url =
-      new URL(
-        request.url
-      );
+      new URL(request.url);
+
+    /* -----------------------------------------------
+       Ignore external domains.
+    ----------------------------------------------- */
 
     if (
       url.origin !==
@@ -99,15 +106,14 @@ self.addEventListener(
       return;
     }
 
-    /*
-     API requests should always go
-     to network first.
-    */
+    /* -----------------------------------------------
+       API REQUESTS
+       Always use network.
+       Never serve API from cache.
+    ----------------------------------------------- */
 
     if (
-      url.pathname.startsWith(
-        "/api/"
-      )
+      url.pathname.startsWith("/api/")
     ) {
       event.respondWith(
         fetch(request)
@@ -116,42 +122,53 @@ self.addEventListener(
       return;
     }
 
-    /*
-     App shell:
-     network first so new deployments
-     are picked up quickly.
-    */
+    /* -----------------------------------------------
+       APP SHELL
+       Network first.
+       If network fails, use cache.
+    ----------------------------------------------- */
 
     event.respondWith(
+
       fetch(request)
+
         .then(response => {
+
           if (
-            response.ok &&
-            request.method ===
-              "GET"
+            response &&
+            response.ok
           ) {
+
             const copy =
               response.clone();
 
             caches
-              .open(
-                CACHE_NAME
-              )
-              .then(cache =>
+              .open(CACHE_NAME)
+              .then(cache => {
+
                 cache.put(
                   request,
                   copy
-                )
-              );
+                );
+
+              })
+              .catch(() => {
+                /* Cache failure should
+                   never break the app. */
+              });
           }
 
           return response;
         })
-        .catch(() =>
-          caches.match(
+
+        .catch(() => {
+
+          return caches.match(
             request
-          )
-        )
+          );
+
+        })
+
     );
   }
 );
