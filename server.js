@@ -795,6 +795,11 @@ async function initDatabase() {
      INDEXES
   ---------------------------------------------------- */
 
+ await dbQuery(`
+  ALTER TABLE dekhoearn_videos
+  ADD COLUMN IF NOT EXISTS creator_id TEXT
+`);
+ 
   await dbQuery(`
     CREATE INDEX IF NOT EXISTS dekhoearn_videos_created_idx
     ON dekhoearn_videos(created_at DESC)
