@@ -25,7 +25,7 @@
 
   <link
     rel="stylesheet"
-    href="/style.css"
+    href="/style.css?v=3.1.1"
   >
 
   <title>DekhoEarn</title>
@@ -34,7 +34,7 @@
 <body>
 
 <!-- =====================================================
-     AUTH
+     AUTH SCREEN
 ====================================================== -->
 
 <section
@@ -44,13 +44,17 @@
 
   <div class="auth-container">
 
+    <!-- BRAND -->
+
     <div class="brand-block">
 
       <div class="brand-logo">
         ▶
       </div>
 
-      <h1>DekhoEarn</h1>
+      <h1>
+        DekhoEarn
+      </h1>
 
       <p>
         Watch • Earn • Share
@@ -58,7 +62,10 @@
 
     </div>
 
-    <!-- LOGIN -->
+
+    <!-- =================================================
+         LOGIN
+    ================================================== -->
 
     <div
       id="loginBox"
@@ -70,6 +77,7 @@
       </h2>
 
       <div class="field">
+
         <label>
           Username
         </label>
@@ -78,11 +86,16 @@
           id="loginUsername"
           type="text"
           autocomplete="username"
+          autocapitalize="none"
+          spellcheck="false"
           placeholder="Enter username"
         >
+
       </div>
 
+
       <div class="field">
+
         <label>
           Password
         </label>
@@ -93,28 +106,39 @@
           autocomplete="current-password"
           placeholder="Enter password"
         >
+
       </div>
+
 
       <button
         id="loginBtn"
+        type="button"
         class="primary-btn"
       >
         Login
       </button>
 
+
       <p class="auth-switch">
+
         Don't have an account?
+
         <button
           id="showRegisterBtn"
+          type="button"
           class="text-btn"
         >
           Create Account
         </button>
+
       </p>
 
     </div>
 
-    <!-- REGISTER -->
+
+    <!-- =================================================
+         REGISTER
+    ================================================== -->
 
     <div
       id="registerBox"
@@ -125,7 +149,9 @@
         Create account
       </h2>
 
+
       <div class="field">
+
         <label>
           Your Name
         </label>
@@ -136,9 +162,12 @@
           autocomplete="name"
           placeholder="Enter your name"
         >
+
       </div>
 
+
       <div class="field">
+
         <label>
           Username
         </label>
@@ -147,11 +176,16 @@
           id="registerUsername"
           type="text"
           autocomplete="username"
+          autocapitalize="none"
+          spellcheck="false"
           placeholder="Choose username"
         >
+
       </div>
 
+
       <div class="field">
+
         <label>
           Password
         </label>
@@ -162,38 +196,54 @@
           autocomplete="new-password"
           placeholder="Minimum 6 characters"
         >
+
       </div>
 
+
       <div class="field">
+
         <label>
+
           Referral Code
+
           <small>
             (optional)
           </small>
+
         </label>
 
         <input
           id="registerReferral"
           type="text"
+          autocapitalize="none"
+          spellcheck="false"
           placeholder="Referral code"
         >
+
       </div>
+
 
       <button
         id="registerBtn"
+        type="button"
         class="primary-btn"
       >
         Create Account
       </button>
 
+
       <p class="auth-switch">
+
         Already have an account?
+
         <button
           id="showLoginBtn"
+          type="button"
           class="text-btn"
         >
           Login
         </button>
+
       </p>
 
     </div>
@@ -202,8 +252,9 @@
 
 </section>
 
+
 <!-- =====================================================
-     APP
+     MAIN APP
 ====================================================== -->
 
 <div
@@ -211,13 +262,17 @@
   class="app-shell hidden"
 >
 
-  <!-- HEADER -->
+
+  <!-- ===================================================
+       HEADER
+  ==================================================== -->
 
   <header class="top-header">
 
     <div class="top-header-inner">
 
       <div class="greeting">
+
         <strong
           id="headerGreeting"
         >
@@ -227,7 +282,9 @@
         <small>
           Watch and earn
         </small>
+
       </div>
+
 
       <div
         id="headerPoints"
@@ -239,6 +296,7 @@
     </div>
 
   </header>
+
 
   <!-- ===================================================
        HOME
@@ -252,6 +310,7 @@
     <div class="section-head">
 
       <div>
+
         <h2>
           Discover
         </h2>
@@ -259,10 +318,13 @@
         <p>
           Watch videos and earn points.
         </p>
+
       </div>
+
 
       <button
         id="refreshFeedBtn"
+        type="button"
         class="icon-btn"
       >
         ↻
@@ -270,12 +332,14 @@
 
     </div>
 
+
     <div
       id="videoFeed"
       class="video-feed"
     ></div>
 
   </section>
+
 
   <!-- ===================================================
        WATCH HISTORY
@@ -287,7 +351,9 @@
   >
 
     <div class="section-head">
+
       <div>
+
         <h2>
           Watch History
         </h2>
@@ -295,14 +361,18 @@
         <p>
           Your watched videos.
         </p>
+
       </div>
+
     </div>
+
 
     <div
       id="watchHistoryList"
     ></div>
 
   </section>
+
 
   <!-- ===================================================
        PLAYER
@@ -317,12 +387,14 @@
 
       <button
         id="backFromPlayerBtn"
+        type="button"
         class="back-btn"
       >
         ← Back
       </button>
 
     </div>
+
 
     <div class="player-box">
 
@@ -333,16 +405,19 @@
         preload="metadata"
       ></video>
 
+
       <div class="player-info">
 
         <h2
           id="playerTitle"
         ></h2>
 
+
         <p
           id="playerDescription"
           class="player-description"
         ></p>
+
 
         <div class="player-stats">
 
@@ -366,24 +441,30 @@
 
         </div>
 
+
         <div class="player-actions">
 
           <button
             id="likeVideoBtn"
+            type="button"
             class="action-btn"
           >
             🤍 Like
           </button>
 
+
           <button
             id="followCreatorBtn"
+            type="button"
             class="action-btn"
           >
             Follow
           </button>
 
+
           <button
             id="reportVideoBtn"
+            type="button"
             class="action-btn"
           >
             ⚑ Report
@@ -395,6 +476,7 @@
 
     </div>
 
+
     <!-- COMMENTS -->
 
     <div class="comments-section">
@@ -402,6 +484,7 @@
       <h3>
         Comments
       </h3>
+
 
       <div class="comment-form">
 
@@ -412,13 +495,16 @@
           placeholder="Write a comment..."
         >
 
+
         <button
           id="commentBtn"
+          type="button"
         >
           Send
         </button>
 
       </div>
+
 
       <div
         id="commentsList"
@@ -427,6 +513,7 @@
     </div>
 
   </section>
+
 
   <!-- ===================================================
        EARN
@@ -440,6 +527,7 @@
     <div class="section-head">
 
       <div>
+
         <h2>
           Earn
         </h2>
@@ -447,11 +535,16 @@
         <p>
           Collect points from available rewards.
         </p>
+
       </div>
 
     </div>
 
+
     <div class="earn-grid">
+
+
+      <!-- DAILY -->
 
       <div class="earn-card">
 
@@ -459,16 +552,20 @@
           🎁
         </div>
 
+
         <h3>
           Daily Reward
         </h3>
+
 
         <p>
           Claim your daily 10-point reward.
         </p>
 
+
         <button
           id="dailyRewardBtn"
+          type="button"
           class="primary-btn"
         >
           Claim Daily Reward
@@ -476,22 +573,29 @@
 
       </div>
 
+
+      <!-- REWARDED AD -->
+
       <div class="earn-card">
 
         <div class="earn-card-icon">
           📺
         </div>
 
+
         <h3>
           Reward Ad
         </h3>
+
 
         <p>
           Demo reward system. Real ad network can be connected later.
         </p>
 
+
         <button
           id="rewardedAdBtn"
+          type="button"
           class="primary-btn"
         >
           🎁 Reward Ad Demo
@@ -501,11 +605,15 @@
 
     </div>
 
+
+    <!-- POINTS HISTORY -->
+
     <div class="points-history">
 
       <h3>
         Points History
       </h3>
+
 
       <div
         id="pointsHistory"
@@ -514,6 +622,7 @@
     </div>
 
   </section>
+
 
   <!-- ===================================================
        UPLOAD
@@ -527,6 +636,7 @@
     <div class="section-head">
 
       <div>
+
         <h2>
           Upload
         </h2>
@@ -534,9 +644,11 @@
         <p>
           Share your video with the community.
         </p>
+
       </div>
 
     </div>
+
 
     <div class="upload-card">
 
@@ -552,6 +664,7 @@
             accept="video/*"
           >
 
+
           <div class="video-select-content">
 
             <strong>
@@ -566,6 +679,7 @@
 
         </label>
 
+
         <div
           id="videoFileName"
           class="file-name"
@@ -574,6 +688,9 @@
         </div>
 
       </div>
+
+
+      <!-- PREVIEW -->
 
       <div
         id="uploadPreview"
@@ -584,15 +701,20 @@
           id="uploadPreviewVideo"
           controls
           playsinline
+          preload="metadata"
         ></video>
 
       </div>
+
+
+      <!-- TITLE -->
 
       <div class="field">
 
         <label>
           Video Title
         </label>
+
 
         <input
           id="videoTitle"
@@ -603,11 +725,15 @@
 
       </div>
 
+
+      <!-- DESCRIPTION -->
+
       <div class="field">
 
         <label>
           Description
         </label>
+
 
         <textarea
           id="videoDescription"
@@ -616,6 +742,9 @@
         ></textarea>
 
       </div>
+
+
+      <!-- UPLOAD PROGRESS -->
 
       <div
         id="uploadProgressBox"
@@ -630,6 +759,7 @@
             Preparing...
           </span>
 
+
           <span
             id="uploadProgressPercent"
           >
@@ -637,6 +767,7 @@
           </span>
 
         </div>
+
 
         <div class="progress-track">
 
@@ -649,8 +780,10 @@
 
       </div>
 
+
       <button
         id="uploadVideoBtn"
+        type="button"
         class="primary-btn"
       >
         Upload Video
@@ -659,6 +792,7 @@
     </div>
 
   </section>
+
 
   <!-- ===================================================
        PROFILE
@@ -675,11 +809,13 @@
         👤
       </div>
 
+
       <h2
         id="profileName"
       >
         User
       </h2>
+
 
       <p
         id="profileUsername"
@@ -687,7 +823,9 @@
         @user
       </p>
 
+
       <div class="profile-stats">
+
 
         <div class="profile-stat">
 
@@ -703,6 +841,7 @@
 
         </div>
 
+
         <div class="profile-stat">
 
           <strong
@@ -716,6 +855,7 @@
           </span>
 
         </div>
+
 
         <div class="profile-stat">
 
@@ -733,31 +873,41 @@
 
       </div>
 
+
+      <!-- PROFILE ACTIONS -->
+
       <div class="profile-actions">
 
         <button
           id="myVideosBtn"
+          type="button"
           class="secondary-btn"
         >
           🎬 My Videos
         </button>
 
+
         <button
           id="creatorDashboardBtn"
+          type="button"
           class="secondary-btn"
         >
           📊 Creator Dashboard
         </button>
 
+
         <button
           id="installAppBtn"
+          type="button"
           class="secondary-btn install-btn hidden"
         >
           📲 Install DekhoEarn
         </button>
 
+
         <button
           id="logoutBtn"
+          type="button"
           class="danger-btn"
         >
           Logout
@@ -766,6 +916,9 @@
       </div>
 
     </div>
+
+
+    <!-- MY VIDEOS -->
 
     <div
       id="myVideosContainer"
@@ -780,8 +933,9 @@
 
   </section>
 
+
   <!-- ===================================================
-       CREATOR
+       CREATOR DASHBOARD
   ==================================================== -->
 
   <section
@@ -792,6 +946,7 @@
     <div class="section-head">
 
       <div>
+
         <h2>
           Creator Dashboard
         </h2>
@@ -799,9 +954,11 @@
         <p>
           Track your content performance.
         </p>
+
       </div>
 
     </div>
+
 
     <div class="creator-card">
 
@@ -809,8 +966,10 @@
         id="creatorStats"
       ></div>
 
+
       <button
         id="applyMonetizationBtn"
+        type="button"
         class="primary-btn"
         style="margin-top:15px;"
       >
@@ -821,8 +980,9 @@
 
   </section>
 
+
   <!-- ===================================================
-       BOTTOM NAV
+       BOTTOM NAVIGATION
   ==================================================== -->
 
   <nav
@@ -830,6 +990,7 @@
   >
 
     <button
+      type="button"
       data-page="homeSection"
       class="active"
     >
@@ -837,28 +998,36 @@
       Home
     </button>
 
+
     <button
+      type="button"
       data-page="watchSection"
     >
       <span>🕘</span>
       Watch
     </button>
 
+
     <button
+      type="button"
       data-page="earnSection"
     >
       <span>💰</span>
       Earn
     </button>
 
+
     <button
+      type="button"
       data-page="uploadSection"
     >
       <span>➕</span>
       Upload
     </button>
 
+
     <button
+      type="button"
       data-page="profileSection"
     >
       <span>👤</span>
@@ -869,6 +1038,7 @@
 
 </div>
 
+
 <!-- =====================================================
      TOAST
 ====================================================== -->
@@ -878,8 +1048,14 @@
   class="toast"
 ></div>
 
+
+<!-- =====================================================
+     JAVASCRIPT
+====================================================== -->
+
 <script
-  src="/app.js"
+  src="/app.js?v=3.1.1"
+  defer
 ></script>
 
 </body>
