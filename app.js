@@ -1817,7 +1817,7 @@ async function claimDailyReward() {
   try {
     const data =
       await api(
-        "/api/daily/claim",
+        "/api/rewards/daily",
         {
           method: "POST"
         }
@@ -1829,9 +1829,7 @@ async function claimDailyReward() {
 
       localStorage.setItem(
         USER_KEY,
-        JSON.stringify(
-          currentUser
-        )
+        JSON.stringify(currentUser)
       );
 
       updateUserUI();
@@ -1841,6 +1839,9 @@ async function claimDailyReward() {
       `+${data.reward || 0} daily points 🎁`,
       "success"
     );
+
+    await loadPointsHistory();
+
   } catch (error) {
     showToast(
       error.message,
@@ -1871,7 +1872,7 @@ async function claimRewardedAd() {
   try {
     const data =
       await api(
-        "/api/rewarded-ad/complete",
+        "/api/rewards/ad",
         {
           method: "POST"
         }
@@ -1883,9 +1884,7 @@ async function claimRewardedAd() {
 
       localStorage.setItem(
         USER_KEY,
-        JSON.stringify(
-          currentUser
-        )
+        JSON.stringify(currentUser)
       );
 
       updateUserUI();
@@ -1895,6 +1894,9 @@ async function claimRewardedAd() {
       `+${data.reward || 0} points added 🎁`,
       "success"
     );
+
+    await loadPointsHistory();
+
   } catch (error) {
     showToast(
       error.message,
@@ -1931,9 +1933,7 @@ async function loadPointsHistory() {
   try {
     const data =
       await api(
-        `/api/user/${encodeURIComponent(
-          currentUser.id
-        )}/points/history`
+        "/api/points/history"
       );
 
     const history =
@@ -1958,8 +1958,8 @@ async function loadPointsHistory() {
               <strong>
                 ${escapeHTML(
                   item.description ||
-                    item.type ||
-                    "Points"
+                  item.type ||
+                  "Points"
                 )}
               </strong>
 
@@ -1979,6 +1979,7 @@ async function loadPointsHistory() {
           </div>
         `)
         .join("");
+
   } catch (error) {
     list.innerHTML = `
       <div class="empty-card small">
