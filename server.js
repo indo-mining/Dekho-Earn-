@@ -5241,8 +5241,7 @@ app.get(
     ) {
       return next();
     }
-    );
-
+    
     const publicIndex =
       path.join(
         publicPath,
