@@ -1,16 +1,29 @@
 /*
 =========================================================
  DEKHOEARN FRONTEND
- Version 3.1.1
+ Version 3.1.2 FINAL
  --------------------------------------------------------
- Fixes:
- - Login/Register event binding
- - Safer initialization
- - Bearer authentication
- - Session handling
- - API error handling
- - Service-worker cache compatibility
- - Existing DekhoEarn features preserved
+ Connected with:
+ - DekhoEarn Server v3.1.2
+ - Secure Authentication
+ - Bearer Authentication
+ - Video Feed
+ - Watch Rewards
+ - Likes
+ - Comments
+ - Reports
+ - Follow System
+ - Daily Rewards
+ - Rewarded Ad Demo
+ - Points History
+ - Watch History
+ - Cloudinary Direct Upload
+ - 100 MB Video Upload
+ - Upload Progress
+ - My Videos
+ - Creator Dashboard
+ - Monetization
+ - PWA
 =========================================================
 */
 
@@ -79,6 +92,7 @@ function showToast(
       `[${type}]`,
       message
     );
+
     return;
   }
 
@@ -106,10 +120,22 @@ function escapeHTML(value) {
   return String(
     value ?? ""
   )
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
+    .replaceAll(
+      "&",
+      "&amp;"
+    )
+    .replaceAll(
+      "<",
+      "&lt;"
+    )
+    .replaceAll(
+      ">",
+      "&gt;"
+    )
+    .replaceAll(
+      '"',
+      "&quot;"
+    )
     .replaceAll(
       "'",
       "&#039;"
@@ -119,10 +145,14 @@ function escapeHTML(value) {
 function formatNumber(value) {
   return Number(
     value || 0
-  ).toLocaleString("en-IN");
+  ).toLocaleString(
+    "en-IN"
+  );
 }
 
-function formatVideoSize(bytes) {
+function formatVideoSize(
+  bytes
+) {
   const size =
     Number(bytes || 0);
 
@@ -147,7 +177,9 @@ function formatVideoSize(bytes) {
 }
 
 function formatDate(value) {
-  if (!value) return "";
+  if (!value) {
+    return "";
+  }
 
   try {
     return new Date(
@@ -266,9 +298,8 @@ async function api(
   }
 
   /*
-  IMPORTANT:
-  Login/Register 401 should NOT
-  automatically clear session.
+  Login/Register 401 should not
+  automatically clear the session.
   */
 
   if (
@@ -421,6 +452,7 @@ async function login() {
         "/api/auth/login",
         {
           method: "POST",
+
           body: JSON.stringify({
             username,
             password
@@ -533,20 +565,26 @@ async function register() {
   }
 
   const usernameRegex =
-  /^[A-Za-z0-9_.]{3,30}$/;
+    /^[A-Za-z0-9_.]{3,30}$/;
 
-if (!usernameRegex.test(username)) {
-  showToast(
-    "Username must be 3-30 characters and use only letters, numbers, underscore or dot",
-    "error"
-  );
+  if (
+    !usernameRegex.test(
+      username
+    )
+  ) {
+    showToast(
+      "Username must be 3-30 characters and use only letters, numbers, underscore or dot",
+      "error"
+    );
 
-  usernameInput?.focus();
+    usernameInput?.focus();
 
-  return;
-}
+    return;
+  }
 
-  if (password.length < 6) {
+  if (
+    password.length < 6
+  ) {
     showToast(
       "Password must be at least 6 characters",
       "error"
@@ -573,11 +611,15 @@ if (!usernameRegex.test(username)) {
         "/api/auth/register",
         {
           method: "POST",
+
           body: JSON.stringify({
             first_name:
               firstName,
+
             username,
+
             password,
+
             referral_code:
               referral
           })
@@ -741,7 +783,9 @@ async function logout() {
 ====================================================== */
 
 function updateUserUI() {
-  if (!currentUser) return;
+  if (!currentUser) {
+    return;
+  }
 
   const name =
     currentUser.first_name ||
@@ -800,7 +844,9 @@ function updateUserUI() {
 }
 
 async function refreshCurrentUser() {
-  if (!currentUser) return;
+  if (!currentUser) {
+    return;
+  }
 
   const data =
     await api(
@@ -902,7 +948,9 @@ async function loadVideos() {
   const feed =
     $("videoFeed");
 
-  if (!feed) return;
+  if (!feed) {
+    return;
+  }
 
   feed.innerHTML = `
     <div class="loading-card">
@@ -929,9 +977,13 @@ async function loadVideos() {
     feed.innerHTML = `
       <div class="empty-card">
         <h3>Unable to load videos</h3>
-        <p>${escapeHTML(
-          error.message
-        )}</p>
+
+        <p>
+          ${escapeHTML(
+            error.message
+          )}
+        </p>
+
         <button
           class="primary-btn"
           id="retryFeedBtn"
@@ -955,13 +1007,21 @@ function renderVideoFeed(
   const feed =
     $("videoFeed");
 
-  if (!feed) return;
+  if (!feed) {
+    return;
+  }
 
   if (!videos.length) {
     feed.innerHTML = `
       <div class="empty-card">
-        <div class="empty-icon">🎬</div>
-        <h3>No videos yet</h3>
+        <div class="empty-icon">
+          🎬
+        </div>
+
+        <h3>
+          No videos yet
+        </h3>
+
         <p>
           Be the first creator to upload a video.
         </p>
@@ -973,73 +1033,79 @@ function renderVideoFeed(
 
   feed.innerHTML =
     videos
-      .map(video => `
-        <article
-          class="video-card"
-          data-video-id="${escapeHTML(
-            video.id
-          )}"
-        >
-          <div class="video-thumb-wrap">
+      .map(
+        video => `
+          <article
+            class="video-card"
+            data-video-id="${escapeHTML(
+              video.id
+            )}"
+          >
 
-            ${
-              video.thumbnail_url
-                ? `
-                  <img
-                    class="video-thumb"
-                    src="${escapeHTML(
-                      video.thumbnail_url
-                    )}"
-                    alt=""
-                    loading="lazy"
-                  >
-                `
-                : `
-                  <div class="video-thumb placeholder-thumb">
-                    ▶
-                  </div>
-                `
-            }
+            <div class="video-thumb-wrap">
 
-            <span class="play-badge">
-              ▶
-            </span>
+              ${
+                video.thumbnail_url
+                  ? `
+                    <img
+                      class="video-thumb"
+                      src="${escapeHTML(
+                        video.thumbnail_url
+                      )}"
+                      alt=""
+                      loading="lazy"
+                    >
+                  `
+                  : `
+                    <div class="video-thumb placeholder-thumb">
+                      ▶
+                    </div>
+                  `
+              }
 
-          </div>
-
-          <div class="video-card-body">
-
-            <h3>
-              ${escapeHTML(
-                video.title
-              )}
-            </h3>
-
-            <p class="video-description">
-              ${escapeHTML(
-                video.description ||
-                  "No description"
-              )}
-            </p>
-
-            <div class="video-meta">
-              <span>
-                @${escapeHTML(
-                  video.creator_username ||
-                    "creator"
-                )}
+              <span class="play-badge">
+                ▶
               </span>
 
-              <span>
-                ${formatNumber(
-                  video.views
-                )} views
-              </span>
             </div>
 
-          </div>
-        </article>
-      `)
+            <div class="video-card-body">
+
+              <h3>
+                ${escapeHTML(
+                  video.title
+                )}
+              </h3>
+
+              <p class="video-description">
+                ${escapeHTML(
+                  video.description ||
+                    "No description"
+                )}
+              </p>
+
+              <div class="video-meta">
+
+                <span>
+                  @${escapeHTML(
+                    video.creator_username ||
+                      "creator"
+                  )}
+                </span>
+
+                <span>
+                  ${formatNumber(
+                    video.views
+                  )} views
+                </span>
+
+              </div>
+
+            </div>
+
+          </article>
+        `
+      )
       .join("");
 
   feed
@@ -1064,7 +1130,9 @@ function renderVideoFeed(
 async function openVideo(
   videoId
 ) {
-  if (!videoId) return;
+  if (!videoId) {
+    return;
+  }
 
   try {
     stopWatchTimer();
@@ -1230,9 +1298,11 @@ async function completeWatch() {
         "/api/watch/complete",
         {
           method: "POST",
+
           body: JSON.stringify({
             video_id:
               currentVideo.id,
+
             watch_seconds:
               watchSeconds
           })
@@ -1256,8 +1326,9 @@ async function completeWatch() {
     }
 
     if (
-      Number(data.reward || 0) >
-      0
+      Number(
+        data.reward || 0
+      ) > 0
     ) {
       showToast(
         `+${data.reward} point earned 🎉`,
@@ -1277,18 +1348,27 @@ async function completeWatch() {
 ====================================================== */
 
 async function loadLikeStatus() {
-  if (!currentVideo) return;
+  if (!currentVideo) {
+    return;
+  }
 
   try {
+    /*
+    SERVER ROUTE:
+    GET /api/videos/:id/like
+    */
+
     const data =
       await api(
         `/api/videos/${encodeURIComponent(
           currentVideo.id
-        )}/like/status`
+        )}/like`
       );
 
     updateLikeButton(
-      Boolean(data.liked)
+      Boolean(
+        data.liked
+      )
     );
   } catch (error) {
     console.warn(
@@ -1304,7 +1384,9 @@ function updateLikeButton(
   const button =
     $("likeVideoBtn");
 
-  if (!button) return;
+  if (!button) {
+    return;
+  }
 
   button.classList.toggle(
     "liked",
@@ -1318,7 +1400,9 @@ function updateLikeButton(
 }
 
 async function toggleLike() {
-  if (!currentVideo) return;
+  if (!currentVideo) {
+    return;
+  }
 
   try {
     const data =
@@ -1332,7 +1416,9 @@ async function toggleLike() {
       );
 
     updateLikeButton(
-      Boolean(data.liked)
+      Boolean(
+        data.liked
+      )
     );
 
     currentVideo.likes_count =
@@ -1361,17 +1447,23 @@ async function toggleLike() {
 ====================================================== */
 
 async function loadFollowStatus() {
-  if (!currentVideo) return;
+  if (!currentVideo) {
+    return;
+  }
 
   const creatorId =
     currentVideo.creator_id ||
     currentVideo.user_id;
 
-  if (!creatorId) return;
+  if (!creatorId) {
+    return;
+  }
 
   if (
     String(creatorId) ===
-    String(currentUser?.id)
+    String(
+      currentUser?.id
+    )
   ) {
     $("followCreatorBtn")
       ?.classList.add(
@@ -1387,15 +1479,22 @@ async function loadFollowStatus() {
     );
 
   try {
+    /*
+    SERVER ROUTE:
+    GET /api/user/:id/follow
+    */
+
     const data =
       await api(
-        `/api/creator/${encodeURIComponent(
+        `/api/user/${encodeURIComponent(
           creatorId
-        )}/follow/status`
+        )}/follow`
       );
 
     updateFollowButton(
-      Boolean(data.following)
+      Boolean(
+        data.following
+      )
     );
   } catch (error) {
     console.warn(
@@ -1411,7 +1510,9 @@ function updateFollowButton(
   const button =
     $("followCreatorBtn");
 
-  if (!button) return;
+  if (!button) {
+    return;
+  }
 
   button.classList.toggle(
     "following",
@@ -1425,25 +1526,36 @@ function updateFollowButton(
 }
 
 async function toggleFollow() {
-  if (!currentVideo) return;
+  if (!currentVideo) {
+    return;
+  }
 
   const creatorId =
     currentVideo.creator_id ||
     currentVideo.user_id;
 
-  if (!creatorId) return;
+  if (!creatorId) {
+    return;
+  }
 
   if (
     String(creatorId) ===
-    String(currentUser?.id)
+    String(
+      currentUser?.id
+    )
   ) {
     return;
   }
 
   try {
+    /*
+    SERVER ROUTE:
+    POST /api/user/:id/follow
+    */
+
     const data =
       await api(
-        `/api/creator/${encodeURIComponent(
+        `/api/user/${encodeURIComponent(
           creatorId
         )}/follow`,
         {
@@ -1452,7 +1564,9 @@ async function toggleFollow() {
       );
 
     updateFollowButton(
-      Boolean(data.following)
+      Boolean(
+        data.following
+      )
     );
 
     showToast(
@@ -1474,12 +1588,16 @@ async function toggleFollow() {
 ====================================================== */
 
 async function loadComments() {
-  if (!currentVideo) return;
+  if (!currentVideo) {
+    return;
+  }
 
   const list =
     $("commentsList");
 
-  if (!list) return;
+  if (!list) {
+    return;
+  }
 
   list.innerHTML = `
     <div class="mini-loading">
@@ -1510,47 +1628,49 @@ async function loadComments() {
 
     list.innerHTML =
       comments
-        .map(comment => `
-          <div class="comment-item">
+        .map(
+          comment => `
+            <div class="comment-item">
 
-            <div class="comment-avatar">
-              ${escapeHTML(
-                (
-                  comment.first_name ||
-                  comment.username ||
-                  "U"
-                )
-                  .charAt(0)
-                  .toUpperCase()
-              )}
-            </div>
-
-            <div class="comment-content">
-
-              <strong>
+              <div class="comment-avatar">
                 ${escapeHTML(
-                  comment.first_name ||
+                  (
+                    comment.first_name ||
                     comment.username ||
-                    "User"
+                    "U"
+                  )
+                    .charAt(0)
+                    .toUpperCase()
                 )}
-              </strong>
+              </div>
 
-              <p>
-                ${escapeHTML(
-                  comment.comment
-                )}
-              </p>
+              <div class="comment-content">
 
-              <small>
-                ${formatDate(
-                  comment.created_at
-                )}
-              </small>
+                <strong>
+                  ${escapeHTML(
+                    comment.first_name ||
+                      comment.username ||
+                      "User"
+                  )}
+                </strong>
+
+                <p>
+                  ${escapeHTML(
+                    comment.comment
+                  )}
+                </p>
+
+                <small>
+                  ${formatDate(
+                    comment.created_at
+                  )}
+                </small>
+
+              </div>
 
             </div>
-
-          </div>
-        `)
+          `
+        )
         .join("");
   } catch (error) {
     list.innerHTML = `
@@ -1564,7 +1684,9 @@ async function loadComments() {
 }
 
 async function addComment() {
-  if (!currentVideo) return;
+  if (!currentVideo) {
+    return;
+  }
 
   const input =
     $("commentInput");
@@ -1591,6 +1713,7 @@ async function addComment() {
       )}/comments`,
       {
         method: "POST",
+
         body: JSON.stringify({
           comment
         })
@@ -1605,7 +1728,9 @@ async function addComment() {
           0
       ) + 1;
 
-    if ($("playerCommentsCount")) {
+    if (
+      $("playerCommentsCount")
+    ) {
       $("playerCommentsCount")
         .textContent =
         `${formatNumber(
@@ -1632,7 +1757,9 @@ async function addComment() {
 ====================================================== */
 
 async function reportVideo() {
-  if (!currentVideo) return;
+  if (!currentVideo) {
+    return;
+  }
 
   const reason =
     window.prompt(
@@ -1664,6 +1791,7 @@ async function reportVideo() {
       )}/report`,
       {
         method: "POST",
+
         body: JSON.stringify({
           reason:
             cleanReason
@@ -1688,12 +1816,16 @@ async function reportVideo() {
 ====================================================== */
 
 async function loadWatchHistory() {
-  if (!currentUser) return;
+  if (!currentUser) {
+    return;
+  }
 
   const list =
     $("watchHistoryList");
 
-  if (!list) return;
+  if (!list) {
+    return;
+  }
 
   list.innerHTML = `
     <div class="loading-card">
@@ -1716,11 +1848,19 @@ async function loadWatchHistory() {
     if (!history.length) {
       list.innerHTML = `
         <div class="empty-card">
-          <div class="empty-icon">🕘</div>
-          <h3>No watch history</h3>
+
+          <div class="empty-icon">
+            🕘
+          </div>
+
+          <h3>
+            No watch history
+          </h3>
+
           <p>
             Videos you watch will appear here.
           </p>
+
         </div>
       `;
 
@@ -1729,53 +1869,57 @@ async function loadWatchHistory() {
 
     list.innerHTML =
       history
-        .map(video => `
-          <article
-            class="history-card"
-            data-video-id="${escapeHTML(
-              video.id
-            )}"
-          >
+        .map(
+          video => `
+            <article
+              class="history-card"
+              data-video-id="${escapeHTML(
+                video.id
+              )}"
+            >
 
-            ${
-              video.thumbnail_url
-                ? `
-                  <img
-                    src="${escapeHTML(
-                      video.thumbnail_url
-                    )}"
-                    alt=""
-                  >
-                `
-                : `
-                  <div class="history-placeholder">
-                    ▶
-                  </div>
-                `
-            }
+              ${
+                video.thumbnail_url
+                  ? `
+                    <img
+                      src="${escapeHTML(
+                        video.thumbnail_url
+                      )}"
+                      alt=""
+                    >
+                  `
+                  : `
+                    <div class="history-placeholder">
+                      ▶
+                    </div>
+                  `
+              }
 
-            <div>
-              <h3>
-                ${escapeHTML(
-                  video.title
-                )}
-              </h3>
+              <div>
 
-              <p>
-                ${formatNumber(
-                  video.user_watch_seconds
-                )} sec watched
-              </p>
+                <h3>
+                  ${escapeHTML(
+                    video.title
+                  )}
+                </h3>
 
-              <small>
-                ${formatDate(
-                  video.watched_at
-                )}
-              </small>
-            </div>
+                <p>
+                  ${formatNumber(
+                    video.user_watch_seconds
+                  )} sec watched
+                </p>
 
-          </article>
-        `)
+                <small>
+                  ${formatDate(
+                    video.watched_at
+                  )}
+                </small>
+
+              </div>
+
+            </article>
+          `
+        )
         .join("");
 
     list
@@ -1815,6 +1959,11 @@ async function claimDailyReward() {
   }
 
   try {
+    /*
+    SERVER ROUTE:
+    POST /api/rewards/daily
+    */
+
     const data =
       await api(
         "/api/rewards/daily",
@@ -1829,7 +1978,9 @@ async function claimDailyReward() {
 
       localStorage.setItem(
         USER_KEY,
-        JSON.stringify(currentUser)
+        JSON.stringify(
+          currentUser
+        )
       );
 
       updateUserUI();
@@ -1841,7 +1992,6 @@ async function claimDailyReward() {
     );
 
     await loadPointsHistory();
-
   } catch (error) {
     showToast(
       error.message,
@@ -1870,6 +2020,11 @@ async function claimRewardedAd() {
   }
 
   try {
+    /*
+    SERVER ROUTE:
+    POST /api/rewards/ad
+    */
+
     const data =
       await api(
         "/api/rewards/ad",
@@ -1884,7 +2039,9 @@ async function claimRewardedAd() {
 
       localStorage.setItem(
         USER_KEY,
-        JSON.stringify(currentUser)
+        JSON.stringify(
+          currentUser
+        )
       );
 
       updateUserUI();
@@ -1896,7 +2053,6 @@ async function claimRewardedAd() {
     );
 
     await loadPointsHistory();
-
   } catch (error) {
     showToast(
       error.message,
@@ -1917,12 +2073,16 @@ async function claimRewardedAd() {
 ====================================================== */
 
 async function loadPointsHistory() {
-  if (!currentUser) return;
+  if (!currentUser) {
+    return;
+  }
 
   const list =
     $("pointsHistory");
 
-  if (!list) return;
+  if (!list) {
+    return;
+  }
 
   list.innerHTML = `
     <div class="mini-loading">
@@ -1931,6 +2091,11 @@ async function loadPointsHistory() {
   `;
 
   try {
+    /*
+    SERVER ROUTE:
+    GET /api/points/history
+    */
+
     const data =
       await api(
         "/api/points/history"
@@ -1951,35 +2116,38 @@ async function loadPointsHistory() {
 
     list.innerHTML =
       history
-        .map(item => `
-          <div class="points-row">
+        .map(
+          item => `
+            <div class="points-row">
 
-            <div>
-              <strong>
-                ${escapeHTML(
-                  item.description ||
-                  item.type ||
-                  "Points"
-                )}
-              </strong>
+              <div>
 
-              <small>
-                ${formatDate(
-                  item.created_at
+                <strong>
+                  ${escapeHTML(
+                    item.description ||
+                      item.type ||
+                      "Points"
+                  )}
+                </strong>
+
+                <small>
+                  ${formatDate(
+                    item.created_at
+                  )}
+                </small>
+
+              </div>
+
+              <b class="points-positive">
+                +${formatNumber(
+                  item.points
                 )}
-              </small>
+              </b>
+
             </div>
-
-            <b class="points-positive">
-              +${formatNumber(
-                item.points
-              )}
-            </b>
-
-          </div>
-        `)
+          `
+        )
         .join("");
-
   } catch (error) {
     list.innerHTML = `
       <div class="empty-card small">
@@ -1998,7 +2166,9 @@ async function loadPointsHistory() {
 function handleVideoFile(
   file
 ) {
-  if (!file) return;
+  if (!file) {
+    return;
+  }
 
   if (
     !file.type ||
@@ -2071,7 +2241,9 @@ function uploadPreviewMetadata() {
   const preview =
     $("uploadPreviewVideo");
 
-  if (!preview) return;
+  if (!preview) {
+    return;
+  }
 
   if (
     Number.isFinite(
@@ -2148,6 +2320,11 @@ function uploadToCloudinary(
       const xhr =
         new XMLHttpRequest();
 
+      /*
+      IMPORTANT:
+      Cloudinary upload itself remains POST.
+      */
+
       xhr.open(
         "POST",
         url,
@@ -2169,19 +2346,25 @@ function uploadToCloudinary(
                 100
             );
 
-          if ($("uploadProgressPercent")) {
+          if (
+            $("uploadProgressPercent")
+          ) {
             $("uploadProgressPercent")
               .textContent =
               `${percent}%`;
           }
 
-          if ($("uploadProgressText")) {
+          if (
+            $("uploadProgressText")
+          ) {
             $("uploadProgressText")
               .textContent =
               `Uploading video... ${percent}%`;
           }
 
-          if ($("uploadProgressBar")) {
+          if (
+            $("uploadProgressBar")
+          ) {
             $("uploadProgressBar")
               .style.width =
               `${percent}%`;
@@ -2294,31 +2477,53 @@ async function uploadVideo() {
     );
 
   try {
-    if ($("uploadProgressPercent")) {
+    if (
+      $("uploadProgressPercent")
+    ) {
       $("uploadProgressPercent")
         .textContent =
         "0%";
     }
 
-    if ($("uploadProgressText")) {
+    if (
+      $("uploadProgressText")
+    ) {
       $("uploadProgressText")
         .textContent =
         "Preparing upload...";
     }
 
-    if ($("uploadProgressBar")) {
+    if (
+      $("uploadProgressBar")
+    ) {
       $("uploadProgressBar")
         .style.width =
         "0%";
     }
 
+    /*
+    =====================================================
+    FIX:
+    Server v3.1.2 exposes Cloudinary signature as GET.
+    =====================================================
+    */
+
     const signature =
       await api(
-        "/api/cloudinary/signature",
-        {
-          method: "POST"
-        }
+        "/api/cloudinary/signature"
       );
+
+    if (
+      !signature ||
+      !signature.cloud_name ||
+      !signature.api_key ||
+      !signature.timestamp ||
+      !signature.signature
+    ) {
+      throw new Error(
+        "Invalid Cloudinary signature response"
+      );
+    }
 
     const uploaded =
       await uploadToCloudinary(
@@ -2335,7 +2540,9 @@ async function uploadVideo() {
       );
     }
 
-    if ($("uploadProgressText")) {
+    if (
+      $("uploadProgressText")
+    ) {
       $("uploadProgressText")
         .textContent =
         "Saving video details...";
@@ -2365,28 +2572,42 @@ async function uploadVideo() {
           selectedVideoFile.size
       );
 
+    /*
+    Save uploaded video metadata
+    into DekhoEarn PostgreSQL.
+    */
+
     await api(
       "/api/videos",
       {
         method: "POST",
+
         body: JSON.stringify({
           title,
+
           description,
+
           video_url:
             uploaded.secure_url ||
             uploaded.url ||
             "",
+
           thumbnail_url:
             thumbnail,
+
           cloudinary_public_id:
             publicId,
+
           cloudinary_resource_type:
             uploaded.resource_type ||
             "video",
+
           cloudinary_format:
             uploaded.format ||
             "",
+
           duration,
+
           bytes
         })
       }
@@ -2438,19 +2659,25 @@ async function uploadVideo() {
         null;
     }
 
-    if ($("uploadProgressText")) {
+    if (
+      $("uploadProgressText")
+    ) {
       $("uploadProgressText")
         .textContent =
         "Upload complete";
     }
 
-    if ($("uploadProgressPercent")) {
+    if (
+      $("uploadProgressPercent")
+    ) {
       $("uploadProgressPercent")
         .textContent =
         "100%";
     }
 
-    if ($("uploadProgressBar")) {
+    if (
+      $("uploadProgressBar")
+    ) {
       $("uploadProgressBar")
         .style.width =
         "100%";
@@ -2487,12 +2714,16 @@ async function uploadVideo() {
 ====================================================== */
 
 async function loadMyVideos() {
-  if (!currentUser) return;
+  if (!currentUser) {
+    return;
+  }
 
   const list =
     $("myVideosList");
 
-  if (!list) return;
+  if (!list) {
+    return;
+  }
 
   list.innerHTML = `
     <div class="mini-loading">
@@ -2514,10 +2745,15 @@ async function loadMyVideos() {
     if (!videos.length) {
       list.innerHTML = `
         <div class="empty-card small">
-          <h3>No videos uploaded</h3>
+
+          <h3>
+            No videos uploaded
+          </h3>
+
           <p>
             Upload your first video.
           </p>
+
         </div>
       `;
 
@@ -2526,62 +2762,64 @@ async function loadMyVideos() {
 
     list.innerHTML =
       videos
-        .map(video => `
-          <div class="my-video-row">
+        .map(
+          video => `
+            <div class="my-video-row">
 
-            ${
-              video.thumbnail_url
-                ? `
-                  <img
-                    src="${escapeHTML(
-                      video.thumbnail_url
-                    )}"
-                    alt=""
-                  >
-                `
-                : `
-                  <div class="my-video-placeholder">
-                    ▶
-                  </div>
-                `
-            }
+              ${
+                video.thumbnail_url
+                  ? `
+                    <img
+                      src="${escapeHTML(
+                        video.thumbnail_url
+                      )}"
+                      alt=""
+                    >
+                  `
+                  : `
+                    <div class="my-video-placeholder">
+                      ▶
+                    </div>
+                  `
+              }
 
-            <div class="my-video-info">
+              <div class="my-video-info">
 
-              <h3>
-                ${escapeHTML(
-                  video.title
-                )}
-              </h3>
+                <h3>
+                  ${escapeHTML(
+                    video.title
+                  )}
+                </h3>
 
-              <p>
-                ${formatNumber(
-                  video.views
-                )} views •
-                ${formatNumber(
-                  video.likes_count
-                )} likes
-              </p>
+                <p>
+                  ${formatNumber(
+                    video.views
+                  )} views •
+                  ${formatNumber(
+                    video.likes_count
+                  )} likes
+                </p>
 
-              <small>
-                ${formatDate(
-                  video.created_at
-                )}
-              </small>
+                <small>
+                  ${formatDate(
+                    video.created_at
+                  )}
+                </small>
+
+              </div>
+
+              <button
+                type="button"
+                class="danger-small delete-video-btn"
+                data-id="${escapeHTML(
+                  video.id
+                )}">
+                Delete
+              </button>
 
             </div>
-
-            <button
-              type="button"
-              class="danger-small delete-video-btn"
-              data-id="${escapeHTML(
-                video.id
-              )}">
-              Delete
-            </button>
-
-          </div>
-        `)
+          `
+        )
         .join("");
 
     list
@@ -2611,14 +2849,18 @@ async function loadMyVideos() {
 async function deleteVideo(
   videoId
 ) {
-  if (!videoId) return;
+  if (!videoId) {
+    return;
+  }
 
   const confirmed =
     window.confirm(
       "Delete this video?"
     );
 
-  if (!confirmed) return;
+  if (!confirmed) {
+    return;
+  }
 
   try {
     await api(
@@ -2651,12 +2893,16 @@ async function deleteVideo(
 ====================================================== */
 
 async function loadCreatorDashboard() {
-  if (!currentUser) return;
+  if (!currentUser) {
+    return;
+  }
 
   const statsBox =
     $("creatorStats");
 
-  if (!statsBox) return;
+  if (!statsBox) {
+    return;
+  }
 
   statsBox.innerHTML = `
     <div class="mini-loading">
@@ -2665,11 +2911,16 @@ async function loadCreatorDashboard() {
   `;
 
   try {
+    /*
+    SERVER ROUTE:
+    GET /api/creator/:id/stats
+    */
+
     const data =
       await api(
         `/api/creator/${encodeURIComponent(
           currentUser.id
-        )}`
+        )}/stats`
       );
 
     const stats =
@@ -2679,69 +2930,103 @@ async function loadCreatorDashboard() {
       <div class="creator-stat-grid">
 
         <div class="stat-card">
-          <span>Videos</span>
+
+          <span>
+            Videos
+          </span>
+
           <strong>
             ${formatNumber(
               stats.video_count
             )}
           </strong>
+
         </div>
 
         <div class="stat-card">
-          <span>Views</span>
+
+          <span>
+            Views
+          </span>
+
           <strong>
             ${formatNumber(
               stats.total_views
             )}
           </strong>
+
         </div>
 
         <div class="stat-card">
-          <span>Likes</span>
+
+          <span>
+            Likes
+          </span>
+
           <strong>
             ${formatNumber(
               stats.total_likes
             )}
           </strong>
+
         </div>
 
         <div class="stat-card">
-          <span>Comments</span>
+
+          <span>
+            Comments
+          </span>
+
           <strong>
             ${formatNumber(
               stats.total_comments
             )}
           </strong>
+
         </div>
 
         <div class="stat-card">
-          <span>Followers</span>
+
+          <span>
+            Followers
+          </span>
+
           <strong>
             ${formatNumber(
               stats.followers
             )}
           </strong>
+
         </div>
 
         <div class="stat-card">
-          <span>Earnings</span>
+
+          <span>
+            Earnings
+          </span>
+
           <strong>
             ₹${formatNumber(
               stats.earnings
             )}
           </strong>
+
         </div>
 
       </div>
 
       <div class="monetization-status">
+
         Monetization:
+
         <strong>
           ${escapeHTML(
             currentUser.monetization_status ||
+              currentUser.creator_status ||
               "not_applied"
           )}
         </strong>
+
       </div>
     `;
   } catch (error) {
@@ -2766,11 +3051,17 @@ async function applyMonetization() {
   }
 
   try {
+    /*
+    SERVER ROUTE:
+    POST /api/creator/apply
+
+    IMPORTANT:
+    There is NO /:id in this route.
+    */
+
     const data =
       await api(
-        `/api/creator/${encodeURIComponent(
-          currentUser.id
-        )}/monetization/apply`,
+        "/api/creator/apply",
         {
           method: "POST"
         }
@@ -2809,7 +3100,9 @@ async function applyMonetization() {
 ====================================================== */
 
 async function startAppData() {
-  if (!currentUser) return;
+  if (!currentUser) {
+    return;
+  }
 
   updateUserUI();
 
@@ -2890,28 +3183,39 @@ window.addEventListener(
 
 function registerServiceWorker() {
   if (
-    !("serviceWorker" in
-      navigator)
+    !(
+      "serviceWorker" in
+      navigator
+    )
   ) {
     return;
   }
 
+  /*
+  v5 forces the browser to request
+  the latest service-worker registration.
+  */
+
   navigator.serviceWorker
     .register(
-      `/sw.js?v=4`
+      `/sw.js?v=5`
     )
-    .then(registration => {
-      console.log(
-        "DekhoEarn service worker registered:",
-        registration.scope
-      );
-    })
-    .catch(error => {
-      console.warn(
-        "Service worker:",
-        error
-      );
-    });
+    .then(
+      registration => {
+        console.log(
+          "DekhoEarn service worker registered:",
+          registration.scope
+        );
+      }
+    )
+    .catch(
+      error => {
+        console.warn(
+          "Service worker:",
+          error
+        );
+      }
+    );
 }
 
 /* ======================================================
@@ -2919,6 +3223,7 @@ function registerServiceWorker() {
 ====================================================== */
 
 function setupEvents() {
+
   /*
   ------------------------------------------------------
   AUTH
@@ -2938,12 +3243,14 @@ function setupEvents() {
     $("showLoginBtn");
 
   if (loginBtn) {
-    loginBtn.type = "button";
+    loginBtn.type =
+      "button";
 
     loginBtn.addEventListener(
       "click",
       event => {
         event.preventDefault();
+
         login();
       }
     );
@@ -2961,6 +3268,7 @@ function setupEvents() {
       "click",
       event => {
         event.preventDefault();
+
         register();
       }
     );
@@ -3133,21 +3441,23 @@ function setupEvents() {
     .querySelectorAll(
       ".bottom-nav button"
     )
-    .forEach(button => {
-      button.addEventListener(
-        "click",
-        event => {
-          event.preventDefault();
+    .forEach(
+      button => {
+        button.addEventListener(
+          "click",
+          event => {
+            event.preventDefault();
 
-          const page =
-            button.dataset.page;
+            const page =
+              button.dataset.page;
 
-          if (page) {
-            showPage(page);
+            if (page) {
+              showPage(page);
+            }
           }
-        }
-      );
-    });
+        );
+      }
+    );
 
   /*
   ------------------------------------------------------
@@ -3259,7 +3569,7 @@ function setupEvents() {
 async function init() {
   try {
     console.log(
-      "DekhoEarn 3.1.1 initializing..."
+      "DekhoEarn 3.1.2 initializing..."
     );
 
     setupEvents();
