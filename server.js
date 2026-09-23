@@ -5232,7 +5232,7 @@ app.use(
 ====================================================== */
 
 app.get(
-  "*",
+  /.*/,
   (req, res, next) => {
     if (
       req.path.startsWith(
@@ -5241,7 +5241,7 @@ app.get(
     ) {
       return next();
     }
-
+    
     const publicIndex =
       path.join(
         publicPath,
