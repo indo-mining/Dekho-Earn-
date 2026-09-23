@@ -532,16 +532,19 @@ async function register() {
     return;
   }
 
-  if (username.length < 3) {
-    showToast(
-      "Username must be at least 3 characters",
-      "error"
-    );
+  const usernameRegex =
+  /^[A-Za-z0-9_.]{3,30}$/;
 
-    usernameInput?.focus();
+if (!usernameRegex.test(username)) {
+  showToast(
+    "Username must be 3-30 characters and use only letters, numbers, underscore or dot",
+    "error"
+  );
 
-    return;
-  }
+  usernameInput?.focus();
+
+  return;
+}
 
   if (password.length < 6) {
     showToast(
