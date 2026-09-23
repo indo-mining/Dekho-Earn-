@@ -1,7 +1,7 @@
 /*
 =========================================================
  DEKHOEARN SERVER
- Version 3.1.2 FINAL
+ Version 3.1.3 FINAL
  --------------------------------------------------------
  Stack:
  - Node.js
@@ -42,6 +42,11 @@
  - Database migrations
  - Existing database compatibility
  - PWA / static frontend
+
+ FIXED IN v3.1.3:
+ - Existing dekhoearn_video_views compatibility
+ - Missing updated_at migration
+ - Existing watch-history database support
 =========================================================
 */
 
@@ -59,9 +64,10 @@ const app = express();
    VERSION / CONFIG
 ====================================================== */
 
-const SERVER_VERSION = "3.1.2";
+const SERVER_VERSION = "3.1.3";
 
-const PORT = Number(process.env.PORT || 10000);
+const PORT =
+  Number(process.env.PORT || 10000);
 
 const DATABASE_URL =
   process.env.DATABASE_URL || "";
@@ -139,7 +145,8 @@ if (!DATABASE_URL) {
 
 const pool = DATABASE_URL
   ? new Pool({
-      connectionString: DATABASE_URL,
+      connectionString:
+        DATABASE_URL,
 
       ssl: {
         rejectUnauthorized: false
@@ -650,7 +657,8 @@ async function requireUser(
     if (!user) {
       return res.status(401).json({
         ok: false,
-        error: "Authentication required"
+        error:
+          "Authentication required"
       });
     }
 
@@ -665,7 +673,8 @@ async function requireUser(
 
     return res.status(500).json({
       ok: false,
-      error: "Authentication error"
+      error:
+        "Authentication error"
     });
   }
 }
@@ -690,7 +699,8 @@ function requireAdmin(
   ) {
     return res.status(403).json({
       ok: false,
-      error: "Admin access denied"
+      error:
+        "Admin access denied"
     });
   }
 
@@ -816,14 +826,14 @@ async function initDatabase() {
 
   await dbQuery(`
     ALTER TABLE dekhoearn_users
-    ADD COLUMN IF NOT EXISTS auth_token_expires_at
-    TIMESTAMPTZ
+    ADD COLUMN IF NOT EXISTS
+    auth_token_expires_at TIMESTAMPTZ
   `);
 
   await dbQuery(`
     ALTER TABLE dekhoearn_users
-    ADD COLUMN IF NOT EXISTS last_login_at
-    TIMESTAMPTZ
+    ADD COLUMN IF NOT EXISTS
+    last_login_at TIMESTAMPTZ
   `);
 
   await dbQuery(`
@@ -853,7 +863,8 @@ async function initDatabase() {
 
   await dbQuery(`
     ALTER TABLE dekhoearn_users
-    ADD COLUMN IF NOT EXISTS monetization_status TEXT
+    ADD COLUMN IF NOT EXISTS
+    monetization_status TEXT
   `);
 
   await dbQuery(`
@@ -868,14 +879,14 @@ async function initDatabase() {
 
   await dbQuery(`
     ALTER TABLE dekhoearn_users
-    ADD COLUMN IF NOT EXISTS created_at
-    TIMESTAMPTZ
+    ADD COLUMN IF NOT EXISTS
+    created_at TIMESTAMPTZ
   `);
 
   await dbQuery(`
     ALTER TABLE dekhoearn_users
-    ADD COLUMN IF NOT EXISTS updated_at
-    TIMESTAMPTZ
+    ADD COLUMN IF NOT EXISTS
+    updated_at TIMESTAMPTZ
   `);
 
   await dbQuery(`
@@ -883,22 +894,40 @@ async function initDatabase() {
 
     SET
       first_name =
-        COALESCE(first_name, ''),
+        COALESCE(
+          first_name,
+          ''
+        ),
 
       points =
-        COALESCE(points, 0),
+        COALESCE(
+          points,
+          0
+        ),
 
       total_earned =
-        COALESCE(total_earned, 0),
+        COALESCE(
+          total_earned,
+          0
+        ),
 
       watched_videos =
-        COALESCE(watched_videos, 0),
+        COALESCE(
+          watched_videos,
+          0
+        ),
 
       today_earned =
-        COALESCE(today_earned, 0),
+        COALESCE(
+          today_earned,
+          0
+        ),
 
       is_creator =
-        COALESCE(is_creator, FALSE),
+        COALESCE(
+          is_creator,
+          FALSE
+        ),
 
       monetization_status =
         COALESCE(
@@ -992,7 +1021,9 @@ async function initDatabase() {
 
   await dbQuery(`
     UPDATE dekhoearn_videos
+
     SET creator_id = user_id
+
     WHERE creator_id IS NULL
        OR creator_id = ''
   `);
@@ -1070,6 +1101,7 @@ async function initDatabase() {
 
   /* ====================================================
      VIDEO VIEWS
+     Existing DB compatibility
   ==================================================== */
 
   await dbQuery(`
@@ -1098,6 +1130,152 @@ async function initDatabase() {
         user_id,
         video_id
       )
+    )
+  `);
+
+  /* ====================================================
+     VIDEO VIEWS MIGRATIONS
+
+     IMPORTANT:
+     CREATE TABLE IF NOT EXISTS does NOT modify
+     an already existing table.
+
+     Therefore every required column is
+     explicitly checked and added.
+  ==================================================== */
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_video_views
+
+    ADD COLUMN IF NOT EXISTS
+    user_id TEXT
+  `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_video_views
+
+    ADD COLUMN IF NOT EXISTS
+    video_id BIGINT
+  `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_video_views
+
+    ADD COLUMN IF NOT EXISTS
+    watch_seconds BIGINT
+  `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_video_views
+
+    ADD COLUMN IF NOT EXISTS
+    reward_granted BOOLEAN
+  `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_video_views
+
+    ADD COLUMN IF NOT EXISTS
+    created_at TIMESTAMPTZ
+  `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_video_views
+
+    ADD COLUMN IF NOT EXISTS
+    updated_at TIMESTAMPTZ
+  `);
+
+  /* ====================================================
+     VIDEO VIEWS BACKFILL
+  ==================================================== */
+
+  await dbQuery(`
+    UPDATE dekhoearn_video_views
+
+    SET
+      watch_seconds =
+        COALESCE(
+          watch_seconds,
+          0
+        ),
+
+      reward_granted =
+        COALESCE(
+          reward_granted,
+          FALSE
+        ),
+
+      created_at =
+        COALESCE(
+          created_at,
+          NOW()
+        ),
+
+      updated_at =
+        COALESCE(
+          updated_at,
+          created_at,
+          NOW()
+        )
+
+    WHERE
+      watch_seconds IS NULL
+
+      OR reward_granted IS NULL
+
+      OR created_at IS NULL
+
+      OR updated_at IS NULL
+  `);
+
+  /* ====================================================
+     VIDEO VIEWS DEFAULTS
+  ==================================================== */
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_video_views
+
+    ALTER COLUMN watch_seconds
+
+    SET DEFAULT 0
+  `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_video_views
+
+    ALTER COLUMN reward_granted
+
+    SET DEFAULT FALSE
+  `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_video_views
+
+    ALTER COLUMN created_at
+
+    SET DEFAULT NOW()
+  `);
+
+  await dbQuery(`
+    ALTER TABLE dekhoearn_video_views
+
+    ALTER COLUMN updated_at
+
+    SET DEFAULT NOW()
+  `);
+
+  /* ====================================================
+     VIDEO VIEWS INDEX
+  ==================================================== */
+
+  await dbQuery(`
+    CREATE INDEX IF NOT EXISTS
+    idx_dekhoearn_video_views_user_updated
+
+    ON dekhoearn_video_views (
+      user_id,
+      updated_at DESC
     )
   `);
 
@@ -1172,8 +1350,6 @@ async function initDatabase() {
 
   /* ====================================================
      FOLLOWS
-     IMPORTANT:
-     creator_id migration fixes old DB
   ==================================================== */
 
   await dbQuery(`
@@ -1202,29 +1378,27 @@ async function initDatabase() {
 
   await dbQuery(`
     ALTER TABLE dekhoearn_follows
+
     ADD COLUMN IF NOT EXISTS
     follower_id TEXT
   `);
 
   await dbQuery(`
     ALTER TABLE dekhoearn_follows
+
     ADD COLUMN IF NOT EXISTS
     creator_id TEXT
   `);
 
   await dbQuery(`
     ALTER TABLE dekhoearn_follows
+
     ADD COLUMN IF NOT EXISTS
     created_at TIMESTAMPTZ
   `);
 
   /* ====================================================
-     OLD DATABASE COMPATIBILITY
-
-     Older version may have:
-     following_id
-
-     Copy old following_id into creator_id.
+     OLD FOLLOW DATABASE COMPATIBILITY
   ==================================================== */
 
   const followsColumns =
@@ -1714,10 +1888,10 @@ app.post(
           password
         );
 
-      let authToken =
+      const authToken =
         createAuthToken();
 
-      let authTokenHash =
+      const authTokenHash =
         hashToken(
           authToken
         );
@@ -1943,12 +2117,6 @@ app.post(
           safeUser(
             inserted.rows[0]
           );
-
-        /*
-         IMPORTANT:
-         Use getSafeUserById only
-         AFTER commit.
-        */
 
         let finalUser =
           user;
@@ -2682,7 +2850,7 @@ app.post(
       }
 
       /* ================================================
-         Simple duplicate URL warning
+         Duplicate URL warning
       ================================================= */
 
       let duplicateWarning =
@@ -4000,7 +4168,6 @@ app.post(
 
 /* ======================================================
    REWARDED AD
-   Demo / points foundation
 ====================================================== */
 
 app.post(
@@ -5071,7 +5238,7 @@ app.post(
 );
 
 /* ======================================================
-   ADMIN BAN / USER STATUS
+   ADMIN USER ACTION
 ====================================================== */
 
 app.post(
@@ -5200,15 +5367,6 @@ const publicPath =
     "public"
   );
 
-/*
- If your index.html,
- app.js, style.css,
- manifest.json and sw.js
- are in project root instead
- of /public, this fallback also
- checks root files.
-*/
-
 app.use(
   express.static(
     publicPath,
@@ -5241,7 +5399,7 @@ app.get(
     ) {
       return next();
     }
-    
+
     const publicIndex =
       path.join(
         publicPath,
