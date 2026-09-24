@@ -917,11 +917,118 @@ function showAuthScreen() {
     );
 
 
-  $("loginForm")
-    ?.addEventListener(
-      "submit",
-      handleLogin
+  async function handleRegister(event) {
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  console.log("CREATE ACCOUNT CLICKED");
+
+  const firstName =
+    $("registerFirstName")?.value.trim() || "";
+
+  const username =
+    $("registerUsername")?.value.trim().toLowerCase() || "";
+
+  const password =
+    $("registerPassword")?.value || "";
+
+  const referral =
+    $("registerReferral")?.value.trim().toUpperCase() || "";
+
+  if (!firstName) {
+    showAuthMessage("First name is required.");
+    return;
+  }
+
+  if (!/^[a-z0-9_.]{3,30}$/.test(username)) {
+    showAuthMessage(
+      "Username must be 3-30 characters and use only lowercase letters, numbers, dot or underscore."
     );
+    return;
+  }
+
+  if (password.length < 6) {
+    showAuthMessage(
+      "Password must be at least 6 characters."
+    );
+    return;
+  }
+
+  const button =
+    $("registerForm")?.querySelector(
+      'button[type="submit"]'
+    );
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Creating...";
+  }
+
+  showAuthMessage("");
+
+  try {
+
+    console.log("REGISTER REQUEST START");
+
+    const data = await api(
+      "/api/auth/register",
+      {
+        method: "POST",
+
+        body: {
+          first_name: firstName,
+          username: username,
+          password: password,
+          referral_code: referral
+        }
+      }
+    );
+
+    console.log(
+      "REGISTER RESPONSE:",
+      data
+    );
+
+    if (!data || !data.token) {
+      throw new Error(
+        data?.message ||
+        "Registration successful response was incomplete."
+      );
+    }
+
+    saveToken(data.token);
+
+    if (data.user) {
+      saveUser(data.user);
+    }
+
+    showSuccess(
+      "Account created successfully!"
+    );
+
+    await showMainApp();
+
+  } catch (error) {
+
+    console.error(
+      "REGISTER ERROR:",
+      error
+    );
+
+    showAuthMessage(
+      error.message ||
+      "Unable to create account."
+    );
+
+  } finally {
+
+    if (button) {
+      button.disabled = false;
+      button.textContent = "Create Account";
+    }
+  }
+  }
 
 
   $("registerForm")
