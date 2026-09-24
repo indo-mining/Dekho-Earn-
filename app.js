@@ -1,10 +1,10 @@
 /*
 =========================================================
  DEKHOEARN FRONTEND
- Version 3.1.2 FINAL
+ Version 3.1.3 FINAL
  --------------------------------------------------------
  Compatible with:
- - DekhoEarn Server v3.1.2
+ - DekhoEarn Server v3.1.3
  - Secure Authentication
  - Bearer Token
  - Video Feed
@@ -18,7 +18,8 @@
  - Gallery Video Upload
  - Cloudinary Signed Upload
  - Upload Progress
- - Upload Timeout / Detailed Errors
+ - Upload Timeout
+ - Detailed Upload Errors
  - My Videos
  - Creator Dashboard
  - Monetization
@@ -27,6 +28,7 @@
 */
 
 "use strict";
+
 
 /* ======================================================
    CONFIG
@@ -73,30 +75,26 @@ function $(id) {
 
 
 function showToast(message, type = "normal") {
-  const existing = document.querySelector(".dekho-toast");
-
-  if (existing) {
-    existing.remove();
-  }
+  document.querySelector(".dekho-toast")?.remove();
 
   const toast = document.createElement("div");
 
   toast.className = `dekho-toast ${type}`;
-
   toast.textContent = String(message || "");
 
   toast.style.position = "fixed";
   toast.style.left = "50%";
   toast.style.bottom = "85px";
   toast.style.transform = "translateX(-50%)";
-  toast.style.zIndex = "99999";
-  toast.style.maxWidth = "90%";
+  toast.style.zIndex = "999999";
+  toast.style.maxWidth = "92%";
   toast.style.padding = "12px 16px";
   toast.style.borderRadius = "12px";
   toast.style.background = "#111";
   toast.style.color = "#fff";
   toast.style.fontSize = "14px";
   toast.style.boxShadow = "0 6px 25px rgba(0,0,0,.25)";
+  toast.style.textAlign = "center";
 
   document.body.appendChild(toast);
 
@@ -132,7 +130,11 @@ function formatVideoSize(bytes) {
     return `${(size / 1024).toFixed(1)} KB`;
   }
 
-  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+  if (size < 1024 * 1024 * 1024) {
+    return `${(size / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  return `${(size / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
 
@@ -160,11 +162,17 @@ function saveSession(token, user) {
   currentUser = user || null;
 
   if (authToken) {
-    localStorage.setItem(AUTH_TOKEN_KEY, authToken);
+    localStorage.setItem(
+      AUTH_TOKEN_KEY,
+      authToken
+    );
   }
 
   if (currentUser) {
-    localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
+    localStorage.setItem(
+      USER_KEY,
+      JSON.stringify(currentUser)
+    );
   }
 }
 
@@ -185,21 +193,36 @@ function clearSession() {
 ====================================================== */
 
 async function api(path, options = {}) {
+
   const requestOptions = {
     ...options
   };
 
   const headers = {
-    ...(options.body instanceof FormData
-      ? {}
-      : {
-          "Content-Type": "application/json"
-        }),
     ...(options.headers || {})
   };
 
+  /*
+   * Do not manually set Content-Type for FormData.
+   * Browser will automatically add multipart boundary.
+   */
+
+  if (
+    options.body &&
+    !(options.body instanceof FormData) &&
+    !headers["Content-Type"]
+  ) {
+    headers["Content-Type"] =
+      "application/json";
+  }
+
+  /*
+   * Secure authentication
+   */
+
   if (authToken) {
-    headers.Authorization = `Bearer ${authToken}`;
+    headers.Authorization =
+      `Bearer ${authToken}`;
   }
 
   requestOptions.headers = headers;
@@ -207,9 +230,18 @@ async function api(path, options = {}) {
   let response;
 
   try {
-    response = await fetch(`${API_BASE}${path}`, requestOptions);
+
+    response = await fetch(
+      `${API_BASE}${path}`,
+      requestOptions
+    );
+
   } catch (error) {
-    console.error("API network error:", error);
+
+    console.error(
+      "API network error:",
+      error
+    );
 
     throw new Error(
       "Network error. Please check your internet connection."
@@ -218,17 +250,45 @@ async function api(path, options = {}) {
 
   let data = {};
 
-  try {
-    data = await response.json();
-  } catch {
-    data = {};
+  const contentType =
+    response.headers.get("content-type") || "";
+
+  if (
+    contentType.includes("application/json")
+  ) {
+
+    try {
+      data = await response.json();
+    } catch {
+      data = {};
+    }
+
+  } else {
+
+    try {
+      const text =
+        await response.text();
+
+      data = {
+        message: text
+      };
+
+    } catch {
+      data = {};
+    }
   }
+
+
+  /*
+   * Session expired
+   */
 
   if (
     response.status === 401 &&
     !path.startsWith("/api/auth/login") &&
     !path.startsWith("/api/auth/register")
   ) {
+
     clearSession();
 
     showAuthScreen(
@@ -236,10 +296,14 @@ async function api(path, options = {}) {
       "Session expired. Please login again."
     );
 
-    throw new Error("Session expired");
+    throw new Error(
+      "Session expired"
+    );
   }
 
+
   if (!response.ok) {
+
     throw new Error(
       data.message ||
       data.error ||
@@ -255,41 +319,70 @@ async function api(path, options = {}) {
    AUTH SCREEN
 ====================================================== */
 
-function showAuthScreen(mode = "login", message = "") {
-  const authScreen = $("authScreen");
-  const appScreen = $("appScreen");
+function showAuthScreen(
+  mode = "login",
+  message = ""
+) {
 
-  if (authScreen) {
-    authScreen.classList.remove("hidden");
-  }
+  const authScreen =
+    $("authScreen");
 
-  if (appScreen) {
-    appScreen.classList.add("hidden");
-  }
+  const appScreen =
+    $("appScreen");
 
-  const loginForm = $("loginForm");
-  const registerForm = $("registerForm");
+  authScreen?.classList.remove(
+    "hidden"
+  );
+
+  appScreen?.classList.add(
+    "hidden"
+  );
+
+  const loginForm =
+    $("loginForm");
+
+  const registerForm =
+    $("registerForm");
 
   if (mode === "register") {
-    loginForm?.classList.add("hidden");
-    registerForm?.classList.remove("hidden");
+
+    loginForm?.classList.add(
+      "hidden"
+    );
+
+    registerForm?.classList.remove(
+      "hidden"
+    );
+
   } else {
-    registerForm?.classList.add("hidden");
-    loginForm?.classList.remove("hidden");
+
+    registerForm?.classList.add(
+      "hidden"
+    );
+
+    loginForm?.classList.remove(
+      "hidden"
+    );
   }
 
   if (message) {
-    showToast(message, "error");
+    showToast(
+      message,
+      "error"
+    );
   }
 }
 
 
 function showApp() {
-  const authScreen = $("authScreen");
-  const appScreen = $("appScreen");
 
-  authScreen?.classList.add("hidden");
-  appScreen?.classList.remove("hidden");
+  $("authScreen")?.classList.add(
+    "hidden"
+  );
+
+  $("appScreen")?.classList.remove(
+    "hidden"
+  );
 
   updateUserUI();
 
@@ -304,53 +397,91 @@ function showApp() {
 ====================================================== */
 
 async function login() {
-  const usernameInput = $("loginUsername");
-  const passwordInput = $("loginPassword");
 
-  const username = String(usernameInput?.value || "")
-    .trim()
-    .toLowerCase();
+  const username =
+    String(
+      $("loginUsername")?.value || ""
+    )
+      .trim()
+      .toLowerCase();
 
-  const password = String(passwordInput?.value || "");
+  const password =
+    String(
+      $("loginPassword")?.value || ""
+    );
 
   if (!username || !password) {
-    showToast("Username and password required.", "error");
+
+    showToast(
+      "Username and password required.",
+      "error"
+    );
+
     return;
   }
 
-  const button = $("loginBtn");
+  const button =
+    $("loginBtn");
 
   if (button) {
     button.disabled = true;
-    button.textContent = "Logging in...";
+    button.textContent =
+      "Logging in...";
   }
 
   try {
-    const data = await api("/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify({
-        username,
-        password
-      })
-    });
 
-    if (!data.token || !data.user) {
-      throw new Error("Invalid login response.");
+    const data =
+      await api(
+        "/api/auth/login",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            username,
+            password
+          })
+        }
+      );
+
+    if (
+      !data.token ||
+      !data.user
+    ) {
+      throw new Error(
+        "Invalid login response."
+      );
     }
 
-    saveSession(data.token, data.user);
+    saveSession(
+      data.token,
+      data.user
+    );
 
-    showToast("Login successful 🎉", "success");
+    showToast(
+      "Login successful 🎉",
+      "success"
+    );
 
     showApp();
 
   } catch (error) {
-    showToast(error.message, "error");
+
+    console.error(
+      "Login error:",
+      error
+    );
+
+    showToast(
+      error.message,
+      "error"
+    );
 
   } finally {
+
     if (button) {
       button.disabled = false;
-      button.textContent = "Login";
+      button.textContent =
+        "Login";
     }
   }
 }
@@ -361,75 +492,110 @@ async function login() {
 ====================================================== */
 
 async function register() {
-  const firstNameInput = $("registerFirstName");
-  const usernameInput = $("registerUsername");
-  const passwordInput = $("registerPassword");
-  const referralInput = $("registerReferral");
 
-  const firstName = String(firstNameInput?.value || "").trim();
+  const firstName =
+    String(
+      $("registerFirstName")?.value || ""
+    ).trim();
 
-  const username = String(usernameInput?.value || "")
-    .trim()
-    .toLowerCase();
+  const username =
+    String(
+      $("registerUsername")?.value || ""
+    )
+      .trim()
+      .toLowerCase();
 
-  const password = String(passwordInput?.value || "");
+  const password =
+    String(
+      $("registerPassword")?.value || ""
+    );
 
-  const referral = String(referralInput?.value || "")
-    .trim()
-    .toUpperCase();
+  const referral =
+    String(
+      $("registerReferral")?.value || ""
+    )
+      .trim()
+      .toUpperCase();
 
   const usernameRegex =
     /^[A-Za-z0-9_.]{3,30}$/;
 
   if (!firstName) {
-    showToast("First name required.", "error");
-    firstNameInput?.focus();
+
+    showToast(
+      "First name required.",
+      "error"
+    );
+
+    $("registerFirstName")?.focus();
+
     return;
   }
 
   if (!usernameRegex.test(username)) {
+
     showToast(
-      "Username must be 3-30 characters and use only letters, numbers, underscore or dot",
+      "Username must be 3-30 characters and use only letters, numbers, underscore or dot.",
       "error"
     );
 
-    usernameInput?.focus();
+    $("registerUsername")?.focus();
+
     return;
   }
 
   if (password.length < 6) {
+
     showToast(
       "Password must be at least 6 characters.",
       "error"
     );
 
-    passwordInput?.focus();
+    $("registerPassword")?.focus();
+
     return;
   }
 
-  const button = $("registerBtn");
+  const button =
+    $("registerBtn");
 
   if (button) {
     button.disabled = true;
-    button.textContent = "Creating account...";
+    button.textContent =
+      "Creating account...";
   }
 
   try {
-    const data = await api("/api/auth/register", {
-      method: "POST",
-      body: JSON.stringify({
-        first_name: firstName,
-        username,
-        password,
-        referral_code: referral
-      })
-    });
 
-    if (!data.token || !data.user) {
-      throw new Error("Invalid registration response.");
+    const data =
+      await api(
+        "/api/auth/register",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            first_name:
+              firstName,
+            username,
+            password,
+            referral_code:
+              referral
+          })
+        }
+      );
+
+    if (
+      !data.token ||
+      !data.user
+    ) {
+      throw new Error(
+        "Invalid registration response."
+      );
     }
 
-    saveSession(data.token, data.user);
+    saveSession(
+      data.token,
+      data.user
+    );
 
     showToast(
       "Account created successfully 🎉",
@@ -439,12 +605,23 @@ async function register() {
     showApp();
 
   } catch (error) {
-    showToast(error.message, "error");
+
+    console.error(
+      "Register error:",
+      error
+    );
+
+    showToast(
+      error.message,
+      "error"
+    );
 
   } finally {
+
     if (button) {
       button.disabled = false;
-      button.textContent = "Create Account";
+      button.textContent =
+        "Create Account";
     }
   }
 }
@@ -455,63 +632,51 @@ async function register() {
 ====================================================== */
 
 async function loadSession() {
+
   if (!authToken) {
-    try {
-      const stored = localStorage.getItem(USER_KEY);
 
-      if (stored) {
-        currentUser = JSON.parse(stored);
-      }
-    } catch {
-      currentUser = null;
-    }
-
-    if (!currentUser) {
-      showAuthScreen("login");
-      return;
-    }
-
-    try {
-      const data = await api("/api/auth/me");
-
-      if (data.user) {
-        currentUser = data.user;
-
-        localStorage.setItem(
-          USER_KEY,
-          JSON.stringify(currentUser)
-        );
-      }
-
-      showApp();
-
-    } catch {
-      clearSession();
-      showAuthScreen("login");
-    }
+    showAuthScreen("login");
 
     return;
   }
 
   try {
-    const data = await api("/api/auth/me");
+
+    const data =
+      await api(
+        "/api/auth/me"
+      );
 
     if (!data.user) {
-      throw new Error("User session not found.");
+      throw new Error(
+        "User session not found."
+      );
     }
 
-    currentUser = data.user;
+    currentUser =
+      data.user;
 
     localStorage.setItem(
       USER_KEY,
-      JSON.stringify(currentUser)
+      JSON.stringify(
+        currentUser
+      )
     );
 
     showApp();
 
-  } catch {
+  } catch (error) {
+
+    console.warn(
+      "Session load:",
+      error
+    );
+
     clearSession();
-    showAuthScreen("login");
+
+    showAuthScreen(
+      "login"
+    );
   }
 }
 
@@ -521,14 +686,25 @@ async function loadSession() {
 ====================================================== */
 
 async function logout() {
+
   try {
+
     if (authToken) {
-      await api("/api/auth/logout", {
-        method: "POST"
-      });
+
+      await api(
+        "/api/auth/logout",
+        {
+          method: "POST"
+        }
+      );
     }
+
   } catch (error) {
-    console.warn("Logout API:", error);
+
+    console.warn(
+      "Logout API:",
+      error
+    );
   }
 
   clearSession();
@@ -545,6 +721,7 @@ async function logout() {
 ====================================================== */
 
 function updateUserUI() {
+
   if (!currentUser) return;
 
   const name =
@@ -560,11 +737,14 @@ function updateUserUI() {
 
   if ($("headerPoints")) {
     $("headerPoints").textContent =
-      `${formatNumber(currentUser.points)} pts`;
+      `${formatNumber(
+        currentUser.points
+      )} pts`;
   }
 
   if ($("profileName")) {
-    $("profileName").textContent = name;
+    $("profileName").textContent =
+      name;
   }
 
   if ($("profileUsername")) {
@@ -574,7 +754,9 @@ function updateUserUI() {
 
   if ($("profilePoints")) {
     $("profilePoints").textContent =
-      formatNumber(currentUser.points);
+      formatNumber(
+        currentUser.points
+      );
   }
 
   if ($("profileVideos")) {
@@ -598,36 +780,52 @@ function updateUserUI() {
 
   if ($("profileFollowers")) {
     $("profileFollowers").textContent =
-      formatNumber(currentUser.followers_count || 0);
+      formatNumber(
+        currentUser.followers_count ||
+        0
+      );
   }
 
   if ($("profileFollowing")) {
     $("profileFollowing").textContent =
-      formatNumber(currentUser.following_count || 0);
+      formatNumber(
+        currentUser.following_count ||
+        0
+      );
   }
 }
 
 
 async function refreshCurrentUser() {
+
   if (!currentUser) return;
 
   try {
-    const data = await api(
-      `/api/user/${encodeURIComponent(currentUser.id)}`
-    );
+
+    const data =
+      await api(
+        `/api/user/${encodeURIComponent(
+          currentUser.id
+        )}`
+      );
 
     if (data.user) {
-      currentUser = data.user;
+
+      currentUser =
+        data.user;
 
       localStorage.setItem(
         USER_KEY,
-        JSON.stringify(currentUser)
+        JSON.stringify(
+          currentUser
+        )
       );
 
       updateUserUI();
     }
 
   } catch (error) {
+
     console.warn(
       "Refresh user failed:",
       error
@@ -641,42 +839,69 @@ async function refreshCurrentUser() {
 ====================================================== */
 
 function showPage(sectionId) {
-  const sections =
-    document.querySelectorAll(".page-section");
-
-  sections.forEach(section => {
-    section.classList.toggle(
-      "active",
-      section.id === sectionId
-    );
-  });
 
   document
-    .querySelectorAll(".bottom-nav button")
+    .querySelectorAll(
+      ".page-section"
+    )
+    .forEach(section => {
+
+      section.classList.toggle(
+        "active",
+        section.id === sectionId
+      );
+    });
+
+
+  document
+    .querySelectorAll(
+      ".bottom-nav button"
+    )
     .forEach(button => {
+
       button.classList.toggle(
         "active",
         button.dataset.page === sectionId
       );
     });
 
-  if (sectionId !== "playerSection") {
+
+  if (
+    sectionId !==
+    "playerSection"
+  ) {
     stopWatchTimer();
   }
 
-  if (sectionId === "watchSection") {
+
+  if (
+    sectionId ===
+    "watchSection"
+  ) {
     loadWatchHistory();
   }
 
-  if (sectionId === "earnSection") {
+
+  if (
+    sectionId ===
+    "earnSection"
+  ) {
     loadPointsHistory();
   }
 
-  if (sectionId === "profileSection") {
+
+  if (
+    sectionId ===
+    "profileSection"
+  ) {
     loadMyVideos();
   }
 
-  if (sectionId === "creatorSection") {
+
+  if (
+    sectionId ===
+    "creatorSection"
+  ) {
     loadCreatorDashboard();
   }
 }
@@ -687,40 +912,63 @@ function showPage(sectionId) {
 ====================================================== */
 
 async function loadVideos() {
-  const feed = $("videoFeed");
+
+  const feed =
+    $("videoFeed");
 
   if (!feed) return;
 
   feed.innerHTML =
-    `<div class="mini-loading">Loading videos...</div>`;
+    `<div class="mini-loading">
+      Loading videos...
+    </div>`;
 
   try {
-    const data = await api("/api/videos");
+
+    const data =
+      await api(
+        "/api/videos"
+      );
 
     const videos =
-      Array.isArray(data.videos)
+      Array.isArray(
+        data.videos
+      )
         ? data.videos
         : [];
 
-    renderVideoFeed(videos);
+    renderVideoFeed(
+      videos
+    );
 
   } catch (error) {
-    console.error("Load videos:", error);
+
+    console.error(
+      "Load videos:",
+      error
+    );
 
     feed.innerHTML =
       `<div class="empty-state">
-        ${escapeHTML(error.message)}
+        ${escapeHTML(
+          error.message
+        )}
       </div>`;
   }
 }
 
 
-function renderVideoFeed(videos) {
-  const feed = $("videoFeed");
+function renderVideoFeed(
+  videos
+) {
+
+  const feed =
+    $("videoFeed");
 
   if (!feed) return;
 
   if (!videos.length) {
+
     feed.innerHTML =
       `<div class="empty-state">
         No videos available yet.
@@ -729,94 +977,113 @@ function renderVideoFeed(videos) {
     return;
   }
 
-  feed.innerHTML = videos.map(video => {
-    const id =
-      video.id ??
-      video.video_id;
 
-    const thumbnail =
-      video.thumbnail_url ||
-      video.thumbnail ||
-      "";
+  feed.innerHTML =
+    videos.map(video => {
 
-    const title =
-      video.title ||
-      "Untitled video";
+      const id =
+        video.id ??
+        video.video_id;
 
-    const description =
-      video.description ||
-      "";
+      const thumbnail =
+        video.thumbnail_url ||
+        video.thumbnail ||
+        "";
 
-    const creator =
-      video.creator_username ||
-      video.username ||
-      video.first_name ||
-      "Creator";
+      const title =
+        video.title ||
+        "Untitled video";
 
-    const views =
-      video.views ??
-      video.view_count ??
-      0;
+      const description =
+        video.description ||
+        "";
 
-    return `
-      <article
-        class="video-card"
-        data-video-id="${escapeHTML(id)}"
-        onclick="openVideo('${escapeHTML(id)}')"
-      >
+      const creator =
+        video.creator_username ||
+        video.username ||
+        video.first_name ||
+        "Creator";
 
-        <div class="video-thumb-wrap">
+      const views =
+        video.views ??
+        video.view_count ??
+        0;
 
-          ${
-            thumbnail
-              ? `
-                <img
-                  class="video-thumb"
-                  src="${escapeHTML(thumbnail)}"
-                  alt="${escapeHTML(title)}"
-                  loading="lazy"
-                >
-              `
-              : `
-                <div class="video-thumb-placeholder">
-                  🎬
-                </div>
-              `
-          }
 
-        </div>
+      return `
+        <article
+          class="video-card"
+          data-video-id="${escapeHTML(id)}"
+          onclick="openVideo('${escapeHTML(id)}')"
+        >
 
-        <div class="video-card-body">
+          <div class="video-thumb-wrap">
 
-          <h3>
-            ${escapeHTML(title)}
-          </h3>
+            ${
+              thumbnail
+                ? `
+                  <img
+                    class="video-thumb"
+                    src="${escapeHTML(
+                      thumbnail
+                    )}"
+                    alt="${escapeHTML(
+                      title
+                    )}"
+                    loading="lazy"
+                  >
+                `
+                : `
+                  <div class="video-thumb-placeholder">
+                    🎬
+                  </div>
+                `
+            }
 
-          ${
-            description
-              ? `
-                <p>
-                  ${escapeHTML(description)}
-                </p>
-              `
-              : ""
-          }
-
-          <div class="video-meta">
-            <span>
-              @${escapeHTML(creator)}
-            </span>
-
-            <span>
-              ${formatNumber(views)} views
-            </span>
           </div>
 
-        </div>
+          <div class="video-card-body">
 
-      </article>
-    `;
-  }).join("");
+            <h3>
+              ${escapeHTML(
+                title
+              )}
+            </h3>
+
+            ${
+              description
+                ? `
+                  <p>
+                    ${escapeHTML(
+                      description
+                    )}
+                  </p>
+                `
+                : ""
+            }
+
+            <div class="video-meta">
+
+              <span>
+                @${escapeHTML(
+                  creator
+                )}
+              </span>
+
+              <span>
+                ${formatNumber(
+                  views
+                )} views
+              </span>
+
+            </div>
+
+          </div>
+
+        </article>
+      `;
+
+    }).join("");
 }
 
 
@@ -824,33 +1091,51 @@ function renderVideoFeed(videos) {
    OPEN VIDEO
 ====================================================== */
 
-async function openVideo(videoId) {
+async function openVideo(
+  videoId
+) {
+
   if (!videoId) return;
 
   stopWatchTimer();
 
-  showPage("playerSection");
+  showPage(
+    "playerSection"
+  );
 
-  const videoElement = $("playerVideo");
+  const videoElement =
+    $("playerVideo");
 
   if (videoElement) {
+
     videoElement.pause();
-    videoElement.removeAttribute("src");
+
+    videoElement.removeAttribute(
+      "src"
+    );
+
     videoElement.load();
   }
 
   try {
-    const data = await api(
-      `/api/videos/${encodeURIComponent(videoId)}`
-    );
+
+    const data =
+      await api(
+        `/api/videos/${encodeURIComponent(
+          videoId
+        )}`
+      );
 
     currentVideo =
       data.video ||
       data;
 
     if (!currentVideo) {
-      throw new Error("Video not found.");
+      throw new Error(
+        "Video not found."
+      );
     }
+
 
     const videoUrl =
       currentVideo.video_url ||
@@ -886,8 +1171,10 @@ async function openVideo(videoId) {
       currentVideo.comments ??
       0;
 
+
     if ($("playerTitle")) {
-      $("playerTitle").textContent = title;
+      $("playerTitle").textContent =
+        title;
     }
 
     if ($("playerDescription")) {
@@ -897,32 +1184,46 @@ async function openVideo(videoId) {
 
     if ($("playerViews")) {
       $("playerViews").textContent =
-        `${formatNumber(views)} views`;
+        `${formatNumber(
+          views
+        )} views`;
     }
 
     if ($("playerLikes")) {
       $("playerLikes").textContent =
-        formatNumber(likes);
+        formatNumber(
+          likes
+        );
     }
 
     if ($("playerCommentsCount")) {
       $("playerCommentsCount").textContent =
-        formatNumber(comments);
+        formatNumber(
+          comments
+        );
     }
 
+
     if (videoElement) {
+
       if (thumbnail) {
-        videoElement.poster = thumbnail;
+        videoElement.poster =
+          thumbnail;
       }
 
       if (videoUrl) {
-        videoElement.src = videoUrl;
+
+        videoElement.src =
+          videoUrl;
+
         videoElement.load();
       }
     }
 
+
     watchSeconds = 0;
     watchRewardSent = false;
+
 
     await loadLikeStatus();
     await loadFollowStatus();
@@ -931,7 +1232,11 @@ async function openVideo(videoId) {
     setupWatchTimer();
 
   } catch (error) {
-    console.error("Open video:", error);
+
+    console.error(
+      "Open video:",
+      error
+    );
 
     showToast(
       error.message,
@@ -946,6 +1251,7 @@ async function openVideo(videoId) {
 ====================================================== */
 
 function setupWatchTimer() {
+
   stopWatchTimer();
 
   if (!currentVideo) return;
@@ -953,42 +1259,58 @@ function setupWatchTimer() {
   watchSeconds = 0;
   watchRewardSent = false;
 
-  watchTimer = setInterval(() => {
-    if (!currentVideo) return;
+  watchTimer =
+    setInterval(() => {
 
-    const videoElement = $("playerVideo");
+      if (!currentVideo) {
+        return;
+      }
 
-    if (
-      videoElement &&
-      !videoElement.paused &&
-      !videoElement.ended
-    ) {
-      watchSeconds++;
+      const videoElement =
+        $("playerVideo");
 
       if (
-        watchSeconds >= MIN_WATCH_SECONDS &&
-        !watchRewardSent
+        videoElement &&
+        !videoElement.paused &&
+        !videoElement.ended
       ) {
-        completeWatch();
+
+        watchSeconds++;
+
+        if (
+          watchSeconds >=
+            MIN_WATCH_SECONDS &&
+          !watchRewardSent
+        ) {
+
+          completeWatch();
+        }
       }
-    }
-  }, 1000);
+
+    }, 1000);
 }
 
 
 function stopWatchTimer() {
+
   if (watchTimer) {
-    clearInterval(watchTimer);
+
+    clearInterval(
+      watchTimer
+    );
+
     watchTimer = null;
   }
 }
 
 
 async function completeWatch() {
+
   if (
     !currentVideo ||
     watchRewardSent ||
-    watchSeconds < MIN_WATCH_SECONDS
+    watchSeconds <
+      MIN_WATCH_SECONDS
   ) {
     return;
   }
@@ -996,29 +1318,43 @@ async function completeWatch() {
   watchRewardSent = true;
 
   try {
-    const data = await api(
-      "/api/watch/complete",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          video_id: currentVideo.id,
-          watch_seconds: watchSeconds
-        })
-      }
-    );
+
+    const data =
+      await api(
+        "/api/watch/complete",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            video_id:
+              currentVideo.id,
+            watch_seconds:
+              watchSeconds
+          })
+        }
+      );
+
 
     if (data.user) {
-      currentUser = data.user;
+
+      currentUser =
+        data.user;
 
       localStorage.setItem(
         USER_KEY,
-        JSON.stringify(currentUser)
+        JSON.stringify(
+          currentUser
+        )
       );
 
       updateUserUI();
     }
 
-    if (data.reward_granted || data.reward) {
+
+    if (
+      data.reward_granted ||
+      data.reward
+    ) {
+
       showToast(
         `+${data.reward || 1} point earned 🎉`,
         "success"
@@ -1026,6 +1362,7 @@ async function completeWatch() {
     }
 
   } catch (error) {
+
     watchRewardSent = false;
 
     console.warn(
@@ -1040,8 +1377,12 @@ async function completeWatch() {
    LIKE
 ====================================================== */
 
-function updateLikeButton(liked) {
-  const button = $("likeBtn");
+function updateLikeButton(
+  liked
+) {
+
+  const button =
+    $("likeBtn");
 
   if (!button) return;
 
@@ -1051,25 +1392,39 @@ function updateLikeButton(liked) {
   );
 
   const text =
-    button.querySelector(".like-text");
+    button.querySelector(
+      ".like-text"
+    );
 
   if (text) {
+
     text.textContent =
-      liked ? "Liked" : "Like";
+      liked
+        ? "Liked"
+        : "Like";
+
   } else {
+
     button.textContent =
-      liked ? "❤️ Liked" : "🤍 Like";
+      liked
+        ? "❤️ Liked"
+        : "🤍 Like";
   }
 }
 
 
 async function loadLikeStatus() {
+
   if (!currentVideo) return;
 
   try {
-    const data = await api(
-      `/api/videos/${encodeURIComponent(currentVideo.id)}/like`
-    );
+
+    const data =
+      await api(
+        `/api/videos/${encodeURIComponent(
+          currentVideo.id
+        )}/like`
+      );
 
     updateLikeButton(
       Boolean(
@@ -1080,6 +1435,7 @@ async function loadLikeStatus() {
     );
 
   } catch (error) {
+
     console.warn(
       "Like status:",
       error
@@ -1089,27 +1445,37 @@ async function loadLikeStatus() {
 
 
 async function toggleLike() {
+
   if (!currentVideo) return;
 
-  const button = $("likeBtn");
+  const button =
+    $("likeBtn");
 
   if (button) {
     button.disabled = true;
   }
 
   try {
-    const data = await api(
-      `/api/videos/${encodeURIComponent(currentVideo.id)}/like`,
-      {
-        method: "POST"
-      }
-    );
+
+    const data =
+      await api(
+        `/api/videos/${encodeURIComponent(
+          currentVideo.id
+        )}/like`,
+        {
+          method: "POST"
+        }
+      );
 
     updateLikeButton(
-      Boolean(data.liked)
+      Boolean(
+        data.liked
+      )
     );
 
+
     if ($("playerLikes")) {
+
       $("playerLikes").textContent =
         formatNumber(
           data.likes_count ??
@@ -1120,12 +1486,14 @@ async function toggleLike() {
     }
 
   } catch (error) {
+
     showToast(
       error.message,
       "error"
     );
 
   } finally {
+
     if (button) {
       button.disabled = false;
     }
@@ -1137,8 +1505,12 @@ async function toggleLike() {
    FOLLOW
 ====================================================== */
 
-function updateFollowButton(following) {
-  const button = $("followCreatorBtn");
+function updateFollowButton(
+  following
+) {
+
+  const button =
+    $("followCreatorBtn");
 
   if (!button) return;
 
@@ -1155,6 +1527,7 @@ function updateFollowButton(following) {
 
 
 async function loadFollowStatus() {
+
   if (!currentVideo) return;
 
   const creatorId =
@@ -1163,23 +1536,35 @@ async function loadFollowStatus() {
 
   if (!creatorId) return;
 
+
   if (
     String(creatorId) ===
     String(currentUser?.id)
   ) {
+
     $("followCreatorBtn")
-      ?.classList.add("hidden");
+      ?.classList.add(
+        "hidden"
+      );
 
     return;
   }
 
+
   $("followCreatorBtn")
-    ?.classList.remove("hidden");
+    ?.classList.remove(
+      "hidden"
+    );
+
 
   try {
-    const data = await api(
-      `/api/user/${encodeURIComponent(creatorId)}/follow`
-    );
+
+    const data =
+      await api(
+        `/api/user/${encodeURIComponent(
+          creatorId
+        )}/follow`
+      );
 
     updateFollowButton(
       Boolean(
@@ -1190,6 +1575,7 @@ async function loadFollowStatus() {
     );
 
   } catch (error) {
+
     console.warn(
       "Follow status:",
       error
@@ -1199,6 +1585,7 @@ async function loadFollowStatus() {
 
 
 async function toggleFollow() {
+
   if (!currentVideo) return;
 
   const creatorId =
@@ -1222,15 +1609,21 @@ async function toggleFollow() {
   }
 
   try {
-    const data = await api(
-      `/api/user/${encodeURIComponent(creatorId)}/follow`,
-      {
-        method: "POST"
-      }
-    );
+
+    const data =
+      await api(
+        `/api/user/${encodeURIComponent(
+          creatorId
+        )}/follow`,
+        {
+          method: "POST"
+        }
+      );
 
     updateFollowButton(
-      Boolean(data.following)
+      Boolean(
+        data.following
+      )
     );
 
     showToast(
@@ -1241,12 +1634,14 @@ async function toggleFollow() {
     );
 
   } catch (error) {
+
     showToast(
       error.message,
       "error"
     );
 
   } finally {
+
     if (button) {
       button.disabled = false;
     }
@@ -1259,9 +1654,11 @@ async function toggleFollow() {
 ====================================================== */
 
 async function loadComments() {
+
   if (!currentVideo) return;
 
-  const list = $("commentsList");
+  const list =
+    $("commentsList");
 
   if (!list) return;
 
@@ -1270,17 +1667,26 @@ async function loadComments() {
       Loading comments...
     </div>`;
 
+
   try {
-    const data = await api(
-      `/api/videos/${encodeURIComponent(currentVideo.id)}/comments`
-    );
+
+    const data =
+      await api(
+        `/api/videos/${encodeURIComponent(
+          currentVideo.id
+        )}/comments`
+      );
 
     const comments =
-      Array.isArray(data.comments)
+      Array.isArray(
+        data.comments
+      )
         ? data.comments
         : [];
 
+
     if (!comments.length) {
+
       list.innerHTML =
         `<div class="empty-state">
           No comments yet.
@@ -1289,66 +1695,83 @@ async function loadComments() {
       return;
     }
 
+
     list.innerHTML =
-      comments.map(comment => {
+      comments.map(
+        comment => {
 
-        const name =
-          comment.username ||
-          comment.first_name ||
-          "User";
+          const name =
+            comment.username ||
+            comment.first_name ||
+            "User";
 
-        const text =
-          comment.comment ||
-          comment.text ||
-          "";
+          const text =
+            comment.comment ||
+            comment.text ||
+            "";
 
-        return `
-          <div class="comment-item">
 
-            <div class="comment-author">
-              @${escapeHTML(name)}
+          return `
+            <div class="comment-item">
+
+              <div class="comment-author">
+                @${escapeHTML(
+                  name
+                )}
+              </div>
+
+              <div class="comment-text">
+                ${escapeHTML(
+                  text
+                )}
+              </div>
+
+              ${
+                comment.created_at
+                  ? `
+                    <div class="comment-date">
+                      ${escapeHTML(
+                        formatDate(
+                          comment.created_at
+                        )
+                      )}
+                    </div>
+                  `
+                  : ""
+              }
+
             </div>
-
-            <div class="comment-text">
-              ${escapeHTML(text)}
-            </div>
-
-            ${
-              comment.created_at
-                ? `
-                  <div class="comment-date">
-                    ${escapeHTML(
-                      formatDate(
-                        comment.created_at
-                      )
-                    )}
-                  </div>
-                `
-                : ""
-            }
-
-          </div>
-        `;
-      }).join("");
+          `;
+        }
+      ).join("");
 
   } catch (error) {
+
     list.innerHTML =
       `<div class="empty-state">
-        ${escapeHTML(error.message)}
+        ${escapeHTML(
+          error.message
+        )}
       </div>`;
   }
 }
 
 
 async function addComment() {
+
   if (!currentVideo) return;
 
-  const input = $("commentInput");
+  const input =
+    $("commentInput");
 
   const comment =
-    String(input?.value || "").trim();
+    String(
+      input?.value || ""
+    ).trim();
+
 
   if (!comment) {
+
     showToast(
       "Write a comment first.",
       "error"
@@ -1357,29 +1780,39 @@ async function addComment() {
     return;
   }
 
+
   try {
-    const data = await api(
-      `/api/videos/${encodeURIComponent(currentVideo.id)}/comments`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          comment
-        })
-      }
-    );
+
+    const data =
+      await api(
+        `/api/videos/${encodeURIComponent(
+          currentVideo.id
+        )}/comments`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            comment
+          })
+        }
+      );
+
 
     if (input) {
       input.value = "";
     }
+
 
     showToast(
       "Comment added 💬",
       "success"
     );
 
+
     await loadComments();
 
+
     if ($("playerCommentsCount")) {
+
       $("playerCommentsCount").textContent =
         formatNumber(
           data.comments_count ??
@@ -1389,6 +1822,7 @@ async function addComment() {
     }
 
   } catch (error) {
+
     showToast(
       error.message,
       "error"
@@ -1402,6 +1836,7 @@ async function addComment() {
 ====================================================== */
 
 async function reportCurrentVideo() {
+
   if (!currentVideo) return;
 
   const reason =
@@ -1409,16 +1844,24 @@ async function reportCurrentVideo() {
       "Why are you reporting this video?"
     );
 
+
   if (reason === null) {
     return;
   }
 
+
   const cleanReason =
-    String(reason).trim();
+    String(
+      reason
+    ).trim();
+
 
   try {
+
     await api(
-      `/api/videos/${encodeURIComponent(currentVideo.id)}/report`,
+      `/api/videos/${encodeURIComponent(
+        currentVideo.id
+      )}/report`,
       {
         method: "POST",
         body: JSON.stringify({
@@ -1429,12 +1872,14 @@ async function reportCurrentVideo() {
       }
     );
 
+
     showToast(
       "Report submitted.",
       "success"
     );
 
   } catch (error) {
+
     showToast(
       error.message,
       "error"
@@ -1448,9 +1893,11 @@ async function reportCurrentVideo() {
 ====================================================== */
 
 async function loadWatchHistory() {
+
   if (!currentUser) return;
 
-  const list = $("watchHistory");
+  const list =
+    $("watchHistory");
 
   if (!list) return;
 
@@ -1459,17 +1906,27 @@ async function loadWatchHistory() {
       Loading history...
     </div>`;
 
+
   try {
-    const data = await api(
-      `/api/user/${encodeURIComponent(currentUser.id)}/watch-history`
-    );
+
+    const data =
+      await api(
+        `/api/user/${encodeURIComponent(
+          currentUser.id
+        )}/watch-history`
+      );
+
 
     const history =
-      Array.isArray(data.history)
+      Array.isArray(
+        data.history
+      )
         ? data.history
         : [];
 
+
     if (!history.length) {
+
       list.innerHTML =
         `<div class="empty-state">
           No watch history yet.
@@ -1478,41 +1935,52 @@ async function loadWatchHistory() {
       return;
     }
 
+
     list.innerHTML =
-      history.map(item => {
+      history.map(
+        item => {
 
-        const title =
-          item.title ||
-          "Video";
+          const title =
+            item.title ||
+            "Video";
 
-        const seconds =
-          item.watch_seconds ||
-          0;
+          const seconds =
+            item.watch_seconds ||
+            0;
 
-        return `
-          <div
-            class="history-item"
-            onclick="openVideo('${escapeHTML(
-              item.video_id
-            )}')"
-          >
 
-            <div class="history-title">
-              ${escapeHTML(title)}
+          return `
+            <div
+              class="history-item"
+              onclick="openVideo('${escapeHTML(
+                item.video_id
+              )}')"
+            >
+
+              <div class="history-title">
+                ${escapeHTML(
+                  title
+                )}
+              </div>
+
+              <div class="history-meta">
+                Watched ${formatNumber(
+                  seconds
+                )} sec
+              </div>
+
             </div>
-
-            <div class="history-meta">
-              Watched ${formatNumber(seconds)} sec
-            </div>
-
-          </div>
-        `;
-      }).join("");
+          `;
+        }
+      ).join("");
 
   } catch (error) {
+
     list.innerHTML =
       `<div class="empty-state">
-        ${escapeHTML(error.message)}
+        ${escapeHTML(
+          error.message
+        )}
       </div>`;
   }
 }
@@ -1523,6 +1991,7 @@ async function loadWatchHistory() {
 ====================================================== */
 
 async function claimDailyReward() {
+
   const button =
     $("dailyRewardBtn");
 
@@ -1530,39 +1999,51 @@ async function claimDailyReward() {
     button.disabled = true;
   }
 
+
   try {
-    const data = await api(
-      "/api/rewards/daily",
-      {
-        method: "POST"
-      }
-    );
+
+    const data =
+      await api(
+        "/api/rewards/daily",
+        {
+          method: "POST"
+        }
+      );
+
 
     if (data.user) {
-      currentUser = data.user;
+
+      currentUser =
+        data.user;
 
       localStorage.setItem(
         USER_KEY,
-        JSON.stringify(currentUser)
+        JSON.stringify(
+          currentUser
+        )
       );
 
       updateUserUI();
     }
+
 
     showToast(
       `+${data.reward || 0} daily points 🎁`,
       "success"
     );
 
+
     await loadPointsHistory();
 
   } catch (error) {
+
     showToast(
       error.message,
       "error"
     );
 
   } finally {
+
     if (button) {
       button.disabled = false;
     }
@@ -1575,50 +2056,67 @@ async function claimDailyReward() {
 ====================================================== */
 
 async function claimRewardedAd() {
+
   const button =
     $("rewardedAdBtn");
 
   if (button) {
+
     button.disabled = true;
+
     button.textContent =
       "Adding reward...";
   }
 
+
   try {
-    const data = await api(
-      "/api/rewards/ad",
-      {
-        method: "POST"
-      }
-    );
+
+    const data =
+      await api(
+        "/api/rewards/ad",
+        {
+          method: "POST"
+        }
+      );
+
 
     if (data.user) {
-      currentUser = data.user;
+
+      currentUser =
+        data.user;
 
       localStorage.setItem(
         USER_KEY,
-        JSON.stringify(currentUser)
+        JSON.stringify(
+          currentUser
+        )
       );
 
       updateUserUI();
     }
+
 
     showToast(
       `+${data.reward || 0} points added 🎁`,
       "success"
     );
 
+
     await loadPointsHistory();
 
   } catch (error) {
+
     showToast(
       error.message,
       "error"
     );
 
   } finally {
+
     if (button) {
+
       button.disabled = false;
+
       button.textContent =
         "🎁 Reward Ad Demo";
     }
@@ -1631,6 +2129,7 @@ async function claimRewardedAd() {
 ====================================================== */
 
 async function loadPointsHistory() {
+
   if (!currentUser) return;
 
   const list =
@@ -1643,17 +2142,25 @@ async function loadPointsHistory() {
       Loading...
     </div>`;
 
+
   try {
-    const data = await api(
-      "/api/points/history"
-    );
+
+    const data =
+      await api(
+        "/api/points/history"
+      );
+
 
     const history =
-      Array.isArray(data.history)
+      Array.isArray(
+        data.history
+      )
         ? data.history
         : [];
 
+
     if (!history.length) {
+
       list.innerHTML =
         `<div class="empty-state">
           No points history yet.
@@ -1662,58 +2169,71 @@ async function loadPointsHistory() {
       return;
     }
 
+
     list.innerHTML =
-      history.map(item => {
+      history.map(
+        item => {
 
-        const points =
-          Number(
-            item.points ??
-            item.amount ??
-            item.reward ??
-            0
-          );
+          const points =
+            Number(
+              item.points ??
+              item.amount ??
+              item.reward ??
+              0
+            );
 
-        const source =
-          item.reason ||
-          item.type ||
-          item.source ||
-          "Reward";
+          const source =
+            item.reason ||
+            item.type ||
+            item.source ||
+            "Reward";
 
-        return `
-          <div class="points-history-item">
 
-            <div>
-              <strong>
-                ${escapeHTML(source)}
-              </strong>
+          return `
+            <div class="points-history-item">
 
-              ${
-                item.created_at
-                  ? `
-                    <small>
-                      ${escapeHTML(
-                        formatDate(
-                          item.created_at
-                        )
-                      )}
-                    </small>
-                  `
-                  : ""
-              }
+              <div>
+
+                <strong>
+                  ${escapeHTML(
+                    source
+                  )}
+                </strong>
+
+                ${
+                  item.created_at
+                    ? `
+                      <small>
+                        ${escapeHTML(
+                          formatDate(
+                            item.created_at
+                          )
+                        )}
+                      </small>
+                    `
+                    : ""
+                }
+
+              </div>
+
+              <div class="points-value">
+                +${formatNumber(
+                  points
+                )}
+              </div>
+
             </div>
-
-            <div class="points-value">
-              +${formatNumber(points)}
-            </div>
-
-          </div>
-        `;
-      }).join("");
+          `;
+        }
+      ).join("");
 
   } catch (error) {
+
     list.innerHTML =
       `<div class="empty-state">
-        ${escapeHTML(error.message)}
+        ${escapeHTML(
+          error.message
+        )}
       </div>`;
   }
 }
@@ -1723,15 +2243,20 @@ async function loadPointsHistory() {
    VIDEO FILE HANDLING
 ====================================================== */
 
-function handleVideoFile(file) {
-  if (!file) {
-    return;
-  }
+function handleVideoFile(
+  file
+) {
+
+  if (!file) return;
+
 
   if (
     !file.type ||
-    !file.type.startsWith("video/")
+    !file.type.startsWith(
+      "video/"
+    )
   ) {
+
     showToast(
       "Please select a valid video file.",
       "error"
@@ -1740,7 +2265,12 @@ function handleVideoFile(file) {
     return;
   }
 
-  if (file.size > MAX_VIDEO_SIZE) {
+
+  if (
+    file.size >
+    MAX_VIDEO_SIZE
+  ) {
+
     showToast(
       "Maximum video size is 100 MB.",
       "error"
@@ -1749,23 +2279,34 @@ function handleVideoFile(file) {
     return;
   }
 
-  selectedVideoFile = file;
 
-  selectedVideoDuration = 0;
+  selectedVideoFile =
+    file;
+
+  selectedVideoDuration =
+    0;
+
 
   if (uploadPreviewUrl) {
+
     URL.revokeObjectURL(
       uploadPreviewUrl
     );
   }
 
+
   uploadPreviewUrl =
-    URL.createObjectURL(file);
+    URL.createObjectURL(
+      file
+    );
+
 
   const preview =
     $("uploadVideoPreview");
 
+
   if (preview) {
+
     preview.src =
       uploadPreviewUrl;
 
@@ -1776,50 +2317,75 @@ function handleVideoFile(file) {
     preview.load();
   }
 
+
   if ($("selectedVideoName")) {
+
     $("selectedVideoName").textContent =
       file.name;
   }
 
+
   if ($("selectedVideoSize")) {
+
     $("selectedVideoSize").textContent =
-      formatVideoSize(file.size);
+      formatVideoSize(
+        file.size
+      );
   }
+
 
   updateUploadProgress(
     0,
     "Video selected"
   );
 
+
   uploadPreviewMetadata();
 }
 
 
 function uploadPreviewMetadata() {
+
   const preview =
     $("uploadVideoPreview");
 
   if (!preview) return;
 
-  const readDuration = () => {
-    const duration =
-      Number(preview.duration);
 
-    if (
-      Number.isFinite(duration) &&
-      duration > 0
-    ) {
-      selectedVideoDuration =
-        Math.round(duration);
-    }
-  };
+  const readDuration =
+    () => {
+
+      const duration =
+        Number(
+          preview.duration
+        );
+
+      if (
+        Number.isFinite(
+          duration
+        ) &&
+        duration > 0
+      ) {
+
+        selectedVideoDuration =
+          Math.round(
+            duration
+          );
+      }
+    };
+
 
   if (
-    Number.isFinite(preview.duration) &&
+    Number.isFinite(
+      preview.duration
+    ) &&
     preview.duration > 0
   ) {
+
     readDuration();
+
   } else {
+
     preview.addEventListener(
       "loadedmetadata",
       readDuration,
@@ -1839,6 +2405,7 @@ function updateUploadProgress(
   percent,
   text
 ) {
+
   const safePercent =
     Math.max(
       0,
@@ -1847,6 +2414,7 @@ function updateUploadProgress(
         Number(percent) || 0
       )
     );
+
 
   const bar =
     $("uploadProgressBar");
@@ -1857,17 +2425,28 @@ function updateUploadProgress(
   const statusText =
     $("uploadProgressText");
 
+
   if (bar) {
+
     bar.style.width =
       `${safePercent}%`;
   }
 
+
   if (percentText) {
+
     percentText.textContent =
-      `${Math.round(safePercent)}%`;
+      `${Math.round(
+        safePercent
+      )}%`;
   }
 
-  if (statusText && text) {
+
+  if (
+    statusText &&
+    text
+  ) {
+
     statusText.textContent =
       text;
   }
@@ -1882,10 +2461,15 @@ function uploadToCloudinary(
   file,
   signature
 ) {
+
   return new Promise(
-    (resolve, reject) => {
+    (
+      resolve,
+      reject
+    ) => {
 
       if (!file) {
+
         reject(
           new Error(
             "Video file is missing."
@@ -1895,7 +2479,9 @@ function uploadToCloudinary(
         return;
       }
 
+
       if (!signature) {
+
         reject(
           new Error(
             "Cloudinary signature is missing."
@@ -1905,11 +2491,13 @@ function uploadToCloudinary(
         return;
       }
 
+
       const cloudName =
         String(
           signature.cloud_name ||
           ""
         ).trim();
+
 
       const apiKey =
         String(
@@ -1917,11 +2505,13 @@ function uploadToCloudinary(
           ""
         ).trim();
 
+
       const timestamp =
         String(
           signature.timestamp ||
           ""
         ).trim();
+
 
       const signedValue =
         String(
@@ -1929,12 +2519,14 @@ function uploadToCloudinary(
           ""
         ).trim();
 
+
       if (
         !cloudName ||
         !apiKey ||
         !timestamp ||
         !signedValue
       ) {
+
         reject(
           new Error(
             "Cloudinary signature response is incomplete."
@@ -1944,52 +2536,87 @@ function uploadToCloudinary(
         return;
       }
 
+
+      /*
+       * Server can return upload_url directly.
+       * Otherwise create it here.
+       */
+
       const uploadUrl =
+        signature.upload_url ||
         `https://api.cloudinary.com/v1_1/${encodeURIComponent(
           cloudName
         )}/video/upload`;
 
+
       const form =
         new FormData();
+
 
       form.append(
         "file",
         file
       );
 
+
       form.append(
         "api_key",
         apiKey
       );
+
 
       form.append(
         "timestamp",
         timestamp
       );
 
+
       form.append(
         "signature",
         signedValue
       );
 
-      if (signature.folder) {
+
+      /*
+       * IMPORTANT:
+       * folder must exactly match
+       * the value signed by server.
+       */
+
+      if (
+        signature.folder
+      ) {
+
         form.append(
           "folder",
           signature.folder
         );
       }
 
-      if (signature.public_id) {
+
+      /*
+       * Only send public_id if the server
+       * explicitly returned it.
+       */
+
+      if (
+        signature.public_id
+      ) {
+
         form.append(
           "public_id",
           signature.public_id
         );
       }
 
+
       const xhr =
         new XMLHttpRequest();
 
-      let completed = false;
+
+      let completed =
+        false;
+
 
       xhr.open(
         "POST",
@@ -1997,18 +2624,18 @@ function uploadToCloudinary(
         true
       );
 
-      /*
-       * IMPORTANT:
-       * Large mobile uploads can take time.
-       */
 
       xhr.timeout =
         CLOUDINARY_UPLOAD_TIMEOUT;
 
+
       xhr.upload.onprogress =
         event => {
 
-          if (!event.lengthComputable) {
+          if (
+            !event.lengthComputable
+          ) {
+
             updateUploadProgress(
               0,
               "Uploading video..."
@@ -2017,11 +2644,13 @@ function uploadToCloudinary(
             return;
           }
 
+
           const percent =
             (
               event.loaded /
               event.total
             ) * 100;
+
 
           updateUploadProgress(
             percent,
@@ -2041,49 +2670,62 @@ function uploadToCloudinary(
 
           completed = true;
 
+
           let data = {};
 
+
           try {
+
             data =
               JSON.parse(
                 xhr.responseText ||
                 "{}"
               );
+
           } catch {
+
             data = {};
           }
+
 
           console.log(
             "Cloudinary response:",
             {
-              status: xhr.status,
+              status:
+                xhr.status,
               data
             }
           );
+
 
           if (
             xhr.status >= 200 &&
             xhr.status < 300
           ) {
+
             updateUploadProgress(
               100,
               "Video uploaded successfully."
             );
 
-            resolve(data);
+            resolve(
+              data
+            );
 
             return;
           }
 
-          const cloudinaryMessage =
+
+          const message =
             data?.error?.message ||
             data?.message ||
             data?.error ||
             `HTTP ${xhr.status}`;
 
+
           reject(
             new Error(
-              `Cloudinary upload failed: ${cloudinaryMessage}`
+              `Cloudinary upload failed: ${message}`
             )
           );
         };
@@ -2098,13 +2740,15 @@ function uploadToCloudinary(
 
           completed = true;
 
+
           console.error(
-            "Cloudinary XHR network error."
+            "Cloudinary XHR network error"
           );
+
 
           reject(
             new Error(
-              "Cloudinary network error. Please check your internet connection, Cloudinary settings, or try again."
+              "Cloudinary network error. Please check internet connection and Cloudinary configuration."
             )
           );
         };
@@ -2119,9 +2763,10 @@ function uploadToCloudinary(
 
           completed = true;
 
+
           reject(
             new Error(
-              "Cloudinary upload timed out. Please check your internet connection and try again."
+              "Cloudinary upload timed out after 10 minutes. Please try again with a smaller video or a better connection."
             )
           );
         };
@@ -2136,6 +2781,7 @@ function uploadToCloudinary(
 
           completed = true;
 
+
           reject(
             new Error(
               "Video upload was cancelled."
@@ -2145,17 +2791,23 @@ function uploadToCloudinary(
 
 
       try {
+
         updateUploadProgress(
           0,
           "Connecting to Cloudinary..."
         );
 
-        xhr.send(form);
+
+        xhr.send(
+          form
+        );
 
       } catch (error) {
 
         if (!completed) {
+
           completed = true;
+
 
           reject(
             new Error(
@@ -2175,7 +2827,9 @@ function uploadToCloudinary(
 ====================================================== */
 
 async function uploadVideo() {
+
   if (!currentUser) {
+
     showToast(
       "Please login first.",
       "error"
@@ -2184,7 +2838,20 @@ async function uploadVideo() {
     return;
   }
 
+
+  if (!authToken) {
+
+    showToast(
+      "Your login session is missing. Please login again.",
+      "error"
+    );
+
+    return;
+  }
+
+
   if (!selectedVideoFile) {
+
     showToast(
       "Please select a video.",
       "error"
@@ -2193,37 +2860,39 @@ async function uploadVideo() {
     return;
   }
 
-  const titleInput =
-    $("uploadTitle");
-
-  const descriptionInput =
-    $("uploadDescription");
 
   const title =
     String(
-      titleInput?.value || ""
+      $("uploadTitle")?.value ||
+      ""
     ).trim();
+
 
   const description =
     String(
-      descriptionInput?.value || ""
+      $("uploadDescription")?.value ||
+      ""
     ).trim();
 
+
   if (!title) {
+
     showToast(
       "Please enter video title.",
       "error"
     );
 
-    titleInput?.focus();
+    $("uploadTitle")?.focus();
 
     return;
   }
+
 
   if (
     selectedVideoFile.size >
     MAX_VIDEO_SIZE
   ) {
+
     showToast(
       "Maximum video size is 100 MB.",
       "error"
@@ -2232,24 +2901,74 @@ async function uploadVideo() {
     return;
   }
 
+
   const button =
     $("uploadVideoBtn");
 
+
   if (button) {
+
     button.disabled = true;
+
     button.textContent =
       "Uploading...";
   }
+
 
   try {
 
     /*
     ======================================================
     STEP 1
-    GET CLOUDINARY SIGNATURE
+    CHECK CLOUDINARY CONFIGURATION
+    ======================================================
+    */
 
-    IMPORTANT:
-    Server v3.1.2 route is GET, not POST.
+    updateUploadProgress(
+      0,
+      "Checking upload service..."
+    );
+
+
+    let statusData = null;
+
+
+    try {
+
+      statusData =
+        await api(
+          "/api/cloudinary/status"
+        );
+
+    } catch (statusError) {
+
+      /*
+       * Status endpoint may not exist on an
+       * older server. Do not stop upload here.
+       */
+
+      console.warn(
+        "Cloudinary status endpoint:",
+        statusError
+      );
+    }
+
+
+    if (
+      statusData &&
+      statusData.configured === false
+    ) {
+
+      throw new Error(
+        "Cloudinary is not configured on the server. Please check CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET in Render."
+      );
+    }
+
+
+    /*
+    ======================================================
+    STEP 2
+    GET SECURE CLOUDINARY SIGNATURE
     ======================================================
     */
 
@@ -2258,20 +2977,85 @@ async function uploadVideo() {
       "Preparing secure upload..."
     );
 
-    const signature =
-      await api(
-        "/api/cloudinary/signature"
+
+    let signature;
+
+
+    try {
+
+      /*
+       * Server supports GET.
+       */
+
+      signature =
+        await api(
+          "/api/cloudinary/signature"
+        );
+
+    } catch (getError) {
+
+      console.warn(
+        "Cloudinary GET signature failed:",
+        getError
       );
 
+
+      /*
+       * Compatibility fallback:
+       * Try POST as well.
+       */
+
+      try {
+
+        signature =
+          await api(
+            "/api/cloudinary/signature",
+            {
+              method: "POST",
+              body: JSON.stringify({})
+            }
+          );
+
+      } catch (postError) {
+
+        console.error(
+          "Cloudinary POST signature failed:",
+          postError
+        );
+
+        throw new Error(
+          `Secure upload setup failed: ${postError.message || getError.message}`
+        );
+      }
+    }
+
+
     if (!signature) {
+
       throw new Error(
         "Cloudinary signature was not received."
       );
     }
 
+
+    console.log(
+      "Cloudinary signature received:",
+      {
+        cloud_name:
+          signature.cloud_name,
+        timestamp:
+          signature.timestamp,
+        folder:
+          signature.folder,
+        upload_url:
+          signature.upload_url
+      }
+    );
+
+
     /*
     ======================================================
-    STEP 2
+    STEP 3
     DIRECT CLOUDINARY UPLOAD
     ======================================================
     */
@@ -2281,11 +3065,13 @@ async function uploadVideo() {
       "Connecting to Cloudinary..."
     );
 
+
     const uploaded =
       await uploadToCloudinary(
         selectedVideoFile,
         signature
       );
+
 
     if (
       !uploaded ||
@@ -2294,42 +3080,58 @@ async function uploadVideo() {
         uploaded.url
       )
     ) {
+
       console.error(
         "Invalid Cloudinary response:",
         uploaded
       );
+
 
       throw new Error(
         "Cloudinary did not return a video URL."
       );
     }
 
+
     const videoUrl =
       uploaded.secure_url ||
       uploaded.url ||
       "";
 
+
     const publicId =
       uploaded.public_id ||
       "";
 
+
     /*
     ======================================================
-    STEP 3
-    CREATE THUMBNAIL
+    STEP 4
+    CREATE CLOUDINARY THUMBNAIL
     ======================================================
     */
 
-    let thumbnail = "";
+    let thumbnail =
+      uploaded.thumbnail_url ||
+      "";
 
-    if (publicId) {
+
+    if (
+      !thumbnail &&
+      publicId
+    ) {
+
       const encodedPublicId =
         publicId
           .split("/")
-          .map(part =>
-            encodeURIComponent(part)
+          .map(
+            part =>
+              encodeURIComponent(
+                part
+              )
           )
           .join("/");
+
 
       thumbnail =
         `https://res.cloudinary.com/${encodeURIComponent(
@@ -2337,10 +3139,11 @@ async function uploadVideo() {
         )}/video/upload/so_1,f_jpg/${encodedPublicId}.jpg`;
     }
 
+
     /*
     ======================================================
-    STEP 4
-    SAVE VIDEO METADATA IN SERVER / NEON
+    STEP 5
+    SAVE VIDEO METADATA TO NEON
     ======================================================
     */
 
@@ -2349,13 +3152,16 @@ async function uploadVideo() {
       "Saving video information..."
     );
 
+
     const data =
       await api(
         "/api/videos",
         {
           method: "POST",
           body: JSON.stringify({
+
             title,
+
             description,
 
             video_url:
@@ -2377,7 +3183,9 @@ async function uploadVideo() {
 
             duration:
               selectedVideoDuration ||
-              Number(uploaded.duration) ||
+              Number(
+                uploaded.duration
+              ) ||
               0,
 
             bytes:
@@ -2389,11 +3197,19 @@ async function uploadVideo() {
         }
       );
 
+
+    /*
+    ======================================================
+    SUCCESS
+    ======================================================
+    */
+
     showToast(
       data.message ||
       "Video uploaded successfully 🎉",
       "success"
     );
+
 
     /*
     ======================================================
@@ -2401,24 +3217,35 @@ async function uploadVideo() {
     ======================================================
     */
 
+    const titleInput =
+      $("uploadTitle");
+
+    const descriptionInput =
+      $("uploadDescription");
+
+
     if (titleInput) {
       titleInput.value = "";
     }
+
 
     if (descriptionInput) {
       descriptionInput.value = "";
     }
 
+
     clearSelectedVideo();
+
 
     updateUploadProgress(
       100,
       "Upload complete 🎉"
     );
 
+
     /*
     ======================================================
-    REFRESH APP DATA
+    REFRESH DATA
     ======================================================
     */
 
@@ -2428,7 +3255,11 @@ async function uploadVideo() {
 
     await loadMyVideos();
 
-    showPage("homeSection");
+
+    showPage(
+      "homeSection"
+    );
+
 
   } catch (error) {
 
@@ -2437,10 +3268,12 @@ async function uploadVideo() {
       error
     );
 
+
     updateUploadProgress(
       0,
       "Upload failed."
     );
+
 
     showToast(
       error.message ||
@@ -2451,7 +3284,9 @@ async function uploadVideo() {
   } finally {
 
     if (button) {
+
       button.disabled = false;
+
       button.textContent =
         "Upload Video";
     }
@@ -2464,23 +3299,37 @@ async function uploadVideo() {
 ====================================================== */
 
 function clearSelectedVideo() {
-  selectedVideoFile = null;
-  selectedVideoDuration = 0;
+
+  selectedVideoFile =
+    null;
+
+  selectedVideoDuration =
+    0;
+
 
   if (uploadPreviewUrl) {
+
     URL.revokeObjectURL(
       uploadPreviewUrl
     );
 
-    uploadPreviewUrl = null;
+    uploadPreviewUrl =
+      null;
   }
+
 
   const preview =
     $("uploadVideoPreview");
 
+
   if (preview) {
+
     preview.pause();
-    preview.removeAttribute("src");
+
+    preview.removeAttribute(
+      "src"
+    );
+
     preview.load();
 
     preview.classList.add(
@@ -2488,15 +3337,28 @@ function clearSelectedVideo() {
     );
   }
 
+
   if ($("selectedVideoName")) {
+
     $("selectedVideoName").textContent =
       "";
   }
 
+
   if ($("selectedVideoSize")) {
+
     $("selectedVideoSize").textContent =
       "";
   }
+
+
+  const fileInput =
+    $("videoFileInput");
+
+  if (fileInput) {
+    fileInput.value = "";
+  }
+
 
   updateUploadProgress(
     0,
@@ -2510,6 +3372,7 @@ function clearSelectedVideo() {
 ====================================================== */
 
 async function loadMyVideos() {
+
   if (!currentUser) return;
 
   const list =
@@ -2522,7 +3385,9 @@ async function loadMyVideos() {
       Loading your videos...
     </div>`;
 
+
   try {
+
     const data =
       await api(
         `/api/videos?creator_id=${encodeURIComponent(
@@ -2530,12 +3395,17 @@ async function loadMyVideos() {
         )}&mine=1`
       );
 
+
     const videos =
-      Array.isArray(data.videos)
+      Array.isArray(
+        data.videos
+      )
         ? data.videos
         : [];
 
+
     if (!videos.length) {
+
       list.innerHTML =
         `<div class="empty-state">
           You haven't uploaded any videos yet.
@@ -2544,67 +3414,87 @@ async function loadMyVideos() {
       return;
     }
 
+
     list.innerHTML =
-      videos.map(video => {
+      videos.map(
+        video => {
 
-        const id =
-          video.id ||
-          video.video_id;
+          const id =
+            video.id ||
+            video.video_id;
 
-        const title =
-          video.title ||
-          "Untitled video";
+          const title =
+            video.title ||
+            "Untitled video";
 
-        const views =
-          video.views ||
-          0;
+          const views =
+            video.views ||
+            0;
 
-        const status =
-          video.status ||
-          video.moderation_status ||
-          "active";
+          const status =
+            video.status ||
+            video.moderation_status ||
+            "active";
 
-        return `
-          <div class="my-video-item">
 
-            <div
-              class="my-video-info"
-              onclick="openVideo('${escapeHTML(id)}')"
-            >
+          return `
+            <div class="my-video-item">
 
-              <strong>
-                ${escapeHTML(title)}
-              </strong>
+              <div
+                class="my-video-info"
+                onclick="openVideo('${escapeHTML(
+                  id
+                )}')"
+              >
 
-              <small>
-                ${formatNumber(views)} views
-                • ${escapeHTML(status)}
-              </small>
+                <strong>
+                  ${escapeHTML(
+                    title
+                  )}
+                </strong>
+
+                <small>
+                  ${formatNumber(
+                    views
+                  )} views
+                  •
+                  ${escapeHTML(
+                    status
+                  )}
+                </small>
+
+              </div>
+
+              <button
+                type="button"
+                onclick="deleteMyVideo('${escapeHTML(
+                  id
+                )}')"
+              >
+                Delete
+              </button>
 
             </div>
-
-            <button
-              type="button"
-              onclick="deleteMyVideo('${escapeHTML(id)}')"
-            >
-              Delete
-            </button>
-
-          </div>
-        `;
-      }).join("");
+          `;
+        }
+      ).join("");
 
   } catch (error) {
 
     list.innerHTML =
       `<div class="empty-state">
-        ${escapeHTML(error.message)}
+        ${escapeHTML(
+          error.message
+        )}
       </div>`;
   }
 }
 
 
-async function deleteMyVideo(videoId) {
+async function deleteMyVideo(
+  videoId
+) {
+
   if (!videoId) return;
 
   const confirmed =
@@ -2612,23 +3502,29 @@ async function deleteMyVideo(videoId) {
       "Delete this video permanently?"
     );
 
+
   if (!confirmed) {
     return;
   }
 
+
   try {
 
     await api(
-      `/api/videos/${encodeURIComponent(videoId)}`,
+      `/api/videos/${encodeURIComponent(
+        videoId
+      )}`,
       {
         method: "DELETE"
       }
     );
 
+
     showToast(
       "Video deleted.",
       "success"
     );
+
 
     await loadMyVideos();
 
@@ -2649,14 +3545,10 @@ async function deleteMyVideo(videoId) {
 ====================================================== */
 
 async function loadCreatorDashboard() {
+
   if (!currentUser) return;
 
   try {
-
-    /*
-    Server v3.1.2:
-    GET /api/creator/:id/stats
-    */
 
     const data =
       await api(
@@ -2665,13 +3557,16 @@ async function loadCreatorDashboard() {
         )}/stats`
       );
 
+
     const stats =
       data.stats ||
       data.creator ||
       data ||
       {};
 
+
     if ($("creatorFollowers")) {
+
       $("creatorFollowers").textContent =
         formatNumber(
           stats.followers ??
@@ -2680,7 +3575,9 @@ async function loadCreatorDashboard() {
         );
     }
 
+
     if ($("creatorVideos")) {
+
       $("creatorVideos").textContent =
         formatNumber(
           stats.total_videos ??
@@ -2690,7 +3587,9 @@ async function loadCreatorDashboard() {
         );
     }
 
+
     if ($("creatorWatchHours")) {
+
       const seconds =
         Number(
           stats.total_watch_seconds ??
@@ -2698,11 +3597,17 @@ async function loadCreatorDashboard() {
           0
         );
 
+
       $("creatorWatchHours").textContent =
-        (seconds / 3600).toFixed(1);
+        (
+          seconds /
+          3600
+        ).toFixed(1);
     }
 
+
     if ($("creatorEarnings")) {
+
       $("creatorEarnings").textContent =
         formatNumber(
           stats.creator_amount ??
@@ -2712,20 +3617,25 @@ async function loadCreatorDashboard() {
         );
     }
 
+
     if ($("creatorStatus")) {
+
       $("creatorStatus").textContent =
         stats.creator_status ||
         currentUser.creator_status ||
         "Not applied";
     }
 
+
     if ($("creatorEligibility")) {
+
       const eligible =
         Boolean(
           stats.eligible ??
           stats.monetization_eligible ??
           false
         );
+
 
       $("creatorEligibility").textContent =
         eligible
@@ -2748,21 +3658,21 @@ async function loadCreatorDashboard() {
 ====================================================== */
 
 async function applyMonetization() {
+
   const button =
     $("applyMonetizationBtn");
 
+
   if (button) {
+
     button.disabled = true;
+
     button.textContent =
       "Applying...";
   }
 
-  try {
 
-    /*
-    Server v3.1.2:
-    POST /api/creator/apply
-    */
+  try {
 
     const data =
       await api(
@@ -2772,22 +3682,29 @@ async function applyMonetization() {
         }
       );
 
+
     showToast(
       data.message ||
       "Creator application submitted.",
       "success"
     );
 
+
     if (data.user) {
-      currentUser = data.user;
+
+      currentUser =
+        data.user;
 
       localStorage.setItem(
         USER_KEY,
-        JSON.stringify(currentUser)
+        JSON.stringify(
+          currentUser
+        )
       );
 
       updateUserUI();
     }
+
 
     await loadCreatorDashboard();
 
@@ -2801,7 +3718,9 @@ async function applyMonetization() {
   } finally {
 
     if (button) {
+
       button.disabled = false;
+
       button.textContent =
         "Apply for Monetization";
     }
@@ -2814,20 +3733,21 @@ async function applyMonetization() {
 ====================================================== */
 
 function setupPWAInstall() {
+
   window.addEventListener(
     "beforeinstallprompt",
     event => {
 
       event.preventDefault();
 
-      deferredPrompt = event;
+      deferredPrompt =
+        event;
 
-      const button =
-        $("installAppBtn");
 
-      button?.classList.remove(
-        "hidden"
-      );
+      $("installAppBtn")
+        ?.classList.remove(
+          "hidden"
+        );
     }
   );
 
@@ -2835,11 +3755,13 @@ function setupPWAInstall() {
   const installButton =
     $("installAppBtn");
 
+
   installButton?.addEventListener(
     "click",
     async () => {
 
       if (!deferredPrompt) {
+
         showToast(
           "Install option is not available right now.",
           "normal"
@@ -2848,15 +3770,22 @@ function setupPWAInstall() {
         return;
       }
 
+
       deferredPrompt.prompt();
 
+
       try {
+
         await deferredPrompt.userChoice;
+
       } catch {
         // Ignore
       }
 
-      deferredPrompt = null;
+
+      deferredPrompt =
+        null;
+
 
       installButton.classList.add(
         "hidden"
@@ -2871,27 +3800,36 @@ function setupPWAInstall() {
 ====================================================== */
 
 function registerServiceWorker() {
-  if (!("serviceWorker" in navigator)) {
+
+  if (
+    !("serviceWorker" in navigator)
+  ) {
     return;
   }
 
+
   navigator.serviceWorker
-    .register("/sw.js?v=5")
-    .then(registration => {
+    .register(
+      "/sw.js?v=6"
+    )
+    .then(
+      registration => {
 
-      console.log(
-        "Service worker registered:",
-        registration.scope
-      );
+        console.log(
+          "Service worker registered:",
+          registration.scope
+        );
+      }
+    )
+    .catch(
+      error => {
 
-    })
-    .catch(error => {
-
-      console.warn(
-        "Service worker registration failed:",
-        error
-      );
-    });
+        console.warn(
+          "Service worker registration failed:",
+          error
+        );
+      }
+    );
 }
 
 
@@ -2902,8 +3840,8 @@ function registerServiceWorker() {
 function bindEvents() {
 
   /*
-  AUTH
-  */
+   * AUTH
+   */
 
   $("loginBtn")
     ?.addEventListener(
@@ -2911,11 +3849,13 @@ function bindEvents() {
       login
     );
 
+
   $("registerBtn")
     ?.addEventListener(
       "click",
       register
     );
+
 
   $("logoutBtn")
     ?.addEventListener(
@@ -2925,91 +3865,105 @@ function bindEvents() {
 
 
   /*
-  AUTH SWITCH
-  */
+   * AUTH SWITCH
+   */
 
   $("showRegisterBtn")
     ?.addEventListener(
       "click",
       () => {
-        showAuthScreen("register");
+        showAuthScreen(
+          "register"
+        );
       }
     );
+
 
   $("showLoginBtn")
     ?.addEventListener(
       "click",
       () => {
-        showAuthScreen("login");
+        showAuthScreen(
+          "login"
+        );
       }
     );
 
 
   /*
-  ENTER KEY LOGIN
-  */
+   * LOGIN ENTER
+   */
 
   $("loginPassword")
     ?.addEventListener(
       "keydown",
       event => {
 
-        if (event.key === "Enter") {
+        if (
+          event.key ===
+          "Enter"
+        ) {
+
           event.preventDefault();
+
           login();
         }
-
       }
     );
 
 
   /*
-  ENTER KEY REGISTER
-  */
+   * REGISTER ENTER
+   */
 
   $("registerPassword")
     ?.addEventListener(
       "keydown",
       event => {
 
-        if (event.key === "Enter") {
+        if (
+          event.key ===
+          "Enter"
+        ) {
+
           event.preventDefault();
+
           register();
         }
-
       }
     );
 
 
   /*
-  NAVIGATION
-  */
+   * NAVIGATION
+   */
 
   document
     .querySelectorAll(
       "[data-page]"
     )
-    .forEach(button => {
+    .forEach(
+      button => {
 
-      button.addEventListener(
-        "click",
-        () => {
+        button.addEventListener(
+          "click",
+          () => {
 
-          const page =
-            button.dataset.page;
+            const page =
+              button.dataset.page;
 
-          if (page) {
-            showPage(page);
+            if (page) {
+              showPage(page);
+            }
           }
-
-        }
-      );
-    });
+        );
+      }
+    );
 
 
   /*
-  PLAYER
-  */
+   * PLAYER
+   */
 
   $("likeBtn")
     ?.addEventListener(
@@ -3017,17 +3971,20 @@ function bindEvents() {
       toggleLike
     );
 
+
   $("followCreatorBtn")
     ?.addEventListener(
       "click",
       toggleFollow
     );
 
+
   $("commentSubmitBtn")
     ?.addEventListener(
       "click",
       addComment
     );
+
 
   $("reportVideoBtn")
     ?.addEventListener(
@@ -3037,14 +3994,15 @@ function bindEvents() {
 
 
   /*
-  REWARDS
-  */
+   * REWARDS
+   */
 
   $("dailyRewardBtn")
     ?.addEventListener(
       "click",
       claimDailyReward
     );
+
 
   $("rewardedAdBtn")
     ?.addEventListener(
@@ -3054,11 +4012,12 @@ function bindEvents() {
 
 
   /*
-  UPLOAD
-  */
+   * UPLOAD
+   */
 
   const fileInput =
     $("videoFileInput");
+
 
   fileInput?.addEventListener(
     "change",
@@ -3067,7 +4026,9 @@ function bindEvents() {
       const file =
         event.target.files?.[0];
 
-      handleVideoFile(file);
+      handleVideoFile(
+        file
+      );
     }
   );
 
@@ -3087,8 +4048,8 @@ function bindEvents() {
 
 
   /*
-  CREATOR
-  */
+   * CREATOR
+   */
 
   $("applyMonetizationBtn")
     ?.addEventListener(
@@ -3098,8 +4059,8 @@ function bindEvents() {
 
 
   /*
-  VIDEO ELEMENT
-  */
+   * PLAYER VIDEO
+   */
 
   $("playerVideo")
     ?.addEventListener(
@@ -3109,15 +4070,6 @@ function bindEvents() {
         if (currentVideo) {
           setupWatchTimer();
         }
-      }
-    );
-
-
-  $("playerVideo")
-    ?.addEventListener(
-      "pause",
-      () => {
-        // Timer checks actual playback state.
       }
     );
 
@@ -3134,20 +4086,31 @@ function bindEvents() {
 
 /* ======================================================
    GLOBAL FUNCTIONS
-   ====================================================== */
+====================================================== */
 
-window.login = login;
-window.register = register;
-window.logout = logout;
+window.login =
+  login;
 
-window.showPage = showPage;
+window.register =
+  register;
 
-window.openVideo = openVideo;
+window.logout =
+  logout;
 
-window.toggleLike = toggleLike;
-window.toggleFollow = toggleFollow;
+window.showPage =
+  showPage;
 
-window.addComment = addComment;
+window.openVideo =
+  openVideo;
+
+window.toggleLike =
+  toggleLike;
+
+window.toggleFollow =
+  toggleFollow;
+
+window.addComment =
+  addComment;
 
 window.reportCurrentVideo =
   reportCurrentVideo;
@@ -3179,9 +4142,11 @@ window.applyMonetization =
 ====================================================== */
 
 async function initApp() {
+
   console.log(
-    "DekhoEarn Frontend v3.1.2 starting..."
+    "DekhoEarn Frontend v3.1.3 starting..."
   );
+
 
   bindEvents();
 
@@ -3189,7 +4154,9 @@ async function initApp() {
 
   registerServiceWorker();
 
+
   await loadSession();
+
 
   console.log(
     "DekhoEarn Frontend initialized."
@@ -3205,6 +4172,7 @@ if (
   document.readyState ===
   "loading"
 ) {
+
   document.addEventListener(
     "DOMContentLoaded",
     initApp,
@@ -3212,6 +4180,8 @@ if (
       once: true
     }
   );
+
 } else {
+
   initApp();
 }
