@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+
   <meta charset="UTF-8">
 
   <meta
@@ -15,23 +16,57 @@
 
   <meta
     name="description"
-    content="DekhoEarn - Watch videos, earn points and share."
+    content="DekhoEarn - Watch videos, earn points and rewards."
   >
+
+  <meta
+    name="mobile-web-app-capable"
+    content="yes"
+  >
+
+  <meta
+    name="apple-mobile-web-app-capable"
+    content="yes"
+  >
+
+  <meta
+    name="apple-mobile-web-app-status-bar-style"
+    content="default"
+  >
+
+  <meta
+    name="apple-mobile-web-app-title"
+    content="DekhoEarn"
+  >
+
+
+  <!-- =================================================
+       PWA MANIFEST
+  ================================================== -->
 
   <link
     rel="manifest"
     href="/manifest.json"
   >
 
+
+  <!-- =================================================
+       STYLESHEET
+  ================================================== -->
+
   <link
     rel="stylesheet"
-    href="/style.css?v=3.1.1"
+    href="/style.css?v=3.1.4"
   >
 
+
   <title>DekhoEarn</title>
+
 </head>
 
+
 <body>
+
 
 <!-- =====================================================
      AUTH SCREEN
@@ -43,6 +78,7 @@
 >
 
   <div class="auth-container">
+
 
     <!-- BRAND -->
 
@@ -76,9 +112,10 @@
         Welcome back
       </h2>
 
+
       <div class="field">
 
-        <label>
+        <label for="loginUsername">
           Username
         </label>
 
@@ -88,6 +125,7 @@
           autocomplete="username"
           autocapitalize="none"
           spellcheck="false"
+          maxlength="50"
           placeholder="Enter username"
         >
 
@@ -96,7 +134,7 @@
 
       <div class="field">
 
-        <label>
+        <label for="loginPassword">
           Password
         </label>
 
@@ -152,7 +190,7 @@
 
       <div class="field">
 
-        <label>
+        <label for="registerName">
           Your Name
         </label>
 
@@ -160,6 +198,7 @@
           id="registerName"
           type="text"
           autocomplete="name"
+          maxlength="100"
           placeholder="Enter your name"
         >
 
@@ -168,7 +207,7 @@
 
       <div class="field">
 
-        <label>
+        <label for="registerUsername">
           Username
         </label>
 
@@ -178,6 +217,7 @@
           autocomplete="username"
           autocapitalize="none"
           spellcheck="false"
+          maxlength="50"
           placeholder="Choose username"
         >
 
@@ -186,7 +226,7 @@
 
       <div class="field">
 
-        <label>
+        <label for="registerPassword">
           Password
         </label>
 
@@ -202,7 +242,7 @@
 
       <div class="field">
 
-        <label>
+        <label for="registerReferral">
 
           Referral Code
 
@@ -217,6 +257,7 @@
           type="text"
           autocapitalize="none"
           spellcheck="false"
+          maxlength="50"
           placeholder="Referral code"
         >
 
@@ -326,6 +367,8 @@
         id="refreshFeedBtn"
         type="button"
         class="icon-btn"
+        aria-label="Refresh videos"
+        title="Refresh"
       >
         ↻
       </button>
@@ -477,7 +520,9 @@
     </div>
 
 
-    <!-- COMMENTS -->
+    <!-- =================================================
+         COMMENTS
+    ================================================== -->
 
     <div class="comments-section">
 
@@ -492,6 +537,7 @@
           id="commentInput"
           type="text"
           maxlength="1000"
+          autocomplete="off"
           placeholder="Write a comment..."
         >
 
@@ -544,7 +590,9 @@
     <div class="earn-grid">
 
 
-      <!-- DAILY -->
+      <!-- =================================================
+           DAILY REWARD
+      ================================================== -->
 
       <div class="earn-card">
 
@@ -574,7 +622,9 @@
       </div>
 
 
-      <!-- REWARDED AD -->
+      <!-- =================================================
+           REWARDED AD
+      ================================================== -->
 
       <div class="earn-card">
 
@@ -606,7 +656,9 @@
     </div>
 
 
-    <!-- POINTS HISTORY -->
+    <!-- =================================================
+         POINTS HISTORY
+    ================================================== -->
 
     <div class="points-history">
 
@@ -652,10 +704,13 @@
 
     <div class="upload-card">
 
+      <!-- VIDEO SELECT -->
+
       <div class="video-picker">
 
         <label
           class="video-select-box"
+          for="videoFile"
         >
 
           <input
@@ -690,7 +745,9 @@
       </div>
 
 
-      <!-- PREVIEW -->
+      <!-- =================================================
+           VIDEO PREVIEW
+      ================================================== -->
 
       <div
         id="uploadPreview"
@@ -707,11 +764,13 @@
       </div>
 
 
-      <!-- TITLE -->
+      <!-- =================================================
+           TITLE
+      ================================================== -->
 
       <div class="field">
 
-        <label>
+        <label for="videoTitle">
           Video Title
         </label>
 
@@ -726,11 +785,13 @@
       </div>
 
 
-      <!-- DESCRIPTION -->
+      <!-- =================================================
+           DESCRIPTION
+      ================================================== -->
 
       <div class="field">
 
-        <label>
+        <label for="videoDescription">
           Description
         </label>
 
@@ -744,11 +805,14 @@
       </div>
 
 
-      <!-- UPLOAD PROGRESS -->
+      <!-- =================================================
+           UPLOAD PROGRESS
+      ================================================== -->
 
       <div
         id="uploadProgressBox"
         class="upload-progress hidden"
+        aria-live="polite"
       >
 
         <div class="progress-text">
@@ -774,12 +838,17 @@
           <div
             id="uploadProgressBar"
             class="progress-bar"
+            style="width:0%;"
           ></div>
 
         </div>
 
       </div>
 
+
+      <!-- =================================================
+           UPLOAD BUTTON
+      ================================================== -->
 
       <button
         id="uploadVideoBtn"
@@ -874,7 +943,9 @@
       </div>
 
 
-      <!-- PROFILE ACTIONS -->
+      <!-- =================================================
+           PROFILE ACTIONS
+      ================================================== -->
 
       <div class="profile-actions">
 
@@ -918,7 +989,9 @@
     </div>
 
 
-    <!-- MY VIDEOS -->
+    <!-- =================================================
+         MY VIDEOS
+    ================================================== -->
 
     <div
       id="myVideosContainer"
@@ -987,6 +1060,7 @@
 
   <nav
     class="bottom-nav"
+    aria-label="Main navigation"
   >
 
     <button
@@ -1046,17 +1120,59 @@
 <div
   id="toast"
   class="toast"
+  role="status"
+  aria-live="polite"
 ></div>
 
 
 <!-- =====================================================
-     JAVASCRIPT
+     APP JAVASCRIPT
 ====================================================== -->
 
 <script
-  src="/app.js?v=3.1.1"
+  src="/app.js?v=3.1.4"
   defer
 ></script>
+
+
+<!-- =====================================================
+     SERVICE WORKER
+====================================================== -->
+
+<script>
+
+  if ("serviceWorker" in navigator) {
+
+    window.addEventListener(
+      "load",
+      () => {
+
+        navigator.serviceWorker
+          .register("/sw.js?v=3.1.4")
+          .then(registration => {
+
+            console.log(
+              "DekhoEarn Service Worker registered:",
+              registration.scope
+            );
+
+          })
+          .catch(error => {
+
+            console.error(
+              "Service Worker registration failed:",
+              error
+            );
+
+          });
+
+      }
+    );
+
+  }
+
+</script>
+
 
 </body>
 </html>
