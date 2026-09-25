@@ -1,7 +1,7 @@
 {
   "name": "dekhoearn",
-  "version": "3.1.0",
-  "description": "DekhoEarn video earning platform",
+  "version": "3.1.4",
+  "description": "DekhoEarn - Watch content, earn points and rewards",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -10,8 +10,12 @@
     "node": ">=20"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "cloudinary": "^2.7.0",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.2",
     "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
     "pg": "^8.16.3"
   }
 }
