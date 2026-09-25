@@ -3,31 +3,35 @@
 /*
 =========================================================
  DEKHOEARN FRONTEND
- Version 3.1.4 FINAL
+ Version 3.2.0 FINAL
  --------------------------------------------------------
  Compatible with:
- - DekhoEarn Server v3.1.3+
+ - DekhoEarn Server v3.2.0+
  - Secure Bearer Authentication
+ - Neon PostgreSQL
+ - Cloudinary Signed Video Upload
  - Video Feed
  - Watch Rewards
  - Likes / Comments / Reports
- - Follow / Subscribe System
- - Daily Reward
- - Rewarded Ad Demo
+ - Follow / Subscribe
+ - Daily Rewards
+ - Rewarded Ads
  - Points History
  - Watch History
  - Gallery Video Upload
- - Cloudinary Signed Upload
  - Upload Progress
  - 100 MB Video Limit
  - My Videos
  - Creator Dashboard
  - Creator Monetization
  - Payout Account Foundation
+ - Admin-ready API
  - PWA Install
  - Mobile Handling
 =========================================================
 */
+
+"use strict";
 
 const API_BASE = "";
 
@@ -43,11 +47,14 @@ const MIN_WATCH_SECONDS = 10;
 
 let currentUser = null;
 let currentVideo = null;
+
 let watchTimer = null;
 let watchSeconds = 0;
 let watchRewardSent = false;
+
 let deferredPrompt = null;
 let uploadInProgress = false;
+let appInitialized = false;
 
 
 /* ======================================================
@@ -67,7 +74,9 @@ function qsa(selector) {
 }
 
 function escapeHTML(value) {
-    if (value === null || value === undefined) return "";
+    if (value === null || value === undefined) {
+        return "";
+    }
 
     return String(value)
         .replace(/&/g, "&amp;")
@@ -91,14 +100,23 @@ function getToken() {
 
 function saveToken(token) {
     if (token) {
-        localStorage.setItem(STORAGE.TOKEN, token);
-    } else {
-        localStorage.removeItem(STORAGE.TOKEN);
+        localStorage.setItem(
+            STORAGE.TOKEN,
+            token
+        );
     }
 }
 
+function removeToken() {
+    localStorage.removeItem(
+        STORAGE.TOKEN
+    );
+}
+
 function saveUser(user) {
-    if (!user) return;
+    if (!user) {
+        return;
+    }
 
     currentUser = user;
 
@@ -114,20 +132,31 @@ function saveUser(user) {
         );
     }
 
-    if (user.first_name || user.name) {
+    const firstName =
+        user.first_name ||
+        user.name ||
+        "";
+
+    if (firstName) {
         localStorage.setItem(
             STORAGE.FIRST_NAME,
-            user.first_name || user.name
+            firstName
         );
     }
 }
 
 function loadSavedUser() {
-    const raw = localStorage.getItem(STORAGE.USER);
+    const raw =
+        localStorage.getItem(
+            STORAGE.USER
+        );
 
-    if (!raw) return null;
+    if (!raw) {
+        return null;
+    }
 
-    const user = safeJSON(raw, null);
+    const user =
+        safeJSON(raw, null);
 
     if (user) {
         currentUser = user;
@@ -140,93 +169,152 @@ function clearSession() {
     currentUser = null;
     currentVideo = null;
 
-    localStorage.removeItem(STORAGE.TOKEN);
-    localStorage.removeItem(STORAGE.USER);
-    localStorage.removeItem(STORAGE.USERNAME);
-    localStorage.removeItem(STORAGE.FIRST_NAME);
+    stopWatchTimer();
+
+    localStorage.removeItem(
+        STORAGE.TOKEN
+    );
+
+    localStorage.removeItem(
+        STORAGE.USER
+    );
+
+    localStorage.removeItem(
+        STORAGE.USERNAME
+    );
+
+    localStorage.removeItem(
+        STORAGE.FIRST_NAME
+    );
 }
 
-function showMessage(message, type = "info") {
+function showMessage(
+    message,
+    type = "info"
+) {
     const box =
         $("messageBox") ||
         $("toast") ||
         $("statusMessage");
 
-    if (box) {
-        box.textContent = message;
-        box.className = `message ${type}`;
-        box.style.display = "block";
-
-        setTimeout(() => {
-            box.style.display = "none";
-        }, 3500);
-
+    if (!box) {
+        console.log(
+            `[DekhoEarn ${type}]`,
+            message
+        );
         return;
     }
 
-    alert(message);
+    box.textContent = message;
+
+    box.className =
+        `message ${type}`;
+
+    box.style.display = "block";
+
+    clearTimeout(
+        box._dekhoearnTimer
+    );
+
+    box._dekhoearnTimer =
+        setTimeout(() => {
+            box.style.display = "none";
+        }, 3500);
 }
 
-function formatNumber(number) {
-    const n = Number(number || 0);
+function formatNumber(value) {
+    const number =
+        Number(value || 0);
 
-    if (n >= 1000000) {
-        return (n / 1000000).toFixed(1) + "M";
+    if (number >= 1000000) {
+        return (
+            number / 1000000
+        ).toFixed(1) + "M";
     }
 
-    if (n >= 1000) {
-        return (n / 1000).toFixed(1) + "K";
+    if (number >= 1000) {
+        return (
+            number / 1000
+        ).toFixed(1) + "K";
     }
 
-    return String(n);
+    return String(number);
 }
 
 function formatDuration(seconds) {
-    const total = Math.max(0, Number(seconds || 0));
+    const total =
+        Math.max(
+            0,
+            Number(seconds || 0)
+        );
 
-    const h = Math.floor(total / 3600);
-    const m = Math.floor((total % 3600) / 60);
-    const s = Math.floor(total % 60);
+    const hours =
+        Math.floor(
+            total / 3600
+        );
 
-    if (h > 0) {
+    const minutes =
+        Math.floor(
+            (total % 3600) / 60
+        );
+
+    const secs =
+        Math.floor(
+            total % 60
+        );
+
+    if (hours > 0) {
         return (
-            String(h).padStart(2, "0") +
+            String(hours).padStart(2, "0") +
             ":" +
-            String(m).padStart(2, "0") +
+            String(minutes).padStart(2, "0") +
             ":" +
-            String(s).padStart(2, "0")
+            String(secs).padStart(2, "0")
         );
     }
 
     return (
-        String(m).padStart(2, "0") +
+        String(minutes).padStart(2, "0") +
         ":" +
-        String(s).padStart(2, "0")
+        String(secs).padStart(2, "0")
     );
 }
 
-function formatDate(dateValue) {
-    if (!dateValue) return "";
-
-    const date = new Date(dateValue);
-
-    if (Number.isNaN(date.getTime())) {
-        return String(dateValue);
+function formatDate(value) {
+    if (!value) {
+        return "";
     }
 
-    return date.toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric"
-    });
+    const date =
+        new Date(value);
+
+    if (
+        Number.isNaN(
+            date.getTime()
+        )
+    ) {
+        return String(value);
+    }
+
+    return date.toLocaleDateString(
+        "en-IN",
+        {
+            day: "2-digit",
+            month: "short",
+            year: "numeric"
+        }
+    );
 }
 
 
 /* ======================================================
-   API
+   API HELPER
 ====================================================== */
 
-async function api(path, options = {}) {
+async function api(
+    path,
+    options = {}
+) {
     const headers = {
         ...(options.headers || {})
     };
@@ -236,30 +324,58 @@ async function api(path, options = {}) {
         !(options.body instanceof FormData) &&
         !headers["Content-Type"]
     ) {
-        headers["Content-Type"] = "application/json";
+        headers["Content-Type"] =
+            "application/json";
     }
 
-    const token = getToken();
+    const token =
+        getToken();
 
     if (token) {
-        headers.Authorization = `Bearer ${token}`;
-        headers["x-auth-token"] = token;
+        headers.Authorization =
+            `Bearer ${token}`;
+
+        /*
+         * Kept for compatibility with
+         * older DekhoEarn server builds.
+         */
+        headers["x-auth-token"] =
+            token;
     }
 
-    const response = await fetch(
-        API_BASE + path,
-        {
-            ...options,
-            headers
-        }
-    );
+    let response;
 
-    const text = await response.text();
+    try {
+        response =
+            await fetch(
+                API_BASE + path,
+                {
+                    ...options,
+                    headers
+                }
+            );
+    } catch (error) {
+        const networkError =
+            new Error(
+                "Network error. Please check your internet connection."
+            );
+
+        networkError.original =
+            error;
+
+        throw networkError;
+    }
+
+    const text =
+        await response.text();
 
     let data = {};
 
     try {
-        data = text ? JSON.parse(text) : {};
+        data =
+            text
+                ? JSON.parse(text)
+                : {};
     } catch {
         data = {
             message: text
@@ -267,13 +383,16 @@ async function api(path, options = {}) {
     }
 
     if (!response.ok) {
-        const error = new Error(
-            data.message ||
-            data.error ||
-            `Request failed (${response.status})`
-        );
+        const error =
+            new Error(
+                data.message ||
+                data.error ||
+                `Request failed (${response.status})`
+            );
 
-        error.status = response.status;
+        error.status =
+            response.status;
+
         error.data = data;
 
         throw error;
@@ -287,18 +406,24 @@ async function api(path, options = {}) {
    AUTH
 ====================================================== */
 
-async function registerUser(username, firstName, email = "") {
-    const data = await api(
-        "/api/auth/register",
-        {
-            method: "POST",
-            body: JSON.stringify({
-                username,
-                first_name: firstName,
-                email
-            })
-        }
-    );
+async function registerUser(
+    username,
+    firstName,
+    email = ""
+) {
+    const data =
+        await api(
+            "/api/auth/register",
+            {
+                method: "POST",
+                body: JSON.stringify({
+                    username,
+                    first_name:
+                        firstName,
+                    email
+                })
+            }
+        );
 
     if (data.token) {
         saveToken(data.token);
@@ -307,7 +432,7 @@ async function registerUser(username, firstName, email = "") {
     const user =
         data.user ||
         data.account ||
-        data;
+        null;
 
     if (user) {
         saveUser(user);
@@ -316,17 +441,21 @@ async function registerUser(username, firstName, email = "") {
     return data;
 }
 
-async function loginUser(username, password = "") {
-    const data = await api(
-        "/api/auth/login",
-        {
-            method: "POST",
-            body: JSON.stringify({
-                username,
-                password
-            })
-        }
-    );
+async function loginUser(
+    username,
+    password = ""
+) {
+    const data =
+        await api(
+            "/api/auth/login",
+            {
+                method: "POST",
+                body: JSON.stringify({
+                    username,
+                    password
+                })
+            }
+        );
 
     if (data.token) {
         saveToken(data.token);
@@ -335,7 +464,7 @@ async function loginUser(username, password = "") {
     const user =
         data.user ||
         data.account ||
-        data;
+        null;
 
     if (user) {
         saveUser(user);
@@ -345,23 +474,30 @@ async function loginUser(username, password = "") {
 }
 
 async function getCurrentUser() {
-    if (!getToken()) {
+    const token =
+        getToken();
+
+    if (!token) {
         return null;
     }
 
     try {
-        const data = await api("/api/auth/me");
+        const data =
+            await api(
+                "/api/auth/me"
+            );
 
         const user =
             data.user ||
             data.account ||
-            data;
+            null;
 
         if (user) {
             saveUser(user);
         }
 
         return user;
+
     } catch (error) {
         if (
             error.status === 401 ||
@@ -384,14 +520,18 @@ async function logoutUser() {
                 }
             );
         }
-    } catch {
-        // Session is cleared locally even if server logout fails.
+    } catch (error) {
+        console.warn(
+            "Logout API error:",
+            error
+        );
     }
 
     clearSession();
 
-    showPage("home");
     updateUserUI();
+
+    showPage("home");
 
     showMessage(
         "Logged out successfully.",
@@ -401,45 +541,47 @@ async function logoutUser() {
 
 
 /* ======================================================
-   USER CREATION / OLD COMPATIBILITY
+   USER / SESSION
 ====================================================== */
 
 async function ensureUser() {
     if (getToken()) {
-        const me = await getCurrentUser();
+        const user =
+            await getCurrentUser();
 
-        if (me) {
-            return me;
+        if (user) {
+            return user;
         }
     }
 
-    const saved = loadSavedUser();
-
-    if (saved) {
-        return saved;
-    }
-
-    return null;
+    return loadSavedUser();
 }
 
-async function createUserFromLegacy(username, firstName) {
-    const params = new URLSearchParams(
-        window.location.search
-    );
+async function createUserFromLegacy(
+    username,
+    firstName
+) {
+    const params =
+        new URLSearchParams(
+            window.location.search
+        );
 
-    const ref = params.get("ref");
+    const ref =
+        params.get("ref");
 
-    const data = await api(
-        "/api/user",
-        {
-            method: "POST",
-            body: JSON.stringify({
-                username,
-                first_name: firstName,
-                ref
-            })
-        }
-    );
+    const data =
+        await api(
+            "/api/user",
+            {
+                method: "POST",
+                body: JSON.stringify({
+                    username,
+                    first_name:
+                        firstName,
+                    ref
+                })
+            }
+        );
 
     if (data.token) {
         saveToken(data.token);
@@ -448,7 +590,7 @@ async function createUserFromLegacy(username, firstName) {
     const user =
         data.user ||
         data.account ||
-        data;
+        null;
 
     if (user) {
         saveUser(user);
@@ -459,11 +601,12 @@ async function createUserFromLegacy(username, firstName) {
 
 
 /* ======================================================
-   UI USER DATA
+   USER UI
 ====================================================== */
 
 function updateUserUI() {
-    const user = currentUser;
+    const user =
+        currentUser;
 
     const name =
         user?.first_name ||
@@ -484,43 +627,58 @@ function updateUserUI() {
 
     qsa(
         "[data-user-name], .user-name"
-    ).forEach(el => {
-        el.textContent = name;
-    });
+    ).forEach(
+        element => {
+            element.textContent =
+                name;
+        }
+    );
 
     qsa(
         "[data-username], .username"
-    ).forEach(el => {
-        el.textContent = username
-            ? "@" + username
-            : "";
-    });
+    ).forEach(
+        element => {
+            element.textContent =
+                username
+                    ? "@" + username
+                    : "";
+        }
+    );
 
     qsa(
         "[data-points], .points-value"
-    ).forEach(el => {
-        el.textContent = formatNumber(points);
-    });
+    ).forEach(
+        element => {
+            element.textContent =
+                formatNumber(points);
+        }
+    );
 
     qsa(
         "[data-followers]"
-    ).forEach(el => {
-        el.textContent = formatNumber(
-            user?.followers_count ||
-            user?.followers ||
-            0
-        );
-    });
+    ).forEach(
+        element => {
+            element.textContent =
+                formatNumber(
+                    user?.followers_count ??
+                    user?.followers ??
+                    0
+                );
+        }
+    );
 
     qsa(
         "[data-following]"
-    ).forEach(el => {
-        el.textContent = formatNumber(
-            user?.following_count ||
-            user?.following ||
-            0
-        );
-    });
+    ).forEach(
+        element => {
+            element.textContent =
+                formatNumber(
+                    user?.following_count ??
+                    user?.following ??
+                    0
+                );
+        }
+    );
 
     const avatar =
         user?.avatar_url ||
@@ -529,14 +687,18 @@ function updateUserUI() {
 
     qsa(
         "[data-user-avatar], .user-avatar"
-    ).forEach(el => {
-        if (
-            el.tagName === "IMG" &&
-            avatar
-        ) {
-            el.src = avatar;
+    ).forEach(
+        element => {
+            if (
+                element.tagName === "IMG"
+            ) {
+                if (avatar) {
+                    element.src =
+                        avatar;
+                }
+            }
         }
-    });
+    );
 }
 
 
@@ -544,7 +706,9 @@ function updateUserUI() {
    PAGE NAVIGATION
 ====================================================== */
 
-function showPage(pageName) {
+function showPage(
+    pageName
+) {
     const pageMap = {
         home: [
             "homePage",
@@ -578,24 +742,41 @@ function showPage(pageName) {
 
     qsa(
         ".page, .app-page, [data-page]"
-    ).forEach(page => {
-        page.style.display = "none";
-        page.classList.remove("active");
-    });
+    ).forEach(
+        page => {
+            page.style.display =
+                "none";
+
+            page.classList.remove(
+                "active"
+            );
+        }
+    );
 
     const ids =
         pageMap[pageName] ||
         [];
 
-    let shown = false;
+    let shown =
+        false;
 
-    for (const id of ids) {
-        const page = $(id);
+    for (
+        const id of ids
+    ) {
+        const page =
+            $(id);
 
         if (page) {
-            page.style.display = "block";
-            page.classList.add("active");
-            shown = true;
+            page.style.display =
+                "block";
+
+            page.classList.add(
+                "active"
+            );
+
+            shown =
+                true;
+
             break;
         }
     }
@@ -606,9 +787,15 @@ function showPage(pageName) {
         );
 
     if (generic) {
-        generic.style.display = "block";
-        generic.classList.add("active");
-        shown = true;
+        generic.style.display =
+            "block";
+
+        generic.classList.add(
+            "active"
+        );
+
+        shown =
+            true;
     }
 
     if (!shown) {
@@ -620,33 +807,44 @@ function showPage(pageName) {
 
     qsa(
         "[data-nav]"
-    ).forEach(button => {
-        button.classList.toggle(
-            "active",
-            button.dataset.nav === pageName
-        );
-    });
+    ).forEach(
+        button => {
+            button.classList.toggle(
+                "active",
+                button.dataset.nav ===
+                    pageName
+            );
+        }
+    );
 
     window.scrollTo({
         top: 0,
         behavior: "smooth"
     });
 
-    if (pageName === "home" ||
-        pageName === "watch") {
+    if (
+        pageName === "home" ||
+        pageName === "watch"
+    ) {
         loadVideos();
     }
 
-    if (pageName === "earn") {
+    if (
+        pageName === "earn"
+    ) {
         loadPointsHistory();
     }
 
-    if (pageName === "profile") {
+    if (
+        pageName === "profile"
+    ) {
         loadWatchHistory();
         loadMyVideos();
     }
 
-    if (pageName === "creator") {
+    if (
+        pageName === "creator"
+    ) {
         loadCreatorDashboard();
     }
 }
@@ -656,8 +854,12 @@ function showPage(pageName) {
    VIDEO NORMALIZATION
 ====================================================== */
 
-function normalizeVideo(video) {
-    if (!video) return null;
+function normalizeVideo(
+    video
+) {
+    if (!video) {
+        return null;
+    }
 
     return {
         ...video,
@@ -760,15 +962,20 @@ async function loadVideos() {
         return;
     }
 
-    containers.forEach(container => {
-        container.innerHTML =
-            `<div class="loading">Loading videos...</div>`;
-    });
+    containers.forEach(
+        container => {
+            container.innerHTML =
+                `<div class="loading">
+                    Loading videos...
+                 </div>`;
+        }
+    );
 
     try {
-        const data = await api(
-            "/api/videos"
-        );
+        const data =
+            await api(
+                "/api/videos"
+            );
 
         let videos =
             data.videos ||
@@ -782,31 +989,46 @@ async function loadVideos() {
 
         videos =
             videos
-                .map(normalizeVideo)
-                .filter(Boolean);
+                .map(
+                    normalizeVideo
+                )
+                .filter(Boolean)
+                .filter(
+                    video =>
+                        video.id &&
+                        video.video_url
+                );
 
-        containers.forEach(container => {
-            renderVideoFeed(
-                container,
-                videos
-            );
-        });
+        containers.forEach(
+            container => {
+                renderVideoFeed(
+                    container,
+                    videos
+                );
+            }
+        );
+
     } catch (error) {
         console.error(
             "VIDEO FEED ERROR:",
             error
         );
 
-        containers.forEach(container => {
-            container.innerHTML =
-                `<div class="empty-state">
-                    Unable to load videos.
-                 </div>`;
-        });
+        containers.forEach(
+            container => {
+                container.innerHTML =
+                    `<div class="empty-state">
+                        Unable to load videos.
+                     </div>`;
+            }
+        );
     }
 }
 
-function renderVideoFeed(container, videos) {
+function renderVideoFeed(
+    container,
+    videos
+) {
     if (!videos.length) {
         container.innerHTML =
             `<div class="empty-state">
@@ -829,6 +1051,7 @@ function renderVideoFeed(container, videos) {
                     onclick="openVideo('${escapeHTML(video.id)}')"
                 >
                     <div class="video-thumb">
+
                         ${
                             thumbnail
                             ? `
@@ -843,6 +1066,7 @@ function renderVideoFeed(container, videos) {
                                     src="${escapeHTML(video.video_url)}"
                                     muted
                                     preload="metadata"
+                                    playsinline
                                 ></video>
                             `
                         }
@@ -850,20 +1074,24 @@ function renderVideoFeed(container, videos) {
                         <span class="video-views">
                             ${formatNumber(video.views)} views
                         </span>
+
                     </div>
 
                     <div class="video-info">
+
                         <h3>
                             ${escapeHTML(video.title)}
                         </h3>
 
                         <div class="video-creator">
+
                             ${
                                 video.creator_avatar
                                 ? `
                                     <img
                                         src="${escapeHTML(video.creator_avatar)}"
                                         alt=""
+                                        loading="lazy"
                                     >
                                 `
                                 : ""
@@ -874,9 +1102,11 @@ function renderVideoFeed(container, videos) {
                                     video.creator_name
                                 )}
                             </span>
+
                         </div>
 
                         <div class="video-stats">
+
                             <span>
                                 ❤️ ${formatNumber(video.likes)}
                             </span>
@@ -884,7 +1114,9 @@ function renderVideoFeed(container, videos) {
                             <span>
                                 💬 ${formatNumber(video.comments)}
                             </span>
+
                         </div>
+
                     </div>
                 </article>
                 `;
@@ -897,16 +1129,27 @@ function renderVideoFeed(container, videos) {
    OPEN VIDEO
 ====================================================== */
 
-async function openVideo(videoId) {
+async function openVideo(
+    videoId
+) {
     stopWatchTimer();
 
     watchSeconds = 0;
     watchRewardSent = false;
 
+    updateWatchProgress();
+
+    if (!videoId) {
+        return;
+    }
+
     try {
-        const data = await api(
-            `/api/videos/${encodeURIComponent(videoId)}`
-        );
+        const data =
+            await api(
+                `/api/videos/${encodeURIComponent(
+                    videoId
+                )}`
+            );
 
         currentVideo =
             normalizeVideo(
@@ -922,7 +1165,9 @@ async function openVideo(videoId) {
 
         showPage("player");
 
-        renderPlayer(currentVideo);
+        renderPlayer(
+            currentVideo
+        );
 
     } catch (error) {
         console.error(
@@ -938,7 +1183,9 @@ async function openVideo(videoId) {
     }
 }
 
-function renderPlayer(video) {
+function renderPlayer(
+    video
+) {
     const player =
         $("videoPlayer") ||
         $("playerVideo");
@@ -970,50 +1217,83 @@ function renderPlayer(video) {
 
     if (views) {
         views.textContent =
-            formatNumber(video.views);
+            formatNumber(
+                video.views
+            );
     }
 
     if (likes) {
         likes.textContent =
-            formatNumber(video.likes);
+            formatNumber(
+                video.likes
+            );
     }
 
     if (comments) {
         comments.textContent =
-            formatNumber(video.comments);
+            formatNumber(
+                video.comments
+            );
     }
 
     if (player) {
         player.pause();
 
-        player.src =
-            video.video_url;
+        player.removeAttribute(
+            "src"
+        );
 
         player.load();
 
-        player.onplay = () => {
-            startWatchTimer();
-        };
+        player.src =
+            video.video_url;
 
-        player.onpause = () => {
-            stopWatchTimer();
-        };
+        player.setAttribute(
+            "playsinline",
+            ""
+        );
 
-        player.onended = () => {
-            stopWatchTimer();
-        };
+        player.setAttribute(
+            "webkit-playsinline",
+            ""
+        );
+
+        player.onplay =
+            startWatchTimer;
+
+        player.onpause =
+            stopWatchTimer;
+
+        player.onended =
+            stopWatchTimer;
+
+        player.onerror =
+            () => {
+                showMessage(
+                    "Unable to play this video.",
+                    "error"
+                );
+            };
+
+        player.load();
     }
 
-    updateLikeButton(video);
+    updateLikeButton(
+        video
+    );
 
-    updateFollowButton(video);
+    updateFollowButton(
+        video
+    );
 
-    loadComments(video.id);
+    loadComments(
+        video.id
+    );
 }
 
 
 /* ======================================================
-   WATCH REWARD
+   WATCH TIMER
 ====================================================== */
 
 function startWatchTimer() {
@@ -1021,26 +1301,31 @@ function startWatchTimer() {
         return;
     }
 
-    watchTimer = setInterval(
-        () => {
-            watchSeconds++;
+    watchTimer =
+        setInterval(
+            () => {
+                watchSeconds++;
 
-            updateWatchProgress();
+                updateWatchProgress();
 
-            if (
-                watchSeconds >= MIN_WATCH_SECONDS &&
-                !watchRewardSent
-            ) {
-                completeWatchReward();
-            }
-        },
-        1000
-    );
+                if (
+                    watchSeconds >=
+                        MIN_WATCH_SECONDS &&
+                    !watchRewardSent
+                ) {
+                    completeWatchReward();
+                }
+            },
+            1000
+        );
 }
 
 function stopWatchTimer() {
     if (watchTimer) {
-        clearInterval(watchTimer);
+        clearInterval(
+            watchTimer
+        );
+
         watchTimer = null;
     }
 }
@@ -1049,18 +1334,26 @@ function updateWatchProgress() {
     const progress =
         $("watchProgress");
 
-    if (progress) {
-        const percentage =
-            Math.min(
-                100,
-                (
-                    watchSeconds /
-                    MIN_WATCH_SECONDS
-                ) * 100
-            );
+    const percent =
+        Math.min(
+            100,
+            (
+                watchSeconds /
+                MIN_WATCH_SECONDS
+            ) * 100
+        );
 
-        progress.style.width =
-            percentage + "%";
+    if (progress) {
+        if (
+            progress.tagName ===
+            "PROGRESS"
+        ) {
+            progress.value =
+                percent;
+        } else {
+            progress.style.width =
+                percent + "%";
+        }
     }
 
     const counter =
@@ -1075,6 +1368,11 @@ function updateWatchProgress() {
     }
 }
 
+
+/* ======================================================
+   WATCH REWARD
+====================================================== */
+
 async function completeWatchReward() {
     if (
         !currentVideo ||
@@ -1086,16 +1384,19 @@ async function completeWatchReward() {
     watchRewardSent = true;
 
     try {
-        const data = await api(
-            "/api/watch/complete",
-            {
-                method: "POST",
-                body: JSON.stringify({
-                    video_id: currentVideo.id,
-                    watch_seconds: watchSeconds
-                })
-            }
-        );
+        const data =
+            await api(
+                "/api/watch/complete",
+                {
+                    method: "POST",
+                    body: JSON.stringify({
+                        video_id:
+                            currentVideo.id,
+                        watch_seconds:
+                            watchSeconds
+                    })
+                }
+            );
 
         const reward =
             Number(
@@ -1105,13 +1406,20 @@ async function completeWatchReward() {
                 0
             );
 
-        if (currentUser) {
+        if (
+            currentUser &&
+            reward > 0
+        ) {
             currentUser.points =
                 Number(
-                    currentUser.points || 0
+                    currentUser.points ||
+                    0
                 ) + reward;
 
-            saveUser(currentUser);
+            saveUser(
+                currentUser
+            );
+
             updateUserUI();
         }
 
@@ -1137,7 +1445,7 @@ async function completeWatchReward() {
 
 
 /* ======================================================
-   LIKE / UNLIKE
+   LIKE
 ====================================================== */
 
 async function toggleLike() {
@@ -1146,14 +1454,15 @@ async function toggleLike() {
     }
 
     try {
-        const data = await api(
-            `/api/videos/${encodeURIComponent(
-                currentVideo.id
-            )}/like`,
-            {
-                method: "POST"
-            }
-        );
+        const data =
+            await api(
+                `/api/videos/${encodeURIComponent(
+                    currentVideo.id
+                )}/like`,
+                {
+                    method: "POST"
+                }
+            );
 
         currentVideo.liked =
             Boolean(
@@ -1166,14 +1475,12 @@ async function toggleLike() {
             Number(
                 data.likes ??
                 data.like_count ??
-                (
-                    currentVideo.likes +
+                currentVideo.likes +
                     (
                         currentVideo.liked
                             ? 1
                             : -1
                     )
-                )
             );
 
         updateLikeButton(
@@ -1194,23 +1501,27 @@ async function toggleLike() {
     }
 }
 
-function updateLikeButton(video) {
+function updateLikeButton(
+    video
+) {
     const buttons = [
         $("likeButton"),
         $("btnLike")
     ].filter(Boolean);
 
-    buttons.forEach(button => {
-        button.classList.toggle(
-            "liked",
-            Boolean(video.liked)
-        );
+    buttons.forEach(
+        button => {
+            button.classList.toggle(
+                "liked",
+                Boolean(video.liked)
+            );
 
-        button.textContent =
-            video.liked
-                ? `❤️ ${formatNumber(video.likes)}`
-                : `♡ ${formatNumber(video.likes)}`;
-    });
+            button.textContent =
+                video.liked
+                    ? `❤️ ${formatNumber(video.likes)}`
+                    : `♡ ${formatNumber(video.likes)}`;
+        }
+    );
 }
 
 
@@ -1218,7 +1529,9 @@ function updateLikeButton(video) {
    COMMENTS
 ====================================================== */
 
-async function loadComments(videoId) {
+async function loadComments(
+    videoId
+) {
     const container =
         $("commentsList") ||
         $("commentList");
@@ -1233,9 +1546,12 @@ async function loadComments(videoId) {
          </div>`;
 
     try {
-        const data = await api(
-            `/api/videos/${encodeURIComponent(videoId)}/comments`
-        );
+        const data =
+            await api(
+                `/api/videos/${encodeURIComponent(
+                    videoId
+                )}/comments`
+            );
 
         let comments =
             data.comments ||
@@ -1258,8 +1574,10 @@ async function loadComments(videoId) {
 
         container.innerHTML =
             comments
-                .map(comment => `
+                .map(
+                    comment => `
                     <div class="comment-item">
+
                         <strong>
                             ${escapeHTML(
                                 comment.username ||
@@ -1281,8 +1599,10 @@ async function loadComments(videoId) {
                                 comment.created_at
                             )}
                         </small>
+
                     </div>
-                `)
+                    `
+                )
                 .join("");
 
     } catch (error) {
@@ -1310,10 +1630,10 @@ async function addComment() {
         return;
     }
 
-    const text =
+    const comment =
         input.value.trim();
 
-    if (!text) {
+    if (!comment) {
         showMessage(
             "Please write a comment.",
             "error"
@@ -1323,19 +1643,35 @@ async function addComment() {
     }
 
     try {
-        await api(
-            `/api/videos/${encodeURIComponent(
-                currentVideo.id
-            )}/comments`,
-            {
-                method: "POST",
-                body: JSON.stringify({
-                    comment: text
-                })
-            }
-        );
+        const data =
+            await api(
+                `/api/videos/${encodeURIComponent(
+                    currentVideo.id
+                )}/comments`,
+                {
+                    method: "POST",
+                    body: JSON.stringify({
+                        comment
+                    })
+                }
+            );
 
         input.value = "";
+
+        currentVideo.comments =
+            Number(
+                data.comments ??
+                data.comment_count ??
+                currentVideo.comments + 1
+            );
+
+        if ($("playerComments")) {
+            $("playerComments")
+                .textContent =
+                formatNumber(
+                    currentVideo.comments
+                );
+        }
 
         await loadComments(
             currentVideo.id
@@ -1375,9 +1711,7 @@ async function reportVideo() {
             "Why are you reporting this video?"
         );
 
-    if (
-        reason === null
-    ) {
+    if (reason === null) {
         return;
     }
 
@@ -1401,7 +1735,8 @@ async function reportVideo() {
             {
                 method: "POST",
                 body: JSON.stringify({
-                    reason: cleanReason
+                    reason:
+                        cleanReason
                 })
             }
         );
@@ -1448,14 +1783,15 @@ async function toggleFollow() {
     }
 
     try {
-        const data = await api(
-            `/api/follow/${encodeURIComponent(
-                creatorId
-            )}`,
-            {
-                method: "POST"
-            }
-        );
+        const data =
+            await api(
+                `/api/follow/${encodeURIComponent(
+                    creatorId
+                )}`,
+                {
+                    method: "POST"
+                }
+            );
 
         currentVideo.following =
             Boolean(
@@ -1482,7 +1818,9 @@ async function toggleFollow() {
     }
 }
 
-function updateFollowButton(video) {
+function updateFollowButton(
+    video
+) {
     const buttons = [
         $("followButton"),
         $("subscribeButton"),
@@ -1490,17 +1828,21 @@ function updateFollowButton(video) {
         $("btnSubscribe")
     ].filter(Boolean);
 
-    buttons.forEach(button => {
-        button.classList.toggle(
-            "following",
-            Boolean(video.following)
-        );
+    buttons.forEach(
+        button => {
+            button.classList.toggle(
+                "following",
+                Boolean(
+                    video.following
+                )
+            );
 
-        button.textContent =
-            video.following
-                ? "✓ Subscribed"
-                : "Subscribe";
-    });
+            button.textContent =
+                video.following
+                    ? "✓ Subscribed"
+                    : "Subscribe";
+        }
+    );
 }
 
 
@@ -1514,17 +1856,25 @@ async function claimDailyReward() {
         $("claimDailyButton")
     ].filter(Boolean);
 
+    if (!buttons.length) {
+        return;
+    }
+
     buttons.forEach(
-        button => button.disabled = true
+        button => {
+            button.disabled =
+                true;
+        }
     );
 
     try {
-        const data = await api(
-            "/api/rewards/daily",
-            {
-                method: "POST"
-            }
-        );
+        const data =
+            await api(
+                "/api/rewards/daily",
+                {
+                    method: "POST"
+                }
+            );
 
         const points =
             Number(
@@ -1534,13 +1884,20 @@ async function claimDailyReward() {
                 10
             );
 
-        if (currentUser) {
+        if (
+            currentUser &&
+            points > 0
+        ) {
             currentUser.points =
                 Number(
-                    currentUser.points || 0
+                    currentUser.points ||
+                    0
                 ) + points;
 
-            saveUser(currentUser);
+            saveUser(
+                currentUser
+            );
+
             updateUserUI();
         }
 
@@ -1558,7 +1915,10 @@ async function claimDailyReward() {
 
     } catch (error) {
         buttons.forEach(
-            button => button.disabled = false
+            button => {
+                button.disabled =
+                    false;
+            }
         );
 
         console.error(
@@ -1576,7 +1936,7 @@ async function claimDailyReward() {
 
 
 /* ======================================================
-   REWARDED AD DEMO
+   REWARDED AD
 ====================================================== */
 
 async function claimRewardedAd() {
@@ -1585,29 +1945,27 @@ async function claimRewardedAd() {
         $("rewardAdButton");
 
     if (button) {
-        button.disabled = true;
+        button.disabled =
+            true;
     }
 
     try {
         const confirmed =
             confirm(
-                "Watch the rewarded ad demo to earn points?"
+                "Watch the rewarded ad to earn points?"
             );
 
         if (!confirmed) {
-            if (button) {
-                button.disabled = false;
-            }
-
             return;
         }
 
-        const data = await api(
-            "/api/rewards/ad",
-            {
-                method: "POST"
-            }
-        );
+        const data =
+            await api(
+                "/api/rewards/ad",
+                {
+                    method: "POST"
+                }
+            );
 
         const points =
             Number(
@@ -1617,13 +1975,20 @@ async function claimRewardedAd() {
                 5
             );
 
-        if (currentUser) {
+        if (
+            currentUser &&
+            points > 0
+        ) {
             currentUser.points =
                 Number(
-                    currentUser.points || 0
+                    currentUser.points ||
+                    0
                 ) + points;
 
-            saveUser(currentUser);
+            saveUser(
+                currentUser
+            );
+
             updateUserUI();
         }
 
@@ -1643,9 +2008,11 @@ async function claimRewardedAd() {
             "Rewarded ad unavailable.",
             "error"
         );
+
     } finally {
         if (button) {
-            button.disabled = false;
+            button.disabled =
+                false;
         }
     }
 }
@@ -1670,9 +2037,10 @@ async function loadPointsHistory() {
          </div>`;
 
     try {
-        const data = await api(
-            "/api/points/history"
-        );
+        const data =
+            await api(
+                "/api/points/history"
+            );
 
         let history =
             data.history ||
@@ -1705,6 +2073,7 @@ async function loadPointsHistory() {
 
                     return `
                     <div class="history-item">
+
                         <div>
                             <strong>
                                 ${escapeHTML(
@@ -1724,8 +2093,13 @@ async function loadPointsHistory() {
                         </div>
 
                         <strong>
-                            +${points}
+                            ${
+                                points >= 0
+                                    ? "+"
+                                    : ""
+                            }${points}
                         </strong>
+
                     </div>
                     `;
                 })
@@ -1764,9 +2138,10 @@ async function loadWatchHistory() {
          </div>`;
 
     try {
-        const data = await api(
-            "/api/watch/history"
-        );
+        const data =
+            await api(
+                "/api/watch/history"
+            );
 
         let history =
             data.history ||
@@ -1796,6 +2171,13 @@ async function loadWatchHistory() {
                             item
                         );
 
+                    if (
+                        !video ||
+                        !video.id
+                    ) {
+                        return "";
+                    }
+
                     return `
                     <div
                         class="history-video"
@@ -1803,6 +2185,7 @@ async function loadWatchHistory() {
                             video.id
                         )}')"
                     >
+
                         ${
                             video.thumbnail_url
                             ? `
@@ -1811,12 +2194,14 @@ async function loadWatchHistory() {
                                         video.thumbnail_url
                                     )}"
                                     alt=""
+                                    loading="lazy"
                                 >
                             `
                             : ""
                         }
 
                         <div>
+
                             <strong>
                                 ${escapeHTML(
                                     video.title
@@ -1826,12 +2211,14 @@ async function loadWatchHistory() {
                             <small>
                                 Watched:
                                 ${formatDuration(
-                                    item.watch_seconds ||
-                                    item.watched_seconds ||
+                                    item.watch_seconds ??
+                                    item.watched_seconds ??
                                     0
                                 )}
                             </small>
+
                         </div>
+
                     </div>
                     `;
                 })
@@ -1870,9 +2257,10 @@ async function loadMyVideos() {
          </div>`;
 
     try {
-        const data = await api(
-            "/api/videos/mine"
-        );
+        const data =
+            await api(
+                "/api/videos/mine"
+            );
 
         let videos =
             data.videos ||
@@ -1886,7 +2274,9 @@ async function loadMyVideos() {
 
         videos =
             videos
-                .map(normalizeVideo)
+                .map(
+                    normalizeVideo
+                )
                 .filter(Boolean);
 
         if (!videos.length) {
@@ -1902,12 +2292,14 @@ async function loadMyVideos() {
             videos
                 .map(video => `
                     <div class="my-video-item">
+
                         <div
                             class="my-video-info"
                             onclick="openVideo('${escapeHTML(
                                 video.id
                             )}')"
                         >
+
                             ${
                                 video.thumbnail_url
                                 ? `
@@ -1916,12 +2308,14 @@ async function loadMyVideos() {
                                             video.thumbnail_url
                                         )}"
                                         alt=""
+                                        loading="lazy"
                                     >
                                 `
                                 : ""
                             }
 
                             <div>
+
                                 <strong>
                                     ${escapeHTML(
                                         video.title
@@ -1933,7 +2327,9 @@ async function loadMyVideos() {
                                         video.views
                                     )} views
                                 </small>
+
                             </div>
+
                         </div>
 
                         <button
@@ -1944,6 +2340,7 @@ async function loadMyVideos() {
                         >
                             Delete
                         </button>
+
                     </div>
                 `)
                 .join("");
@@ -1961,7 +2358,13 @@ async function loadMyVideos() {
     }
 }
 
-async function deleteMyVideo(videoId) {
+async function deleteMyVideo(
+    videoId
+) {
+    if (!videoId) {
+        return;
+    }
+
     const confirmed =
         confirm(
             "Are you sure you want to delete this video?"
@@ -1987,6 +2390,7 @@ async function deleteMyVideo(videoId) {
         );
 
         await loadMyVideos();
+
         await loadVideos();
 
     } catch (error) {
@@ -2005,7 +2409,7 @@ async function deleteMyVideo(videoId) {
 
 
 /* ======================================================
-   CLOUDINARY SIGNED UPLOAD
+   CLOUDINARY UPLOAD ELEMENTS
 ====================================================== */
 
 function getUploadElements() {
@@ -2039,6 +2443,11 @@ function getUploadElements() {
             $("publishVideoButton")
     };
 }
+
+
+/* ======================================================
+   VIDEO PREVIEW
+====================================================== */
 
 function setupVideoPreview() {
     const {
@@ -2089,38 +2498,61 @@ function setupVideoPreview() {
                 return;
             }
 
-            if (preview) {
-                const url =
-                    URL.createObjectURL(
-                        file
-                    );
+            if (!preview) {
+                return;
+            }
 
-                if (
-                    preview.tagName ===
-                    "VIDEO"
-                ) {
-                    preview.src = url;
-                    preview.controls = true;
-                    preview.style.display =
-                        "block";
-                } else {
-                    preview.innerHTML = `
-                        <video
-                            src="${url}"
-                            controls
-                            playsinline
-                        ></video>
-                    `;
+            const url =
+                URL.createObjectURL(
+                    file
+                );
 
-                    preview.style.display =
-                        "block";
-                }
+            if (
+                preview.tagName ===
+                "VIDEO"
+            ) {
+                preview.src =
+                    url;
+
+                preview.controls =
+                    true;
+
+                preview.muted =
+                    true;
+
+                preview.playsInline =
+                    true;
+
+                preview.style.display =
+                    "block";
+
+            } else {
+                preview.innerHTML = `
+                    <video
+                        src="${url}"
+                        controls
+                        muted
+                        playsinline
+                        webkit-playsinline
+                        style="width:100%;max-width:100%;"
+                    ></video>
+                `;
+
+                preview.style.display =
+                    "block";
             }
         }
     );
 }
 
-function updateUploadProgress(percent) {
+
+/* ======================================================
+   UPLOAD PROGRESS
+====================================================== */
+
+function updateUploadProgress(
+    percent
+) {
     const {
         progress,
         progressText
@@ -2140,7 +2572,11 @@ function updateUploadProgress(percent) {
             progress.tagName ===
             "PROGRESS"
         ) {
-            progress.value = value;
+            progress.max =
+                100;
+
+            progress.value =
+                value;
         } else {
             progress.style.width =
                 value + "%";
@@ -2153,11 +2589,36 @@ function updateUploadProgress(percent) {
     }
 }
 
+
+/* ======================================================
+   CLOUDINARY SIGNATURE
+====================================================== */
+
 async function getCloudinarySignature() {
-    return await api(
-        "/api/cloudinary/signature"
+    const data =
+        await api(
+            "/api/cloudinary/signature"
+        );
+
+    /*
+     * Some server versions return:
+     * { signature: ... }
+     *
+     * Some return:
+     * { data: {...} }
+     */
+
+    return (
+        data.signatureData ||
+        data.data ||
+        data
     );
 }
+
+
+/* ======================================================
+   DIRECT CLOUDINARY UPLOAD
+====================================================== */
 
 function uploadToCloudinary(
     file,
@@ -2165,7 +2626,10 @@ function uploadToCloudinary(
     onProgress
 ) {
     return new Promise(
-        (resolve, reject) => {
+        (
+            resolve,
+            reject
+        ) => {
             const xhr =
                 new XMLHttpRequest();
 
@@ -2232,11 +2696,15 @@ function uploadToCloudinary(
                 );
             }
 
-            xhr.open(
-                "POST",
+            const uploadURL =
                 `https://api.cloudinary.com/v1_1/${encodeURIComponent(
                     cloudName
-                )}/video/upload`
+                )}/video/upload`;
+
+            xhr.open(
+                "POST",
+                uploadURL,
+                true
             );
 
             xhr.upload.onprogress =
@@ -2250,57 +2718,83 @@ function uploadToCloudinary(
                                 event.total
                             ) * 100;
 
-                        onProgress(
-                            percent
+                        if (
+                            typeof onProgress ===
+                            "function"
+                        ) {
+                            onProgress(
+                                percent
+                            );
+                        }
+                    }
+                };
+
+            xhr.onload =
+                () => {
+                    let data = {};
+
+                    try {
+                        data =
+                            xhr.responseText
+                                ? JSON.parse(
+                                    xhr.responseText
+                                )
+                                : {};
+                    } catch {
+                        data = {};
+                    }
+
+                    if (
+                        xhr.status >= 200 &&
+                        xhr.status < 300
+                    ) {
+                        resolve(
+                            data
+                        );
+                    } else {
+                        reject(
+                            new Error(
+                                data.error?.message ||
+                                data.message ||
+                                `Cloudinary upload failed (${xhr.status}).`
+                            )
                         );
                     }
                 };
 
-            xhr.onload = () => {
-                let data = {};
-
-                try {
-                    data =
-                        JSON.parse(
-                            xhr.responseText
-                        );
-                } catch {
-                    data = {};
-                }
-
-                if (
-                    xhr.status >= 200 &&
-                    xhr.status < 300
-                ) {
-                    resolve(data);
-                } else {
+            xhr.onerror =
+                () => {
                     reject(
                         new Error(
-                            data.error?.message ||
-                            data.message ||
-                            "Cloudinary upload failed."
+                            "Network error during upload."
                         )
                     );
-                }
-            };
+                };
 
-            xhr.onerror = () => {
-                reject(
-                    new Error(
-                        "Network error during upload."
-                    )
-                );
-            };
+            xhr.onabort =
+                () => {
+                    reject(
+                        new Error(
+                            "Upload cancelled."
+                        )
+                    );
+                };
 
-            xhr.onabort = () => {
-                reject(
-                    new Error(
-                        "Upload cancelled."
-                    )
-                );
-            };
+            xhr.ontimeout =
+                () => {
+                    reject(
+                        new Error(
+                            "Upload timed out. Please try again."
+                        )
+                    );
+                };
 
-            xhr.send(form);
+            xhr.timeout =
+                15 * 60 * 1000;
+
+            xhr.send(
+                form
+            );
         }
     );
 }
@@ -2320,7 +2814,8 @@ async function saveUploadedVideo(
         uploadData.url;
 
     const publicId =
-        uploadData.public_id;
+        uploadData.public_id ||
+        null;
 
     if (!videoUrl) {
         throw new Error(
@@ -2335,9 +2830,10 @@ async function saveUploadedVideo(
             body: JSON.stringify({
                 title,
                 description,
-                video_url: videoUrl,
+                video_url:
+                    videoUrl,
                 cloudinary_public_id:
-                    publicId || null,
+                    publicId,
                 resource_type:
                     uploadData.resource_type ||
                     "video"
@@ -2426,42 +2922,54 @@ async function uploadVideo() {
         return;
     }
 
-    uploadInProgress = true;
+    uploadInProgress =
+        true;
 
     if (button) {
-        button.disabled = true;
+        button.disabled =
+            true;
+
         button.textContent =
-            "Uploading...";
+            "Preparing...";
     }
 
-    updateUploadProgress(0);
+    updateUploadProgress(
+        0
+    );
 
     try {
         /*
-         * STEP 1:
-         * Get signed Cloudinary upload data
+         * STEP 1
+         * Ask server for signed Cloudinary data.
          */
+
         const signatureData =
             await getCloudinarySignature();
 
-        updateUploadProgress(5);
+        updateUploadProgress(
+            5
+        );
+
+        if (button) {
+            button.textContent =
+                "Uploading...";
+        }
 
         /*
-         * STEP 2:
-         * Upload directly to Cloudinary
+         * STEP 2
+         * Direct browser -> Cloudinary.
          */
+
         const uploadData =
             await uploadToCloudinary(
                 file,
                 signatureData,
                 percent => {
-                    /*
-                     * Cloudinary upload = 5% to 90%
-                     */
                     const total =
                         5 +
                         (
-                            percent * 0.85
+                            percent *
+                            0.85
                         );
 
                     updateUploadProgress(
@@ -2470,26 +2978,48 @@ async function uploadVideo() {
                 }
             );
 
-        updateUploadProgress(90);
+        updateUploadProgress(
+            90
+        );
+
+        if (button) {
+            button.textContent =
+                "Saving...";
+        }
 
         /*
-         * STEP 3:
-         * Save video metadata in Neon
+         * STEP 3
+         * Save metadata in Neon through server.
          */
+
         await saveUploadedVideo(
             videoTitle,
             videoDescription,
             uploadData
         );
 
-        updateUploadProgress(100);
+        updateUploadProgress(
+            100
+        );
 
         showMessage(
             "🎉 Video uploaded successfully!",
             "success"
         );
 
+        /*
+         * Reset form.
+         */
+
         input.value = "";
+
+        if (title) {
+            title.value = "";
+        }
+
+        if (description) {
+            description.value = "";
+        }
 
         const preview =
             getUploadElements()
@@ -2500,6 +3030,8 @@ async function uploadVideo() {
                 preview.tagName ===
                 "VIDEO"
             ) {
+                preview.pause();
+
                 preview.removeAttribute(
                     "src"
                 );
@@ -2509,24 +3041,21 @@ async function uploadVideo() {
                 preview.style.display =
                     "none";
             } else {
-                preview.innerHTML = "";
+                preview.innerHTML =
+                    "";
+
                 preview.style.display =
                     "none";
             }
         }
 
-        if (title) {
-            title.value = "";
-        }
-
-        if (description) {
-            description.value = "";
-        }
-
         await loadVideos();
+
         await loadMyVideos();
 
-        showPage("home");
+        showPage(
+            "home"
+        );
 
     } catch (error) {
         console.error(
@@ -2536,15 +3065,18 @@ async function uploadVideo() {
 
         showMessage(
             error.message ||
-            "Network error during upload.",
+            "Upload failed. Please try again.",
             "error"
         );
 
     } finally {
-        uploadInProgress = false;
+        uploadInProgress =
+            false;
 
         if (button) {
-            button.disabled = false;
+            button.disabled =
+                false;
+
             button.textContent =
                 "Upload Video";
         }
@@ -2571,14 +3103,42 @@ async function loadCreatorDashboard() {
          </div>`;
 
     try {
-        const data = await api(
-            "/api/creator/stats"
-        );
+        const data =
+            await api(
+                "/api/creator/stats"
+            );
 
         const stats =
             data.stats ||
             data.creator ||
             data;
+
+        const followers =
+            Number(
+                stats.followers ??
+                stats.followers_count ??
+                0
+            );
+
+        const videos =
+            Number(
+                stats.videos ??
+                stats.total_videos ??
+                0
+            );
+
+        const watchHours =
+            Number(
+                stats.watch_hours ??
+                0
+            );
+
+        const earnings =
+            Number(
+                stats.earnings ??
+                stats.creator_earnings ??
+                0
+            );
 
         container.innerHTML = `
             <div class="creator-stat-grid">
@@ -2586,43 +3146,45 @@ async function loadCreatorDashboard() {
                 <div class="creator-stat">
                     <strong>
                         ${formatNumber(
-                            stats.followers ||
-                            stats.followers_count ||
-                            0
+                            followers
                         )}
                     </strong>
-                    <span>Followers</span>
+                    <span>
+                        Followers
+                    </span>
                 </div>
 
                 <div class="creator-stat">
                     <strong>
                         ${formatNumber(
-                            stats.videos ||
-                            stats.total_videos ||
-                            0
+                            videos
                         )}
                     </strong>
-                    <span>Videos</span>
+                    <span>
+                        Videos
+                    </span>
                 </div>
 
                 <div class="creator-stat">
                     <strong>
                         ${formatNumber(
-                            stats.watch_hours ||
-                            0
+                            watchHours
                         )}
                     </strong>
-                    <span>Watch Hours</span>
+                    <span>
+                        Watch Hours
+                    </span>
                 </div>
 
                 <div class="creator-stat">
                     <strong>
                         ${formatNumber(
-                            stats.earnings ||
-                            0
+                            earnings
                         )}
                     </strong>
-                    <span>Earnings</span>
+                    <span>
+                        Earnings
+                    </span>
                 </div>
 
             </div>
@@ -2645,7 +3207,9 @@ async function loadCreatorDashboard() {
     }
 }
 
-function updateCreatorEligibility(stats) {
+function updateCreatorEligibility(
+    stats
+) {
     const element =
         $("creatorEligibility");
 
@@ -2660,16 +3224,23 @@ function updateCreatorEligibility(stats) {
         "";
 
     const applied =
-        stats.applied ??
-        currentUser?.creator_applied ??
-        false;
+        Boolean(
+            stats.applied ??
+            stats.creator_applied ??
+            currentUser?.creator_applied ??
+            false
+        );
 
-    element.textContent =
-        status
-            ? `Creator status: ${status}`
-            : applied
-                ? "Creator application submitted."
-                : "Creator eligibility available.";
+    if (status) {
+        element.textContent =
+            `Creator status: ${status}`;
+    } else if (applied) {
+        element.textContent =
+            "Creator application submitted.";
+    } else {
+        element.textContent =
+            "Creator eligibility available.";
+    }
 }
 
 
@@ -2682,7 +3253,8 @@ async function applyForCreator() {
         $("creatorApplyButton");
 
     if (button) {
-        button.disabled = true;
+        button.disabled =
+            true;
     }
 
     try {
@@ -2711,9 +3283,11 @@ async function applyForCreator() {
             "Unable to submit creator application.",
             "error"
         );
+
     } finally {
         if (button) {
-            button.disabled = false;
+            button.disabled =
+                false;
         }
     }
 }
@@ -2725,15 +3299,22 @@ async function applyForCreator() {
 
 async function savePayoutAccount() {
     const name =
-        $("payoutName")?.value?.trim() ||
+        $("payoutName")
+            ?.value
+            ?.trim() ||
         "";
 
     const accountNumber =
-        $("payoutAccountNumber")?.value?.trim() ||
+        $("payoutAccountNumber")
+            ?.value
+            ?.trim() ||
         "";
 
     const ifsc =
-        $("payoutIFSC")?.value?.trim() ||
+        $("payoutIFSC")
+            ?.value
+            ?.trim()
+            .toUpperCase() ||
         "";
 
     if (
@@ -2755,7 +3336,8 @@ async function savePayoutAccount() {
             {
                 method: "POST",
                 body: JSON.stringify({
-                    account_name: name,
+                    account_name:
+                        name,
                     account_number:
                         accountNumber,
                     ifsc
@@ -2792,14 +3374,17 @@ window.addEventListener(
     event => {
         event.preventDefault();
 
-        deferredPrompt = event;
+        deferredPrompt =
+            event;
 
         qsa(
             "#installButton, [data-install]"
-        ).forEach(button => {
-            button.style.display =
-                "block";
-        });
+        ).forEach(
+            button => {
+                button.style.display =
+                    "block";
+            }
+        );
     }
 );
 
@@ -2813,278 +3398,260 @@ async function installApp() {
         return;
     }
 
-    deferredPrompt.prompt();
-
     try {
+        deferredPrompt.prompt();
+
         await deferredPrompt.userChoice;
-    } catch {
-        // Ignore install result errors.
+
+    } catch (error) {
+        console.warn(
+            "PWA install error:",
+            error
+        );
     }
 
-    deferredPrompt = null;
+    deferredPrompt =
+        null;
 
     qsa(
         "#installButton, [data-install]"
-    ).forEach(button => {
-        button.style.display =
-            "none";
-    });
+    ).forEach(
+        button => {
+            button.style.display =
+                "none";
+        }
+    );
 }
 
 window.addEventListener(
     "appinstalled",
     () => {
-        deferredPrompt = null;
+        deferredPrompt =
+            null;
 
         qsa(
             "#installButton, [data-install]"
-        ).forEach(button => {
-            button.style.display =
-                "none";
-        });
+        ).forEach(
+            button => {
+                button.style.display =
+                    "none";
+            }
+        );
     }
 );
 
 
 /* ======================================================
-   EVENT BINDING
+   NAVIGATION BINDING
 ====================================================== */
 
 function bindNavigation() {
     qsa(
         "[data-nav]"
-    ).forEach(button => {
-        button.addEventListener(
-            "click",
-            event => {
-                event.preventDefault();
+    ).forEach(
+        button => {
+            button.addEventListener(
+                "click",
+                event => {
+                    event.preventDefault();
 
-                const page =
-                    button.dataset.nav;
+                    const page =
+                        button.dataset.nav;
 
-                if (page) {
-                    showPage(page);
+                    if (page) {
+                        showPage(
+                            page
+                        );
+                    }
                 }
-            }
-        );
-    });
-
-    const homeButtons = [
-        "homeButton",
-        "navHome"
-    ];
-
-    homeButtons.forEach(id => {
-        const button = $(id);
-
-        if (button) {
-            button.addEventListener(
-                "click",
-                () => showPage("home")
             );
         }
-    });
+    );
 
-    const watchButtons = [
-        "watchButton",
-        "navWatch"
-    ];
+    const mappings = {
+        home: [
+            "homeButton",
+            "navHome"
+        ],
 
-    watchButtons.forEach(id => {
-        const button = $(id);
+        watch: [
+            "watchButton",
+            "navWatch"
+        ],
 
-        if (button) {
-            button.addEventListener(
-                "click",
-                () => showPage("watch")
+        earn: [
+            "earnButton",
+            "navEarn"
+        ],
+
+        upload: [
+            "uploadNavButton",
+            "navUpload"
+        ],
+
+        profile: [
+            "profileButton",
+            "navProfile"
+        ],
+
+        creator: [
+            "creatorButton",
+            "navCreator"
+        ]
+    };
+
+    Object.entries(
+        mappings
+    ).forEach(
+        ([page, ids]) => {
+            ids.forEach(
+                id => {
+                    const button =
+                        $(id);
+
+                    if (
+                        button &&
+                        !button.dataset
+                            .dekhoearnBound
+                    ) {
+                        button.dataset
+                            .dekhoearnBound =
+                            "true";
+
+                        button.addEventListener(
+                            "click",
+                            event => {
+                                event.preventDefault();
+
+                                showPage(
+                                    page
+                                );
+                            }
+                        );
+                    }
+                }
             );
         }
-    });
-
-    const earnButtons = [
-        "earnButton",
-        "navEarn"
-    ];
-
-    earnButtons.forEach(id => {
-        const button = $(id);
-
-        if (button) {
-            button.addEventListener(
-                "click",
-                () => showPage("earn")
-            );
-        }
-    });
-
-    const uploadButtons = [
-        "uploadNavButton",
-        "navUpload"
-    ];
-
-    uploadButtons.forEach(id => {
-        const button = $(id);
-
-        if (button) {
-            button.addEventListener(
-                "click",
-                () => showPage("upload")
-            );
-        }
-    });
-
-    const profileButtons = [
-        "profileButton",
-        "navProfile"
-    ];
-
-    profileButtons.forEach(id => {
-        const button = $(id);
-
-        if (button) {
-            button.addEventListener(
-                "click",
-                () => showPage("profile")
-            );
-        }
-    });
-
-    const creatorButtons = [
-        "creatorButton",
-        "navCreator"
-    ];
-
-    creatorButtons.forEach(id => {
-        const button = $(id);
-
-        if (button) {
-            button.addEventListener(
-                "click",
-                () => showPage("creator")
-            );
-        }
-    });
+    );
 }
 
+
+/* ======================================================
+   ACTION BINDING
+====================================================== */
+
 function bindActions() {
-    const likeButton =
-        $("likeButton") ||
-        $("btnLike");
-
-    if (likeButton) {
-        likeButton.addEventListener(
-            "click",
+    const actions = [
+        [
+            [
+                "likeButton",
+                "btnLike"
+            ],
             toggleLike
-        );
-    }
+        ],
 
-    const commentButton =
-        $("commentButton") ||
-        $("btnComment");
-
-    if (commentButton) {
-        commentButton.addEventListener(
-            "click",
+        [
+            [
+                "commentButton",
+                "btnComment"
+            ],
             addComment
-        );
-    }
+        ],
 
-    const reportButton =
-        $("reportButton") ||
-        $("btnReport");
-
-    if (reportButton) {
-        reportButton.addEventListener(
-            "click",
+        [
+            [
+                "reportButton",
+                "btnReport"
+            ],
             reportVideo
-        );
-    }
+        ],
 
-    const followButton =
-        $("followButton") ||
-        $("subscribeButton") ||
-        $("btnFollow") ||
-        $("btnSubscribe");
-
-    if (followButton) {
-        followButton.addEventListener(
-            "click",
+        [
+            [
+                "followButton",
+                "subscribeButton",
+                "btnFollow",
+                "btnSubscribe"
+            ],
             toggleFollow
-        );
-    }
+        ],
 
-    const dailyButton =
-        $("dailyRewardButton") ||
-        $("claimDailyButton");
-
-    if (dailyButton) {
-        dailyButton.addEventListener(
-            "click",
+        [
+            [
+                "dailyRewardButton",
+                "claimDailyButton"
+            ],
             claimDailyReward
-        );
-    }
+        ],
 
-    const adButton =
-        $("rewardedAdButton") ||
-        $("rewardAdButton");
-
-    if (adButton) {
-        adButton.addEventListener(
-            "click",
+        [
+            [
+                "rewardedAdButton",
+                "rewardAdButton"
+            ],
             claimRewardedAd
-        );
-    }
+        ],
 
-    const uploadButton =
-        $("uploadButton") ||
-        $("publishVideoButton");
-
-    if (uploadButton) {
-        uploadButton.addEventListener(
-            "click",
+        [
+            [
+                "uploadButton",
+                "publishVideoButton"
+            ],
             uploadVideo
-        );
-    }
+        ],
 
-    const creatorApply =
-        $("creatorApplyButton");
-
-    if (creatorApply) {
-        creatorApply.addEventListener(
-            "click",
+        [
+            [
+                "creatorApplyButton"
+            ],
             applyForCreator
-        );
-    }
+        ],
 
-    const payoutButton =
-        $("savePayoutButton");
-
-    if (payoutButton) {
-        payoutButton.addEventListener(
-            "click",
+        [
+            [
+                "savePayoutButton"
+            ],
             savePayoutAccount
-        );
-    }
+        ],
 
-    const installButton =
-        $("installButton");
-
-    if (installButton) {
-        installButton.addEventListener(
-            "click",
+        [
+            [
+                "installButton"
+            ],
             installApp
-        );
-    }
+        ],
 
-    const logoutButton =
-        $("logoutButton");
-
-    if (logoutButton) {
-        logoutButton.addEventListener(
-            "click",
+        [
+            [
+                "logoutButton"
+            ],
             logoutUser
-        );
-    }
+        ]
+    ];
+
+    actions.forEach(
+        ([ids, handler]) => {
+            const element =
+                ids
+                    .map(id => $(id))
+                    .find(Boolean);
+
+            if (
+                element &&
+                !element.dataset
+                    .dekhoearnBound
+            ) {
+                element.dataset
+                    .dekhoearnBound =
+                    "true";
+
+                element.addEventListener(
+                    "click",
+                    handler
+                );
+            }
+        }
+    );
 }
 
 
@@ -3101,27 +3668,49 @@ function bindAuthForm() {
         return;
     }
 
+    if (
+        form.dataset
+            .dekhoearnBound
+    ) {
+        return;
+    }
+
+    form.dataset
+        .dekhoearnBound =
+        "true";
+
     form.addEventListener(
         "submit",
         async event => {
             event.preventDefault();
 
             const username =
-                $("username")?.value?.trim() ||
-                $("loginUsername")?.value?.trim() ||
+                $("username")
+                    ?.value
+                    ?.trim() ||
+                $("loginUsername")
+                    ?.value
+                    ?.trim() ||
                 "";
 
             const firstName =
-                $("firstName")?.value?.trim() ||
-                $("first_name")?.value?.trim() ||
+                $("firstName")
+                    ?.value
+                    ?.trim() ||
+                $("first_name")
+                    ?.value
+                    ?.trim() ||
                 "";
 
             const email =
-                $("email")?.value?.trim() ||
+                $("email")
+                    ?.value
+                    ?.trim() ||
                 "";
 
             const password =
-                $("password")?.value ||
+                $("password")
+                    ?.value ||
                 "";
 
             if (!username) {
@@ -3136,9 +3725,15 @@ function bindAuthForm() {
             try {
                 let data;
 
-                if (
-                    password
-                ) {
+                /*
+                 * Password available =
+                 * Login
+                 *
+                 * No password =
+                 * Registration / legacy mode
+                 */
+
+                if (password) {
                     data =
                         await loginUser(
                             username,
@@ -3149,22 +3744,18 @@ function bindAuthForm() {
                         await registerUser(
                             username,
                             firstName ||
-                            username,
+                                username,
                             email
                         );
                 }
 
-                if (
-                    data.token
-                ) {
+                if (data.token) {
                     saveToken(
                         data.token
                     );
                 }
 
-                if (
-                    data.user
-                ) {
+                if (data.user) {
                     saveUser(
                         data.user
                     );
@@ -3177,7 +3768,9 @@ function bindAuthForm() {
                     "success"
                 );
 
-                showPage("home");
+                showPage(
+                    "home"
+                );
 
                 await loadVideos();
 
@@ -3210,12 +3803,25 @@ function setupSearch() {
         return;
     }
 
-    let timeout;
+    if (
+        input.dataset
+            .dekhoearnBound
+    ) {
+        return;
+    }
+
+    input.dataset
+        .dekhoearnBound =
+        "true";
+
+    let timeout = null;
 
     input.addEventListener(
         "input",
         () => {
-            clearTimeout(timeout);
+            clearTimeout(
+                timeout
+            );
 
             timeout =
                 setTimeout(
@@ -3230,7 +3836,9 @@ function setupSearch() {
     );
 }
 
-function filterVisibleVideos(query) {
+function filterVisibleVideos(
+    query
+) {
     const value =
         String(
             query || ""
@@ -3240,17 +3848,21 @@ function filterVisibleVideos(query) {
 
     qsa(
         ".video-card"
-    ).forEach(card => {
-        const text =
-            card.textContent
-                .toLowerCase();
+    ).forEach(
+        card => {
+            const text =
+                card.textContent
+                    .toLowerCase();
 
-        card.style.display =
-            !value ||
-            text.includes(value)
-                ? ""
-                : "none";
-    });
+            card.style.display =
+                !value ||
+                text.includes(
+                    value
+                )
+                    ? ""
+                    : "none";
+        }
+    );
 }
 
 
@@ -3314,27 +3926,77 @@ function setupNetworkHandling() {
 
 function registerServiceWorker() {
     if (
-        "serviceWorker" in navigator
+        !("serviceWorker" in navigator)
     ) {
-        window.addEventListener(
-            "load",
-            () => {
-                navigator.serviceWorker
-                    .register(
-                        "./sw.js"
-                    )
-                    .catch(
-                        error => {
-                            console.warn(
-                                "Service worker registration failed:",
-                                error
-                            );
-                        }
-                    );
-            }
-        );
+        return;
     }
+
+    window.addEventListener(
+        "load",
+        () => {
+            navigator.serviceWorker
+                .register(
+                    "./sw.js"
+                )
+                .then(
+                    registration => {
+                        console.log(
+                            "DekhoEarn Service Worker registered:",
+                            registration.scope
+                        );
+                    }
+                )
+                .catch(
+                    error => {
+                        console.warn(
+                            "Service worker registration failed:",
+                            error
+                        );
+                    }
+                );
+        }
+    );
 }
+
+
+/* ======================================================
+   PAGE VISIBILITY
+====================================================== */
+
+document.addEventListener(
+    "visibilitychange",
+    () => {
+        if (
+            document.hidden
+        ) {
+            stopWatchTimer();
+        } else {
+            const player =
+                $("videoPlayer") ||
+                $("playerVideo");
+
+            if (
+                player &&
+                !player.paused &&
+                !player.ended
+            ) {
+                startWatchTimer();
+            }
+        }
+    }
+);
+
+
+/* ======================================================
+   BROWSER BACK HANDLING
+====================================================== */
+
+window.addEventListener(
+    "beforeunload",
+    () => {
+        stopWatchTimer();
+    }
+);
 
 
 /* ======================================================
@@ -3342,8 +4004,15 @@ function registerServiceWorker() {
 ====================================================== */
 
 async function initApp() {
+    if (appInitialized) {
+        return;
+    }
+
+    appInitialized =
+        true;
+
     console.log(
-        "DekhoEarn Frontend v3.1.4 starting..."
+        "DekhoEarn Frontend v3.2.0 starting..."
     );
 
     loadSavedUser();
@@ -3361,20 +4030,33 @@ async function initApp() {
 
     updateUserUI();
 
+    /*
+     * Validate existing login token.
+     */
+
     const user =
         await ensureUser();
 
     if (user) {
-        saveUser(user);
+        saveUser(
+            user
+        );
+
         updateUserUI();
     }
 
-    showPage("home");
+    /*
+     * Always open Home.
+     */
+
+    showPage(
+        "home"
+    );
 
     await loadVideos();
 
     console.log(
-        "DekhoEarn Frontend v3.1.4 ready."
+        "DekhoEarn Frontend v3.2.0 ready."
     );
 }
 
@@ -3436,7 +4118,10 @@ if (
 ) {
     document.addEventListener(
         "DOMContentLoaded",
-        initApp
+        initApp,
+        {
+            once: true
+        }
     );
 } else {
     initApp();
