@@ -4995,35 +4995,179 @@ app.post(
 
 async function start() {
 
-  if (!pool) {
+  try {
 
-    console.warn(
-      "WARNING: DATABASE_URL is not configured"
-    );
+    /*
+    ------------------------------------------------------
+    DATABASE INITIALIZATION
+    ------------------------------------------------------
+    */
 
-  } else {
+    if (!pool) {
 
-    await initDB();
-  }
+      console.warn(
+        "WARNING: DATABASE_URL is not configured"
+      );
 
-  app.listen(
-    PORT,
-    () => {
+      console.warn(
+        "Database features will be unavailable."
+      );
+
+    } else {
+
       console.log(
-        `DekhoEarn server v4.0.0 running on ${APP_BASE_URL}`
+        "Initializing database..."
+      );
+
+      await initDB();
+
+      console.log(
+        "Database initialized successfully."
       );
     }
-  );
-}
 
-start().catch(
-  error => {
+
+    /*
+    ------------------------------------------------------
+    CASH WITHDRAWAL TABLES
+    ------------------------------------------------------
+    */
+
+    if (pool) {
+
+      try {
+
+        await initCashWithdrawalTables();
+
+        console.log(
+          "Cash withdrawal tables initialized."
+        );
+
+      } catch (error) {
+
+        console.error(
+          "Cash withdrawal table initialization failed:",
+          error
+        );
+
+        /*
+        Do not stop the whole server here.
+        The server can still start, while withdrawal
+        functionality remains unavailable until fixed.
+        */
+
+      }
+    }
+
+
+    /*
+    ------------------------------------------------------
+    START EXPRESS SERVER
+    ------------------------------------------------------
+    */
+
+    app.listen(
+      PORT,
+      () => {
+
+        console.log(
+          `DekhoEarn server v4.0.0 running on ${APP_BASE_URL}`
+        );
+
+        console.log(
+          `Port: ${PORT}`
+        );
+
+      }
+    );
+
+  } catch (error) {
+
     console.error(
       "SERVER START FAILED:",
       error
     );
 
     process.exit(1);
+  }
+}
+
+
+/* ======================================================
+   START APPLICATION
+====================================================== */
+
+start();
+
+
+/* ======================================================
+   GRACEFUL SHUTDOWN
+====================================================== */
+
+process.on(
+  "SIGTERM",
+  async () => {
+
+    console.log(
+      "SIGTERM received. Shutting down..."
+    );
+
+    try {
+
+      if (pool) {
+
+        await pool.end();
+
+        console.log(
+          "Database connection closed."
+        );
+      }
+
+    } catch (error) {
+
+      console.error(
+        "Error during SIGTERM shutdown:",
+        error
+      );
+
+    } finally {
+
+      process.exit(0);
+    }
+  }
+);
+
+
+process.on(
+  "SIGINT",
+  async () => {
+
+    console.log(
+      "SIGINT received. Shutting down..."
+    );
+
+    try {
+
+      if (pool) {
+
+        await pool.end();
+
+        console.log(
+          "Database connection closed."
+        );
+      }
+
+    } catch (error) {
+
+      console.error(
+        "Error during SIGINT shutdown:",
+        error
+      );
+
+    } finally {
+
+      process.exit(0);
+    }
   }
 );
 
