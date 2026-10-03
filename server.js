@@ -2,7 +2,7 @@
 
 /*
 =========================================================
- DEKHOEARN SERVER v4.0.0
+ DEKHOEARN SERVER v4.0.1
 
  - Authentication / Sessions
  - Videos / Cloudinary
@@ -40,7 +40,8 @@ const app = express();
    CONFIG
 ====================================================== */
 
-const PORT = Number(process.env.PORT || 10000);
+const PORT =
+  Number(process.env.PORT || 10000);
 
 const DATABASE_URL =
   process.env.DATABASE_URL || "";
@@ -89,13 +90,23 @@ const MIN_WATCH_SECONDS =
 ====================================================== */
 
 const MIN_WITHDRAWAL =
-  Number(process.env.MIN_WITHDRAWAL || 100);
-
-const POINTS_PER_RUPEE =
-  Number(process.env.POINTS_PER_RUPEE || 100);
+  Number(
+    process.env.MIN_WITHDRAWAL ||
+    process.env.MIN_WITHDRAWAL_AMOUNT ||
+    100
+  );
 
 const MAX_WITHDRAWAL =
-  Number(process.env.MAX_WITHDRAWAL || 5000);
+  Number(
+    process.env.MAX_WITHDRAWAL ||
+    process.env.MAX_WITHDRAWAL_AMOUNT ||
+    5000
+  );
+
+const POINTS_PER_RUPEE =
+  Number(
+    process.env.POINTS_PER_RUPEE || 100
+  );
 
 const MAX_VIDEO_SIZE =
   100 * 1024 * 1024;
@@ -106,12 +117,17 @@ const MAX_VIDEO_SIZE =
 
 const pool = DATABASE_URL
   ? new Pool({
-      connectionString: DATABASE_URL,
+      connectionString:
+        DATABASE_URL,
+
       ssl: {
         rejectUnauthorized: false
       },
+
       max: 10,
+
       idleTimeoutMillis: 30000,
+
       connectionTimeoutMillis: 10000
     })
   : null;
@@ -131,6 +147,7 @@ app.use(
   cors({
     origin: true,
     credentials: true,
+
     methods: [
       "GET",
       "POST",
@@ -139,6 +156,7 @@ app.use(
       "DELETE",
       "OPTIONS"
     ],
+
     allowedHeaders: [
       "Content-Type",
       "Authorization",
@@ -166,10 +184,10 @@ app.use(
    HELPERS
 ====================================================== */
 
-const clean = (
+function clean(
   value,
   max = 1000
-) => {
+) {
   if (
     value === undefined ||
     value === null
@@ -180,82 +198,122 @@ const clean = (
   return String(value)
     .trim()
     .slice(0, max);
-};
+}
 
-const email = value =>
-  clean(value, 320)
-    .toLowerCase();
+function cleanString(
+  value,
+  max = 1000
+) {
+  return clean(
+    value,
+    max
+  );
+}
 
-const username = value =>
-  clean(value, 50)
+function email(value) {
+  return clean(
+    value,
+    320
+  ).toLowerCase();
+}
+
+function username(value) {
+  return clean(
+    value,
+    50
+  )
     .toLowerCase()
     .replace(
       /[^a-z0-9_.]/g,
       ""
     );
+}
 
-const int = (
+function int(
   value,
   fallback = 0
-) => {
-  const n = parseInt(
-    value,
-    10
-  );
+) {
+  const n =
+    parseInt(
+      value,
+      10
+    );
 
   return Number.isFinite(n)
     ? n
     : fallback;
-};
+}
 
-const num = (
+function num(
   value,
   fallback = 0
-) => {
-  const n = Number(value);
+) {
+  const n =
+    Number(value);
 
   return Number.isFinite(n)
     ? n
     : fallback;
-};
+}
 
-const dateOnly = () =>
-  new Date()
+function dateOnly() {
+  return new Date()
     .toISOString()
     .slice(0, 10);
+}
 
-const token = () =>
-  crypto
+function token() {
+  return crypto
     .randomBytes(32)
     .toString("hex");
+}
 
-const hash = value =>
-  crypto
+function hash(value) {
+  return crypto
     .createHash("sha256")
     .update(String(value))
     .digest("hex");
+}
 
-const json = (
+function json(
   res,
   data = {}
-) =>
-  res.json({
+) {
+  return res.json({
     success: true,
     ...data
   });
+}
 
-const error = (
+function error(
   res,
   status,
   message,
   extra = {}
-) =>
-  res.status(status).json({
-    success: false,
-    error: message,
+) {
+  return res
+    .status(status)
+    .json({
+      success: false,
+      error: message,
+      message,
+      ...extra
+    });
+}
+
+function sendError(
+  res,
+  status,
+  message,
+  extra = {}
+) {
+  return error(
+    res,
+    status,
     message,
-    ...extra
-  });
+    extra
+  );
+}
 
 async function q(
   sql,
@@ -310,7 +368,7 @@ async function col(
 }
 
 /* ======================================================
-   DATABASE
+   DATABASE INITIALIZATION
 ====================================================== */
 
 async function initDB() {
@@ -347,11 +405,9 @@ async function initDB() {
   `);
 
   const userColumns = {
-    password_hash:
-      "TEXT",
+    password_hash: "TEXT",
 
-    avatar_url:
-      "TEXT",
+    avatar_url: "TEXT",
 
     points:
       "BIGINT NOT NULL DEFAULT 0",
@@ -864,13 +920,23 @@ function publicUser(user) {
 
   return {
     id: user.id,
-    name: user.name,
-    username: user.username,
-    email: user.email,
-    avatar_url: user.avatar_url,
+
+    name:
+      user.name,
+
+    username:
+      user.username,
+
+    email:
+      user.email,
+
+    avatar_url:
+      user.avatar_url,
 
     points:
-      Number(user.points || 0),
+      Number(
+        user.points || 0
+      ),
 
     followers_count:
       Number(
@@ -1001,6 +1067,7 @@ app.get(
     try {
 
       if (pool) {
+
         await q(
           "SELECT 1"
         );
@@ -1010,10 +1077,12 @@ app.get(
 
     } catch {}
 
-    res.json({
+    return res.json({
       ok: true,
-      service: "DekhoEarn",
-      version: "4.0.0",
+      service:
+        "DekhoEarn",
+      version:
+        "4.0.1",
       database,
       time:
         new Date().toISOString()
@@ -1024,15 +1093,25 @@ app.get(
 app.get(
   "/api/version",
   (req, res) =>
-    json(res, {
-      version: "4.0.0",
-      min_watch_seconds:
-        MIN_WATCH_SECONDS,
-      minimum_withdrawal:
-        MIN_WITHDRAWAL,
-      points_per_rupee:
-        POINTS_PER_RUPEE
-    })
+    json(
+      res,
+      {
+        version:
+          "4.0.1",
+
+        min_watch_seconds:
+          MIN_WATCH_SECONDS,
+
+        minimum_withdrawal:
+          MIN_WITHDRAWAL,
+
+        maximum_withdrawal:
+          MAX_WITHDRAWAL,
+
+        points_per_rupee:
+          POINTS_PER_RUPEE
+      }
+    )
 );
 
 /* ======================================================
@@ -1149,7 +1228,10 @@ app.post(
           crypto
             .randomBytes(3)
             .toString("hex")
-        ).slice(0, 50);
+        ).slice(
+          0,
+          50
+        );
 
       const result =
         await q(
@@ -1210,7 +1292,9 @@ app.post(
       return json(
         res,
         {
-          token: session,
+          token:
+            session,
+
           user:
             publicUser(user)
         }
@@ -1292,7 +1376,9 @@ app.post(
       return json(
         res,
         {
-          token: session,
+          token:
+            session,
+
           user:
             publicUser(user)
         }
@@ -1315,12 +1401,15 @@ app.get(
   "/api/auth/me",
   requireAuth,
   (req, res) =>
-    json(res, {
-      user:
-        publicUser(
-          req.user
-        )
-    })
+    json(
+      res,
+      {
+        user:
+          publicUser(
+            req.user
+          )
+      }
+    )
 );
 
 app.post(
@@ -1365,12 +1454,15 @@ app.get(
   "/api/user",
   requireAuth,
   (req, res) =>
-    json(res, {
-      user:
-        publicUser(
-          req.user
-        )
-    })
+    json(
+      res,
+      {
+        user:
+          publicUser(
+            req.user
+          )
+      }
+    )
 );
 
 /* ======================================================
@@ -1409,12 +1501,11 @@ app.get(
 
       const params = [];
 
-      let where =
-        `
+      let where = `
         v.status='active'
         AND
         v.moderation_status='approved'
-        `;
+      `;
 
       if (search) {
 
@@ -1465,24 +1556,30 @@ app.get(
             result.rows.map(
               video => ({
                 ...video,
+
                 id:
                   Number(video.id),
+
                 user_id:
                   Number(
                     video.user_id
                   ),
+
                 views:
                   Number(
                     video.views
                   ),
+
                 likes_count:
                   Number(
                     video.likes_count
                   ),
+
                 comments_count:
                   Number(
                     video.comments_count
                   ),
+
                 watched_seconds:
                   Number(
                     video.watched_seconds
@@ -1615,7 +1712,10 @@ app.post(
           2000
         );
 
-      if (!title || !url) {
+      if (
+        !title ||
+        !url
+      ) {
         return error(
           res,
           400,
@@ -1643,24 +1743,31 @@ app.post(
           `,
           [
             req.user.id,
+
             title,
+
             clean(
               req.body.description,
               2000
             ),
+
             url,
+
             clean(
               req.body.cloudinary_public_id,
               500
             ),
+
             clean(
               req.body.cloudinary_resource_type,
               50
             ) || "video",
+
             clean(
               req.body.thumbnail_url,
               2000
             ),
+
             Math.max(
               0,
               int(
@@ -1827,6 +1934,14 @@ app.post(
   requireAuth,
   async (req, res) => {
 
+    if (!pool) {
+      return error(
+        res,
+        503,
+        "Database unavailable"
+      );
+    }
+
     const client =
       await pool.connect();
 
@@ -1849,7 +1964,8 @@ app.post(
 
       if (
         !videoId ||
-        seconds < MIN_WATCH_SECONDS
+        seconds <
+          MIN_WATCH_SECONDS
       ) {
         return error(
           res,
@@ -2061,7 +2177,7 @@ app.post(
 );
 
 /* ======================================================
-   LIKE / COMMENT / REPORT
+   LIKES
 ====================================================== */
 
 app.post(
@@ -2072,7 +2188,9 @@ app.post(
     try {
 
       const id =
-        int(req.params.id);
+        int(
+          req.params.id
+        );
 
       const existing =
         await q(
@@ -2164,6 +2282,10 @@ app.post(
   }
 );
 
+/* ======================================================
+   COMMENTS
+====================================================== */
+
 app.get(
   "/api/videos/:id/comments",
   async (req, res) => {
@@ -2233,6 +2355,11 @@ app.post(
         );
       }
 
+      const videoId =
+        int(
+          req.params.id
+        );
+
       const result =
         await q(
           `
@@ -2245,9 +2372,7 @@ app.post(
           RETURNING *
           `,
           [
-            int(
-              req.params.id
-            ),
+            videoId,
             req.user.id,
             text
           ]
@@ -2260,11 +2385,7 @@ app.post(
           comments_count+1
         WHERE id=$1
         `,
-        [
-          int(
-            req.params.id
-          )
-        ]
+        [videoId]
       );
 
       return json(
@@ -2285,6 +2406,10 @@ app.post(
     }
   }
 );
+
+/* ======================================================
+   REPORT
+====================================================== */
 
 app.post(
   "/api/videos/:id/report",
@@ -2481,7 +2606,7 @@ app.post(
 );
 
 /* ======================================================
-   REWARDS
+   DAILY REWARD
 ====================================================== */
 
 app.post(
@@ -2550,7 +2675,9 @@ app.post(
           reference_id
         )
         VALUES(
-          $1,$2,'daily',
+          $1,
+          $2,
+          'daily',
           'Daily reward',
           $3
         )
@@ -2580,6 +2707,10 @@ app.post(
     }
   }
 );
+
+/* ======================================================
+   REWARDED AD
+====================================================== */
 
 app.post(
   "/api/rewards/ad",
@@ -2626,7 +2757,8 @@ app.post(
           description
         )
         VALUES(
-          $1,$2,
+          $1,
+          $2,
           'rewarded_ad',
           'Rewarded ad reward'
         )
@@ -2655,6 +2787,10 @@ app.post(
     }
   }
 );
+
+/* ======================================================
+   POINTS HISTORY
+====================================================== */
 
 app.get(
   "/api/points/history",
@@ -2695,6 +2831,10 @@ app.get(
     }
   }
 );
+
+/* ======================================================
+   WATCH HISTORY
+====================================================== */
 
 app.get(
   "/api/watch/history",
@@ -2873,118 +3013,163 @@ app.post(
    PAYOUT ACCOUNT
 ====================================================== */
 
-app.post(
-  "/api/creator/payout",
+app.get(
+  "/api/wallet/payout-account",
   requireAuth,
   async (req, res) => {
 
     try {
 
-      const type =
-        clean(
-          req.body.account_type ||
-          req.body.type,
-          30
-        ) || "bank";
-
-      const name =
-        clean(
-          req.body.account_name,
-          150
-        );
-
-      const number =
-        clean(
-          req.body.account_number ||
-          req.body.upi_id,
-          100
-        );
-
-      const ifsc =
-        clean(
-          req.body.ifsc,
-          20
-        ).toUpperCase();
-
-      if (
-        !name ||
-        !number
-      ) {
-        return error(
-          res,
-          400,
-          "Payout details required"
-        );
-      }
-
-      const identifier =
-        type === "upi"
-          ? number
-          : `${number}${
-              ifsc
-                ? `|${ifsc}`
-                : ""
-            }`;
-
       const result =
         await q(
           `
-          INSERT INTO dekhoearn_payout_accounts(
-            user_id,
+          SELECT
+            id,
             account_type,
             account_name,
             account_identifier,
             status
-          )
-          VALUES(
-            $1,$2,$3,$4,
-            'pending'
-          )
-          ON CONFLICT(user_id)
-          DO UPDATE SET
-            account_type=
-              EXCLUDED.account_type,
-            account_name=
-              EXCLUDED.account_name,
-            account_identifier=
-              EXCLUDED.account_identifier,
-            status='pending',
-            updated_at=NOW()
-          RETURNING
-            id,
-            account_type,
-            account_name,
-            status
+          FROM dekhoearn_payout_accounts
+          WHERE user_id=$1
+          LIMIT 1
           `,
           [
-            req.user.id,
-            type,
-            name,
-            identifier
+            req.user.id
           ]
         );
 
       return json(
         res,
         {
-          payout_account:
-            result.rows[0]
+          account:
+            result.rows[0] ||
+            null
         }
       );
 
     } catch (e) {
 
+      console.error(e);
+
       return error(
         res,
         500,
-        "Could not save payout account"
+        "Unable to load payout account"
+      );
+    }
+  }
+);
+
+app.post(
+  "/api/wallet/payout-account",
+  requireAuth,
+  async (req, res) => {
+
+    try {
+
+      const accountType =
+        cleanString(
+          req.body.account_type ||
+          req.body.type,
+          30
+        ).toLowerCase();
+
+      const accountName =
+        cleanString(
+          req.body.account_name,
+          120
+        );
+
+      const accountIdentifier =
+        cleanString(
+          req.body.account_identifier ||
+          req.body.upi_id ||
+          req.body.account_number,
+          150
+        );
+
+      if (
+        ![
+          "upi",
+          "bank"
+        ].includes(
+          accountType
+        )
+      ) {
+        return error(
+          res,
+          400,
+          "Payout type must be UPI or bank"
+        );
+      }
+
+      if (
+        !accountName ||
+        !accountIdentifier
+      ) {
+        return error(
+          res,
+          400,
+          "Payout details are required"
+        );
+      }
+
+      await q(
+        `
+        INSERT INTO dekhoearn_payout_accounts(
+          user_id,
+          account_type,
+          account_name,
+          account_identifier,
+          status
+        )
+        VALUES(
+          $1,$2,$3,$4,'pending'
+        )
+        ON CONFLICT(user_id)
+        DO UPDATE SET
+          account_type=
+            EXCLUDED.account_type,
+          account_name=
+            EXCLUDED.account_name,
+          account_identifier=
+            EXCLUDED.account_identifier,
+          status='pending',
+          updated_at=NOW()
+        `,
+        [
+          req.user.id,
+          accountType,
+          accountName,
+          accountIdentifier
+        ]
+      );
+
+      return json(
+        res,
+        {
+          message:
+            "Payout account saved",
+          status:
+            "pending"
+        }
+      );
+
+    } catch (e) {
+
+      console.error(e);
+
+      return error(
+        res,
+        500,
+        "Unable to save payout account"
       );
     }
   }
 );
 
 /* ======================================================
-   WALLET
+   WALLET HELPER
 ====================================================== */
 
 async function walletBalance(
@@ -3012,6 +3197,10 @@ async function walletBalance(
       .balance || 0
   );
 }
+
+/* ======================================================
+   WALLET
+====================================================== */
 
 app.get(
   "/api/wallet",
@@ -3064,14 +3253,22 @@ app.get(
         {
           wallet: {
             balance,
+
             pending:
               Number(
                 pending.rows[0]
                   .amount || 0
               ),
-            currency: "INR",
+
+            currency:
+              "INR",
+
             minimum_withdrawal:
               MIN_WITHDRAWAL,
+
+            maximum_withdrawal:
+              MAX_WITHDRAWAL,
+
             points_per_rupee:
               POINTS_PER_RUPEE
           },
@@ -3082,6 +3279,8 @@ app.get(
       );
 
     } catch (e) {
+
+      console.error(e);
 
       return error(
         res,
@@ -3140,6 +3339,14 @@ app.post(
   "/api/wallet/convert-points",
   requireAuth,
   async (req, res) => {
+
+    if (!pool) {
+      return error(
+        res,
+        503,
+        "Database unavailable"
+      );
+    }
 
     const client =
       await pool.connect();
@@ -3349,6 +3556,14 @@ app.post(
   requireAuth,
   async (req, res) => {
 
+    if (!pool) {
+      return error(
+        res,
+        503,
+        "Database unavailable"
+      );
+    }
+
     const client =
       await pool.connect();
 
@@ -3410,7 +3625,7 @@ app.post(
         return error(
           res,
           400,
-          "Add and verify a UPI or bank payout account first"
+          "Add a UPI or bank payout account first"
         );
       }
 
@@ -3452,6 +3667,37 @@ app.post(
         );
       }
 
+      const existing =
+        await client.query(
+          `
+          SELECT id
+          FROM dekhoearn_withdrawals
+          WHERE user_id=$1
+            AND status IN(
+              'pending',
+              'processing'
+            )
+          LIMIT 1
+          FOR UPDATE
+          `,
+          [
+            req.user.id
+          ]
+        );
+
+      if (existing.rowCount) {
+
+        await client.query(
+          "ROLLBACK"
+        );
+
+        return error(
+          res,
+          400,
+          "You already have a withdrawal pending"
+        );
+      }
+
       const reference =
         `withdraw:${req.user.id}:${crypto.randomUUID()}`;
 
@@ -3462,20 +3708,23 @@ app.post(
             user_id,
             amount,
             payout_account_id,
-            status
+            status,
+            provider_reference
           )
           VALUES(
             $1,
             $2,
             $3,
-            'pending'
+            'pending',
+            $4
           )
           RETURNING *
           `,
           [
             req.user.id,
             amount,
-            account.rows[0].id
+            account.rows[0].id,
+            reference
           ]
         );
 
@@ -3504,31 +3753,16 @@ app.post(
       );
 
       await client.query(
-        `
-        UPDATE dekhoearn_withdrawals
-        SET provider_reference=$1
-        WHERE id=$2
-        `,
-        [
-          reference,
-          withdrawal
-            .rows[0].id
-        ]
-      );
-
-      await client.query(
         "COMMIT"
       );
 
       return json(
         res,
         {
-          withdrawal: {
-            ...withdrawal
-              .rows[0],
+          withdrawal:
+            withdrawal.rows[0],
 
-            reference
-          },
+          reference,
 
           message:
             "Withdrawal request submitted. Payment will be marked paid only after payout confirmation."
@@ -3659,6 +3893,14 @@ app.post(
   requireAdmin,
   async (req, res) => {
 
+    if (!pool) {
+      return error(
+        res,
+        503,
+        "Database unavailable"
+      );
+    }
+
     const client =
       await pool.connect();
 
@@ -3676,11 +3918,11 @@ app.post(
         );
 
       const allowed = [
+        "pending",
         "processing",
         "paid",
         "failed",
-        "rejected",
-        "pending"
+        "rejected"
       ];
 
       if (
@@ -3742,6 +3984,11 @@ app.post(
           "Paid withdrawal cannot be reverted"
         );
       }
+
+      /*
+       * If a withdrawal is rejected or failed,
+       * return the held amount to wallet.
+       */
 
       if (
         (
@@ -3805,10 +4052,12 @@ app.post(
         `,
         [
           status,
+
           clean(
             req.body.note,
             500
           ),
+
           id
         ]
       );
@@ -3834,6 +4083,7 @@ app.post(
           "admin",
           "withdrawal_status",
           String(id),
+
           clean(
             req.body.note,
             500
@@ -3877,7 +4127,7 @@ app.post(
 );
 
 /* ======================================================
-   ADMIN
+   ADMIN USERS
 ====================================================== */
 
 app.get(
@@ -3926,6 +4176,10 @@ app.get(
   }
 );
 
+/* ======================================================
+   ADMIN REPORTS
+====================================================== */
+
 app.get(
   "/api/admin/reports",
   requireAdmin,
@@ -3969,6 +4223,10 @@ app.get(
   }
 );
 
+/* ======================================================
+   ADMIN VIDEOS
+====================================================== */
+
 app.get(
   "/api/admin/videos",
   requireAdmin,
@@ -4007,6 +4265,7 @@ app.get(
 
 /* ======================================================
    STATIC FRONTEND
+   MUST BE AFTER ALL API ROUTES
 ====================================================== */
 
 const publicDir =
@@ -4022,6 +4281,11 @@ app.use(
     }
   )
 );
+
+/*
+ * Express 5 catch-all.
+ * API routes have already been registered above.
+ */
 
 app.get(
   "/{*splat}",
@@ -4039,7 +4303,7 @@ app.get(
       );
     }
 
-    res.sendFile(
+    return res.sendFile(
       path.join(
         publicDir,
         "index.html"
@@ -4048,960 +4312,15 @@ app.get(
   }
 );
 
-/* =========================================================
-   DEKHOEARN - CASH WALLET & WITHDRAWAL SYSTEM
-   Version 3.2.0
-   ---------------------------------------------------------
-   IMPORTANT:
-   - Points and Cash are completely separate.
-   - Points CANNOT be withdrawn.
-   - Cash comes only from eligible creator earnings.
-   - Initial payout flow is admin-approved.
-========================================================= */
-
-const MIN_WITHDRAWAL_AMOUNT = Number(
-    process.env.MIN_WITHDRAWAL_AMOUNT || 50
-);
-
-const MAX_WITHDRAWAL_AMOUNT = Number(
-    process.env.MAX_WITHDRAWAL_AMOUNT || 10000
-);
-
-
-/* =========================================================
-   CASH TABLES
-========================================================= */
-
-async function initCashWithdrawalTables() {
-    if (!pool) {
-        console.log("Cash withdrawal tables skipped: database unavailable");
-        return;
-    }
-
-    try {
-
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS dekhoearn_cash_ledger (
-                id BIGSERIAL PRIMARY KEY,
-                user_id BIGINT NOT NULL,
-                amount NUMERIC(12,2) NOT NULL,
-                type VARCHAR(40) NOT NULL,
-                description TEXT,
-                reference_id VARCHAR(120),
-                status VARCHAR(30) DEFAULT 'available',
-                created_at TIMESTAMPTZ DEFAULT NOW()
-            )
-        `);
-
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS dekhoearn_withdrawals (
-                id BIGSERIAL PRIMARY KEY,
-                user_id BIGINT NOT NULL,
-                amount NUMERIC(12,2) NOT NULL,
-                payout_method VARCHAR(30) NOT NULL,
-                payout_account_id BIGINT,
-                status VARCHAR(30) DEFAULT 'pending',
-                admin_note TEXT,
-                transaction_reference VARCHAR(150),
-                requested_at TIMESTAMPTZ DEFAULT NOW(),
-                processed_at TIMESTAMPTZ
-            )
-        `);
-
-        await pool.query(`
-            CREATE INDEX IF NOT EXISTS idx_cash_ledger_user
-            ON dekhoearn_cash_ledger(user_id, created_at DESC)
-        `);
-
-        await pool.query(`
-            CREATE INDEX IF NOT EXISTS idx_withdrawals_user
-            ON dekhoearn_withdrawals(user_id, requested_at DESC)
-        `);
-
-        await pool.query(`
-            CREATE INDEX IF NOT EXISTS idx_withdrawals_status
-            ON dekhoearn_withdrawals(status)
-        `);
-
-        console.log("Cash wallet tables ready");
-
-    } catch (error) {
-        console.error(
-            "Cash wallet table initialization failed:",
-            error.message
-        );
-    }
-}
-
-
-/* =========================================================
-   CASH BALANCE HELPER
-========================================================= */
-
-async function getCashBalance(userId) {
-
-    const result = await pool.query(`
-        SELECT
-            COALESCE(
-                SUM(
-                    CASE
-                        WHEN type IN (
-                            'creator_earning',
-                            'cash_credit',
-                            'refund'
-                        )
-                        AND status = 'available'
-                        THEN amount
-                        ELSE 0
-                    END
-                ), 0
-            )
-            -
-            COALESCE(
-                SUM(
-                    CASE
-                        WHEN type = 'withdrawal'
-                        AND status IN (
-                            'pending',
-                            'approved',
-                            'paid'
-                        )
-                        THEN ABS(amount)
-                        ELSE 0
-                    END
-                ), 0
-            ) AS balance
-        FROM dekhoearn_cash_ledger
-        WHERE user_id = $1
-    `, [userId]);
-
-    return Number(result.rows[0]?.balance || 0);
-}
-
-
-/* =========================================================
-   CASH WALLET
-========================================================= */
-
-app.get("/api/wallet", requireAuth, async (req, res) => {
-
-    try {
-
-        const userId = req.user.id;
-
-        const balance = await getCashBalance(userId);
-
-        const history = await pool.query(`
-            SELECT
-                id,
-                amount,
-                type,
-                description,
-                reference_id,
-                status,
-                created_at
-            FROM dekhoearn_cash_ledger
-            WHERE user_id = $1
-            ORDER BY created_at DESC
-            LIMIT 100
-        `, [userId]);
-
-        res.json({
-            success: true,
-            balance: Number(balance.toFixed(2)),
-            currency: "INR",
-            min_withdrawal: MIN_WITHDRAWAL_AMOUNT,
-            max_withdrawal: MAX_WITHDRAWAL_AMOUNT,
-            history: history.rows
-        });
-
-    } catch (error) {
-
-        console.error("Wallet error:", error);
-
-        return sendError(
-            res,
-            500,
-            "Unable to load wallet"
-        );
-    }
-});
-
-
-/* =========================================================
-   ADD CREATOR CASH EARNING
-   ---------------------------------------------------------
-   This should ONLY be called by trusted server-side
-   creator monetization logic.
-========================================================= */
-
-async function addCreatorCashEarning({
-    userId,
-    amount,
-    videoId = null,
-    description = "Creator earning"
-}) {
-
-    if (!pool) {
-        throw new Error("Database unavailable");
-    }
-
-    const value = Number(amount);
-
-    if (!Number.isFinite(value) || value <= 0) {
-        throw new Error("Invalid cash earning amount");
-    }
-
-    const referenceId =
-        videoId
-            ? `video_${videoId}_${Date.now()}`
-            : `earning_${userId}_${Date.now()}`;
-
-    await pool.query(`
-        INSERT INTO dekhoearn_cash_ledger
-        (
-            user_id,
-            amount,
-            type,
-            description,
-            reference_id,
-            status
-        )
-        VALUES
-        ($1, $2, 'creator_earning', $3, $4, 'available')
-    `, [
-        userId,
-        value.toFixed(2),
-        description,
-        referenceId
-    ]);
-
-    return value;
-}
-
-
-/* =========================================================
-   PAYOUT ACCOUNT
-   ---------------------------------------------------------
-   Bank / UPI details
-========================================================= */
-
-app.get("/api/wallet/payout-account", requireAuth, async (req, res) => {
-
-    try {
-
-        const result = await pool.query(`
-            SELECT
-                id,
-                account_type,
-                account_name,
-                account_identifier,
-                status
-            FROM dekhoearn_payout_accounts
-            WHERE user_id = $1
-            LIMIT 1
-        `, [req.user.id]);
-
-        res.json({
-            success: true,
-            account: result.rows[0] || null
-        });
-
-    } catch (error) {
-
-        console.error("Payout account error:", error);
-
-        return sendError(
-            res,
-            500,
-            "Unable to load payout account"
-        );
-    }
-});
-
-
-/* =========================================================
-   SAVE / UPDATE PAYOUT ACCOUNT
-========================================================= */
-
-app.post("/api/wallet/payout-account", requireAuth, async (req, res) => {
-
-    try {
-
-        const userId = req.user.id;
-
-        const accountType =
-            cleanString(req.body.account_type, 30).toLowerCase();
-
-        const accountName =
-            cleanString(req.body.account_name, 120);
-
-        const accountIdentifier =
-            cleanString(req.body.account_identifier, 150);
-
-        if (!["upi", "bank"].includes(accountType)) {
-            return sendError(
-                res,
-                400,
-                "Payout type must be UPI or bank"
-            );
-        }
-
-        if (!accountName || !accountIdentifier) {
-            return sendError(
-                res,
-                400,
-                "Payout details are required"
-            );
-        }
-
-        await pool.query(`
-            INSERT INTO dekhoearn_payout_accounts
-            (
-                user_id,
-                account_type,
-                account_name,
-                account_identifier,
-                status
-            )
-            VALUES
-            ($1, $2, $3, $4, 'pending')
-            ON CONFLICT (user_id)
-            DO UPDATE SET
-                account_type = EXCLUDED.account_type,
-                account_name = EXCLUDED.account_name,
-                account_identifier = EXCLUDED.account_identifier,
-                status = 'pending'
-        `, [
-            userId,
-            accountType,
-            accountName,
-            accountIdentifier
-        ]);
-
-        res.json({
-            success: true,
-            message: "Payout account saved",
-            status: "pending"
-        });
-
-    } catch (error) {
-
-        console.error(
-            "Save payout account error:",
-            error
-        );
-
-        return sendError(
-            res,
-            500,
-            "Unable to save payout account"
-        );
-    }
-});
-
-
-/* =========================================================
-   REQUEST WITHDRAWAL
-========================================================= */
-
-app.post("/api/wallet/withdraw", requireAuth, async (req, res) => {
-
-    const client = await pool.connect();
-
-    try {
-
-        const userId = req.user.id;
-
-        const amount = Number(req.body.amount);
-
-        if (!Number.isFinite(amount)) {
-            return sendError(
-                res,
-                400,
-                "Invalid withdrawal amount"
-            );
-        }
-
-        if (amount < MIN_WITHDRAWAL_AMOUNT) {
-            return sendError(
-                res,
-                400,
-                `Minimum withdrawal is ₹${MIN_WITHDRAWAL_AMOUNT}`
-            );
-        }
-
-        if (amount > MAX_WITHDRAWAL_AMOUNT) {
-            return sendError(
-                res,
-                400,
-                `Maximum withdrawal is ₹${MAX_WITHDRAWAL_AMOUNT}`
-            );
-        }
-
-        const payout = await client.query(`
-            SELECT
-                id,
-                account_type,
-                account_name,
-                account_identifier,
-                status
-            FROM dekhoearn_payout_accounts
-            WHERE user_id = $1
-            LIMIT 1
-        `, [userId]);
-
-        if (!payout.rows.length) {
-            return sendError(
-                res,
-                400,
-                "Please add a payout account first"
-            );
-        }
-
-        if (payout.rows[0].status !== "verified") {
-            return sendError(
-                res,
-                400,
-                "Payout account is not verified yet"
-            );
-        }
-
-        await client.query("BEGIN");
-
-        const balanceResult = await client.query(`
-            SELECT
-                COALESCE(
-                    SUM(
-                        CASE
-                            WHEN type IN (
-                                'creator_earning',
-                                'cash_credit',
-                                'refund'
-                            )
-                            AND status = 'available'
-                            THEN amount
-
-                            WHEN type = 'withdrawal'
-                            AND status IN (
-                                'pending',
-                                'approved',
-                                'paid'
-                            )
-                            THEN -ABS(amount)
-
-                            ELSE 0
-                        END
-                    ),
-                    0
-                ) AS balance
-            FROM dekhoearn_cash_ledger
-            WHERE user_id = $1
-        `, [userId]);
-
-        const balance =
-            Number(balanceResult.rows[0]?.balance || 0);
-
-        if (balance < amount) {
-
-            await client.query("ROLLBACK");
-
-            return sendError(
-                res,
-                400,
-                "Insufficient cash balance"
-            );
-        }
-
-        /*
-         * Prevent multiple pending requests from
-         * consuming the same balance.
-         */
-
-        const existing = await client.query(`
-            SELECT id
-            FROM dekhoearn_withdrawals
-            WHERE user_id = $1
-              AND status IN ('pending', 'approved')
-            LIMIT 1
-            FOR UPDATE
-        `, [userId]);
-
-        if (existing.rows.length) {
-
-            await client.query("ROLLBACK");
-
-            return sendError(
-                res,
-                400,
-                "You already have a withdrawal pending"
-            );
-        }
-
-        const withdrawal = await client.query(`
-            INSERT INTO dekhoearn_withdrawals
-            (
-                user_id,
-                amount,
-                payout_method,
-                payout_account_id,
-                status
-            )
-            VALUES
-            ($1, $2, $3, $4, 'pending')
-            RETURNING id, amount, status, requested_at
-        `, [
-            userId,
-            amount.toFixed(2),
-            payout.rows[0].account_type,
-            payout.rows[0].id
-        ]);
-
-        /*
-         * Reserve the amount immediately.
-         */
-
-        await client.query(`
-            INSERT INTO dekhoearn_cash_ledger
-            (
-                user_id,
-                amount,
-                type,
-                description,
-                reference_id,
-                status
-            )
-            VALUES
-            (
-                $1,
-                $2,
-                'withdrawal',
-                'Withdrawal request',
-                $3,
-                'available'
-            )
-        `, [
-            userId,
-            (-amount).toFixed(2),
-            `withdrawal_${withdrawal.rows[0].id}`
-        ]);
-
-        await client.query("COMMIT");
-
-        return res.json({
-            success: true,
-            message: "Withdrawal request submitted",
-            withdrawal: withdrawal.rows[0]
-        });
-
-    } catch (error) {
-
-        try {
-            await client.query("ROLLBACK");
-        } catch (_) {}
-
-        console.error(
-            "Withdrawal request error:",
-            error
-        );
-
-        return sendError(
-            res,
-            500,
-            "Unable to create withdrawal request"
-        );
-
-    } finally {
-
-        client.release();
-    }
-});
-
-
-/* =========================================================
-   WITHDRAWAL HISTORY
-========================================================= */
-
-app.get("/api/wallet/withdrawals", requireAuth, async (req, res) => {
-
-    try {
-
-        const result = await pool.query(`
-            SELECT
-                w.id,
-                w.amount,
-                w.payout_method,
-                w.status,
-                w.admin_note,
-                w.transaction_reference,
-                w.requested_at,
-                w.processed_at
-            FROM dekhoearn_withdrawals w
-            WHERE w.user_id = $1
-            ORDER BY w.requested_at DESC
-            LIMIT 100
-        `, [req.user.id]);
-
-        res.json({
-            success: true,
-            withdrawals: result.rows
-        });
-
-    } catch (error) {
-
-        console.error(
-            "Withdrawal history error:",
-            error
-        );
-
-        return sendError(
-            res,
-            500,
-            "Unable to load withdrawal history"
-        );
-    }
-});
-
-
-/* =========================================================
-   ADMIN - WITHDRAWAL LIST
-   ---------------------------------------------------------
-   Uses existing admin authentication.
-========================================================= */
-
-app.get("/api/admin/withdrawals", requireAdmin, async (req, res) => {
-
-    try {
-
-        const result = await pool.query(`
-            SELECT
-                w.id,
-                w.user_id,
-                u.username,
-                u.name,
-                w.amount,
-                w.payout_method,
-                w.status,
-                w.admin_note,
-                w.transaction_reference,
-                w.requested_at,
-                w.processed_at,
-                p.account_name,
-                p.account_identifier
-            FROM dekhoearn_withdrawals w
-            JOIN dekhoearn_users u
-                ON u.id = w.user_id
-            LEFT JOIN dekhoearn_payout_accounts p
-                ON p.id = w.payout_account_id
-            ORDER BY w.requested_at DESC
-            LIMIT 200
-        `);
-
-        res.json({
-            success: true,
-            withdrawals: result.rows
-        });
-
-    } catch (error) {
-
-        console.error(
-            "Admin withdrawals error:",
-            error
-        );
-
-        return sendError(
-            res,
-            500,
-            "Unable to load withdrawals"
-        );
-    }
-});
-
-
-/* =========================================================
-   ADMIN - APPROVE WITHDRAWAL
-========================================================= */
-
-app.post(
-    "/api/admin/withdrawals/:id/approve",
-    requireAdmin,
-    async (req, res) => {
-
-        try {
-
-            const id = Number(req.params.id);
-
-            if (!Number.isInteger(id)) {
-                return sendError(
-                    res,
-                    400,
-                    "Invalid withdrawal ID"
-                );
-            }
-
-            const result = await pool.query(`
-                UPDATE dekhoearn_withdrawals
-                SET
-                    status = 'approved'
-                WHERE id = $1
-                  AND status = 'pending'
-                RETURNING *
-            `, [id]);
-
-            if (!result.rows.length) {
-                return sendError(
-                    res,
-                    404,
-                    "Pending withdrawal not found"
-                );
-            }
-
-            res.json({
-                success: true,
-                message: "Withdrawal approved",
-                withdrawal: result.rows[0]
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Approve withdrawal error:",
-                error
-            );
-
-            return sendError(
-                res,
-                500,
-                "Unable to approve withdrawal"
-            );
-        }
-    }
-);
-
-
-/* =========================================================
-   ADMIN - MARK PAID
-========================================================= */
-
-app.post(
-    "/api/admin/withdrawals/:id/paid",
-    requireAdmin,
-    async (req, res) => {
-
-        try {
-
-            const id = Number(req.params.id);
-
-            const transactionReference =
-                cleanString(
-                    req.body.transaction_reference,
-                    150
-                );
-
-            if (!Number.isInteger(id)) {
-                return sendError(
-                    res,
-                    400,
-                    "Invalid withdrawal ID"
-                );
-            }
-
-            if (!transactionReference) {
-                return sendError(
-                    res,
-                    400,
-                    "Transaction reference is required"
-                );
-            }
-
-            const result = await pool.query(`
-                UPDATE dekhoearn_withdrawals
-                SET
-                    status = 'paid',
-                    transaction_reference = $2,
-                    processed_at = NOW()
-                WHERE id = $1
-                  AND status = 'approved'
-                RETURNING *
-            `, [
-                id,
-                transactionReference
-            ]);
-
-            if (!result.rows.length) {
-                return sendError(
-                    res,
-                    404,
-                    "Approved withdrawal not found"
-                );
-            }
-
-            res.json({
-                success: true,
-                message: "Withdrawal marked as paid",
-                withdrawal: result.rows[0]
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Mark paid error:",
-                error
-            );
-
-            return sendError(
-                res,
-                500,
-                "Unable to mark withdrawal as paid"
-            );
-        }
-    }
-);
-
-
-/* =========================================================
-   ADMIN - REJECT WITHDRAWAL
-========================================================= */
-
-app.post(
-    "/api/admin/withdrawals/:id/reject",
-    requireAdmin,
-    async (req, res) => {
-
-        const client = await pool.connect();
-
-        try {
-
-            const id = Number(req.params.id);
-
-            const note =
-                cleanString(
-                    req.body.note,
-                    500
-                ) || "Withdrawal rejected";
-
-            await client.query("BEGIN");
-
-            const withdrawal = await client.query(`
-                SELECT
-                    id,
-                    user_id,
-                    amount,
-                    status
-                FROM dekhoearn_withdrawals
-                WHERE id = $1
-                FOR UPDATE
-            `, [id]);
-
-            if (!withdrawal.rows.length) {
-
-                await client.query("ROLLBACK");
-
-                return sendError(
-                    res,
-                    404,
-                    "Withdrawal not found"
-                );
-            }
-
-            const row = withdrawal.rows[0];
-
-            if (!["pending", "approved"].includes(row.status)) {
-
-                await client.query("ROLLBACK");
-
-                return sendError(
-                    res,
-                    400,
-                    "Withdrawal cannot be rejected now"
-                );
-            }
-
-            await client.query(`
-                UPDATE dekhoearn_withdrawals
-                SET
-                    status = 'rejected',
-                    admin_note = $2,
-                    processed_at = NOW()
-                WHERE id = $1
-            `, [
-                id,
-                note
-            ]);
-
-            /*
-             * Return reserved cash to wallet.
-             */
-
-            await client.query(`
-                INSERT INTO dekhoearn_cash_ledger
-                (
-                    user_id,
-                    amount,
-                    type,
-                    description,
-                    reference_id,
-                    status
-                )
-                VALUES
-                (
-                    $1,
-                    $2,
-                    'refund',
-                    'Withdrawal rejected - balance returned',
-                    $3,
-                    'available'
-                )
-            `, [
-                row.user_id,
-                Math.abs(Number(row.amount)).toFixed(2),
-                `withdrawal_refund_${id}`
-            ]);
-
-            await client.query("COMMIT");
-
-            res.json({
-                success: true,
-                message: "Withdrawal rejected and balance returned"
-            });
-
-        } catch (error) {
-
-            try {
-                await client.query("ROLLBACK");
-            } catch (_) {}
-
-            console.error(
-                "Reject withdrawal error:",
-                error
-            );
-
-            return sendError(
-                res,
-                500,
-                "Unable to reject withdrawal"
-            );
-
-        } finally {
-
-            client.release();
-        }
-    }
-);
-
 /* ======================================================
    START SERVER
 ====================================================== */
 
+let server = null;
+
 async function start() {
 
   try {
-
-    /*
-    ------------------------------------------------------
-    DATABASE INITIALIZATION
-    ------------------------------------------------------
-    */
 
     if (!pool) {
 
@@ -5026,185 +4345,148 @@ async function start() {
       );
     }
 
+    server =
+      app.listen(
+        PORT,
+        () => {
 
-    /*
-    ------------------------------------------------------
-    CASH WITHDRAWAL TABLES
-    ------------------------------------------------------
-    */
+          console.log(
+            `DekhoEarn server v4.0.1 running on ${APP_BASE_URL}`
+          );
 
-    if (pool) {
+          console.log(
+            `Port: ${PORT}`
+          );
 
-      try {
+        }
+      );
 
-        await initCashWithdrawalTables();
-
-        console.log(
-          "Cash withdrawal tables initialized."
-        );
-
-      } catch (error) {
-
-        console.error(
-          "Cash withdrawal table initialization failed:",
-          error
-        );
-
-        /*
-        Do not stop the whole server here.
-        The server can still start, while withdrawal
-        functionality remains unavailable until fixed.
-        */
-
-      }
-    }
-
-
-    /*
-    ------------------------------------------------------
-    START EXPRESS SERVER
-    ------------------------------------------------------
-    */
-
-    app.listen(
-      PORT,
-      () => {
-
-        console.log(
-          `DekhoEarn server v4.0.0 running on ${APP_BASE_URL}`
-        );
-
-        console.log(
-          `Port: ${PORT}`
-        );
-
-      }
-    );
-
-  } catch (error) {
+  } catch (e) {
 
     console.error(
       "SERVER START FAILED:",
-      error
+      e
     );
 
     process.exit(1);
   }
 }
 
+/* ======================================================
+   GRACEFUL SHUTDOWN
+   ONLY ONE SIGTERM + ONE SIGINT
+====================================================== */
+
+let shuttingDown = false;
+
+async function shutdown(
+  signal
+) {
+
+  if (shuttingDown) {
+    return;
+  }
+
+  shuttingDown = true;
+
+  console.log(
+    `${signal} received. Shutting down...`
+  );
+
+  try {
+
+    if (server) {
+
+      await new Promise(
+        resolve => {
+          server.close(
+            () => resolve()
+          );
+        }
+      );
+
+      console.log(
+        "HTTP server closed."
+      );
+    }
+
+  } catch (e) {
+
+    console.error(
+      "HTTP shutdown error:",
+      e
+    );
+  }
+
+  try {
+
+    if (pool) {
+
+      await pool.end();
+
+      console.log(
+        "Database connection closed."
+      );
+    }
+
+  } catch (e) {
+
+    console.error(
+      "Database shutdown error:",
+      e
+    );
+  }
+
+  process.exit(0);
+}
+
+process.on(
+  "SIGTERM",
+  () => {
+    shutdown("SIGTERM");
+  }
+);
+
+process.on(
+  "SIGINT",
+  () => {
+    shutdown("SIGINT");
+  }
+);
+
+/* ======================================================
+   UNHANDLED ERRORS
+====================================================== */
+
+process.on(
+  "unhandledRejection",
+  error => {
+
+    console.error(
+      "Unhandled Promise Rejection:",
+      error
+    );
+  }
+);
+
+process.on(
+  "uncaughtException",
+  error => {
+
+    console.error(
+      "Uncaught Exception:",
+      error
+    );
+
+    /*
+     * Do not immediately kill the process here.
+     * Render/Node can still report the error.
+     */
+  }
+);
 
 /* ======================================================
    START APPLICATION
 ====================================================== */
 
 start();
-
-
-/* ======================================================
-   GRACEFUL SHUTDOWN
-====================================================== */
-
-process.on(
-  "SIGTERM",
-  async () => {
-
-    console.log(
-      "SIGTERM received. Shutting down..."
-    );
-
-    try {
-
-      if (pool) {
-
-        await pool.end();
-
-        console.log(
-          "Database connection closed."
-        );
-      }
-
-    } catch (error) {
-
-      console.error(
-        "Error during SIGTERM shutdown:",
-        error
-      );
-
-    } finally {
-
-      process.exit(0);
-    }
-  }
-);
-
-
-process.on(
-  "SIGINT",
-  async () => {
-
-    console.log(
-      "SIGINT received. Shutting down..."
-    );
-
-    try {
-
-      if (pool) {
-
-        await pool.end();
-
-        console.log(
-          "Database connection closed."
-        );
-      }
-
-    } catch (error) {
-
-      console.error(
-        "Error during SIGINT shutdown:",
-        error
-      );
-
-    } finally {
-
-      process.exit(0);
-    }
-  }
-);
-
-/* ======================================================
-   GRACEFUL SHUTDOWN
-====================================================== */
-
-process.on(
-  "SIGTERM",
-  async () => {
-
-    try {
-
-      if (pool) {
-        await pool.end();
-      }
-
-    } finally {
-
-      process.exit(0);
-    }
-  }
-);
-
-process.on(
-  "SIGINT",
-  async () => {
-
-    try {
-
-      if (pool) {
-        await pool.end();
-      }
-
-    } finally {
-
-      process.exit(0);
-    }
-  }
-);
