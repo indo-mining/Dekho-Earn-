@@ -3,1647 +3,1910 @@
 /*
 =========================================================
  DEKHOEARN FRONTEND
- Version 3.2.0 FINAL
- --------------------------------------------------------
+ Version 4.0.0
  Compatible with:
- - DekhoEarn Server v3.2.0+
- - Secure Bearer Authentication
- - Neon PostgreSQL
- - Cloudinary Signed Video Upload
- - Video Feed
- - Watch Rewards
- - Likes / Comments / Reports
- - Follow / Subscribe
- - Daily Rewards
- - Rewarded Ads
- - Points History
- - Watch History
- - Gallery Video Upload
- - Upload Progress
- - 100 MB Video Limit
- - My Videos
- - Creator Dashboard
- - Creator Monetization
- - Payout Account Foundation
- - Admin-ready API
- - PWA Install
- - Mobile Handling
+ - DekhoEarn Server v4.0.1
+ - Current index.html
+ - Cloudinary direct signed video upload
+ - Neon PostgreSQL API
+ - Mobile / PWA
 =========================================================
 */
 
-"use strict";
+(() => {
 
-const API_BASE = "";
+    /* =====================================================
+       CONFIG
+    ===================================================== */
 
-const STORAGE = {
-    TOKEN: "dekhoearn_auth_token",
-    USER: "dekhoearn_user",
-    USERNAME: "dekhoearn_username",
-    FIRST_NAME: "dekhoearn_first_name"
-};
+    const API_BASE = "";
 
-const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
-const MIN_WATCH_SECONDS = 10;
+    const STORAGE = {
+        token: "dekhoearn_auth_token",
+        user: "dekhoearn_user",
+        username: "dekhoearn_username",
+        firstName: "dekhoearn_first_name"
+    };
 
-let currentUser = null;
-let currentVideo = null;
+    const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
+    const MIN_WATCH_SECONDS = 10;
 
-let watchTimer = null;
-let watchSeconds = 0;
-let watchRewardSent = false;
+    let currentUser = null;
+    let currentVideo = null;
 
-let deferredPrompt = null;
-let uploadInProgress = false;
-let appInitialized = false;
+    let watchTimer = null;
+    let watchedSeconds = 0;
+    let watchRewardSent = false;
+
+    let selectedVideoFile = null;
+    let selectedVideoDuration = 0;
+    let selectedVideoObjectUrl = null;
+
+    let uploadInProgress = false;
+
+    let deferredInstallPrompt = null;
+
+    let initialized = false;
 
 
-/* ======================================================
-   BASIC HELPERS
-====================================================== */
+    /* =====================================================
+       HELPERS
+    ===================================================== */
 
-function $(id) {
-    return document.getElementById(id);
-}
+    const $ = (id) => document.getElementById(id);
 
-function qs(selector) {
-    return document.querySelector(selector);
-}
+    function escapeHTML(value) {
 
-function qsa(selector) {
-    return Array.from(document.querySelectorAll(selector));
-}
-
-function escapeHTML(value) {
-    if (value === null || value === undefined) {
-        return "";
+        return String(value ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     }
 
-    return String(value)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
 
-function safeJSON(value, fallback = null) {
-    try {
-        return JSON.parse(value);
-    } catch {
-        return fallback;
-    }
-}
+    function number(value, fallback = 0) {
 
-function getToken() {
-    return localStorage.getItem(STORAGE.TOKEN) || "";
-}
+        const n = Number(value);
 
-function saveToken(token) {
-    if (token) {
-        localStorage.setItem(
-            STORAGE.TOKEN,
-            token
-        );
-    }
-}
-
-function removeToken() {
-    localStorage.removeItem(
-        STORAGE.TOKEN
-    );
-}
-
-function saveUser(user) {
-    if (!user) {
-        return;
+        return Number.isFinite(n) ? n : fallback;
     }
 
-    currentUser = user;
 
-    localStorage.setItem(
-        STORAGE.USER,
-        JSON.stringify(user)
-    );
+    function formatNumber(value) {
 
-    if (user.username) {
-        localStorage.setItem(
-            STORAGE.USERNAME,
-            user.username
-        );
+        return number(value).toLocaleString("en-IN");
     }
 
-    const firstName =
-        user.first_name ||
-        user.name ||
-        "";
 
-    if (firstName) {
-        localStorage.setItem(
-            STORAGE.FIRST_NAME,
-            firstName
-        );
-    }
-}
+    function formatDuration(seconds) {
 
-function loadSavedUser() {
-    const raw =
-        localStorage.getItem(
-            STORAGE.USER
-        );
+        seconds = Math.max(0, Math.floor(number(seconds)));
 
-    if (!raw) {
-        return null;
+        const minutes = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+
+        return `${minutes}:${String(secs).padStart(2, "0")}`;
     }
 
-    const user =
-        safeJSON(raw, null);
 
-    if (user) {
-        currentUser = user;
-    }
+    function formatDate(value) {
 
-    return user;
-}
+        if (!value) return "";
 
-function clearSession() {
-    currentUser = null;
-    currentVideo = null;
+        const d = new Date(value);
 
-    stopWatchTimer();
+        if (Number.isNaN(d.getTime())) return "";
 
-    localStorage.removeItem(
-        STORAGE.TOKEN
-    );
-
-    localStorage.removeItem(
-        STORAGE.USER
-    );
-
-    localStorage.removeItem(
-        STORAGE.USERNAME
-    );
-
-    localStorage.removeItem(
-        STORAGE.FIRST_NAME
-    );
-}
-
-function showMessage(
-    message,
-    type = "info"
-) {
-    const box =
-        $("messageBox") ||
-        $("toast") ||
-        $("statusMessage");
-
-    if (!box) {
-        console.log(
-            `[DekhoEarn ${type}]`,
-            message
-        );
-        return;
-    }
-
-    box.textContent = message;
-
-    box.className =
-        `message ${type}`;
-
-    box.style.display = "block";
-
-    clearTimeout(
-        box._dekhoearnTimer
-    );
-
-    box._dekhoearnTimer =
-        setTimeout(() => {
-            box.style.display = "none";
-        }, 3500);
-}
-
-function formatNumber(value) {
-    const number =
-        Number(value || 0);
-
-    if (number >= 1000000) {
-        return (
-            number / 1000000
-        ).toFixed(1) + "M";
-    }
-
-    if (number >= 1000) {
-        return (
-            number / 1000
-        ).toFixed(1) + "K";
-    }
-
-    return String(number);
-}
-
-function formatDuration(seconds) {
-    const total =
-        Math.max(
-            0,
-            Number(seconds || 0)
-        );
-
-    const hours =
-        Math.floor(
-            total / 3600
-        );
-
-    const minutes =
-        Math.floor(
-            (total % 3600) / 60
-        );
-
-    const secs =
-        Math.floor(
-            total % 60
-        );
-
-    if (hours > 0) {
-        return (
-            String(hours).padStart(2, "0") +
-            ":" +
-            String(minutes).padStart(2, "0") +
-            ":" +
-            String(secs).padStart(2, "0")
-        );
-    }
-
-    return (
-        String(minutes).padStart(2, "0") +
-        ":" +
-        String(secs).padStart(2, "0")
-    );
-}
-
-function formatDate(value) {
-    if (!value) {
-        return "";
-    }
-
-    const date =
-        new Date(value);
-
-    if (
-        Number.isNaN(
-            date.getTime()
-        )
-    ) {
-        return String(value);
-    }
-
-    return date.toLocaleDateString(
-        "en-IN",
-        {
-            day: "2-digit",
+        return d.toLocaleDateString("en-IN", {
+            day: "numeric",
             month: "short",
             year: "numeric"
+        });
+    }
+
+
+    function getToken() {
+
+        return localStorage.getItem(STORAGE.token) || "";
+    }
+
+
+    function getSavedUser() {
+
+        try {
+
+            const raw = localStorage.getItem(STORAGE.user);
+
+            return raw ? JSON.parse(raw) : null;
+
+        } catch {
+
+            return null;
         }
-    );
-}
-
-
-/* ======================================================
-   API HELPER
-====================================================== */
-
-async function api(
-    path,
-    options = {}
-) {
-    const headers = {
-        ...(options.headers || {})
-    };
-
-    if (
-        options.body &&
-        !(options.body instanceof FormData) &&
-        !headers["Content-Type"]
-    ) {
-        headers["Content-Type"] =
-            "application/json";
     }
 
-    const token =
-        getToken();
 
-    if (token) {
-        headers.Authorization =
-            `Bearer ${token}`;
+    function saveSession(token, user) {
 
-        /*
-         * Kept for compatibility with
-         * older DekhoEarn server builds.
-         */
-        headers["x-auth-token"] =
-            token;
-    }
-
-    let response;
-
-    try {
-        response =
-            await fetch(
-                API_BASE + path,
-                {
-                    ...options,
-                    headers
-                }
-            );
-    } catch (error) {
-        const networkError =
-            new Error(
-                "Network error. Please check your internet connection."
-            );
-
-        networkError.original =
-            error;
-
-        throw networkError;
-    }
-
-    const text =
-        await response.text();
-
-    let data = {};
-
-    try {
-        data =
-            text
-                ? JSON.parse(text)
-                : {};
-    } catch {
-        data = {
-            message: text
-        };
-    }
-
-    if (!response.ok) {
-        const error =
-            new Error(
-                data.message ||
-                data.error ||
-                `Request failed (${response.status})`
-            );
-
-        error.status =
-            response.status;
-
-        error.data = data;
-
-        throw error;
-    }
-
-    return data;
-}
-
-
-/* ======================================================
-   AUTH
-====================================================== */
-
-async function registerUser(
-    username,
-    firstName,
-    email = ""
-) {
-    const data =
-        await api(
-            "/api/auth/register",
-            {
-                method: "POST",
-                body: JSON.stringify({
-                    username,
-                    first_name:
-                        firstName,
-                    email
-                })
-            }
-        );
-
-    if (data.token) {
-        saveToken(data.token);
-    }
-
-    const user =
-        data.user ||
-        data.account ||
-        null;
-
-    if (user) {
-        saveUser(user);
-    }
-
-    return data;
-}
-
-async function loginUser(
-    username,
-    password = ""
-) {
-    const data =
-        await api(
-            "/api/auth/login",
-            {
-                method: "POST",
-                body: JSON.stringify({
-                    username,
-                    password
-                })
-            }
-        );
-
-    if (data.token) {
-        saveToken(data.token);
-    }
-
-    const user =
-        data.user ||
-        data.account ||
-        null;
-
-    if (user) {
-        saveUser(user);
-    }
-
-    return data;
-}
-
-async function getCurrentUser() {
-    const token =
-        getToken();
-
-    if (!token) {
-        return null;
-    }
-
-    try {
-        const data =
-            await api(
-                "/api/auth/me"
-            );
-
-        const user =
-            data.user ||
-            data.account ||
-            null;
+        if (token) {
+            localStorage.setItem(STORAGE.token, token);
+        }
 
         if (user) {
-            saveUser(user);
-        }
 
-        return user;
-
-    } catch (error) {
-        if (
-            error.status === 401 ||
-            error.status === 403
-        ) {
-            clearSession();
-        }
-
-        return null;
-    }
-}
-
-async function logoutUser() {
-    try {
-        if (getToken()) {
-            await api(
-                "/api/auth/logout",
-                {
-                    method: "POST"
-                }
-            );
-        }
-    } catch (error) {
-        console.warn(
-            "Logout API error:",
-            error
-        );
-    }
-
-    clearSession();
-
-    updateUserUI();
-
-    showPage("home");
-
-    showMessage(
-        "Logged out successfully.",
-        "success"
-    );
-}
-
-
-/* ======================================================
-   USER / SESSION
-====================================================== */
-
-async function ensureUser() {
-    if (getToken()) {
-        const user =
-            await getCurrentUser();
-
-        if (user) {
-            return user;
-        }
-    }
-
-    return loadSavedUser();
-}
-
-async function createUserFromLegacy(
-    username,
-    firstName
-) {
-    const params =
-        new URLSearchParams(
-            window.location.search
-        );
-
-    const ref =
-        params.get("ref");
-
-    const data =
-        await api(
-            "/api/user",
-            {
-                method: "POST",
-                body: JSON.stringify({
-                    username,
-                    first_name:
-                        firstName,
-                    ref
-                })
-            }
-        );
-
-    if (data.token) {
-        saveToken(data.token);
-    }
-
-    const user =
-        data.user ||
-        data.account ||
-        null;
-
-    if (user) {
-        saveUser(user);
-    }
-
-    return data;
-}
-
-
-/* ======================================================
-   USER UI
-====================================================== */
-
-function updateUserUI() {
-    const user =
-        currentUser;
-
-    const name =
-        user?.first_name ||
-        user?.name ||
-        user?.username ||
-        "Guest";
-
-    const username =
-        user?.username ||
-        "";
-
-    const points =
-        Number(
-            user?.points ??
-            user?.balance ??
-            0
-        );
-
-    qsa(
-        "[data-user-name], .user-name"
-    ).forEach(
-        element => {
-            element.textContent =
-                name;
-        }
-    );
-
-    qsa(
-        "[data-username], .username"
-    ).forEach(
-        element => {
-            element.textContent =
-                username
-                    ? "@" + username
-                    : "";
-        }
-    );
-
-    qsa(
-        "[data-points], .points-value"
-    ).forEach(
-        element => {
-            element.textContent =
-                formatNumber(points);
-        }
-    );
-
-    qsa(
-        "[data-followers]"
-    ).forEach(
-        element => {
-            element.textContent =
-                formatNumber(
-                    user?.followers_count ??
-                    user?.followers ??
-                    0
-                );
-        }
-    );
-
-    qsa(
-        "[data-following]"
-    ).forEach(
-        element => {
-            element.textContent =
-                formatNumber(
-                    user?.following_count ??
-                    user?.following ??
-                    0
-                );
-        }
-    );
-
-    const avatar =
-        user?.avatar_url ||
-        user?.avatar ||
-        "";
-
-    qsa(
-        "[data-user-avatar], .user-avatar"
-    ).forEach(
-        element => {
-            if (
-                element.tagName === "IMG"
-            ) {
-                if (avatar) {
-                    element.src =
-                        avatar;
-                }
-            }
-        }
-    );
-}
-
-
-/* ======================================================
-   PAGE NAVIGATION
-====================================================== */
-
-function showPage(
-    pageName
-) {
-    const pageMap = {
-        home: [
-            "homePage",
-            "pageHome"
-        ],
-        watch: [
-            "watchPage",
-            "pageWatch"
-        ],
-        player: [
-            "playerPage",
-            "pagePlayer"
-        ],
-        earn: [
-            "earnPage",
-            "pageEarn"
-        ],
-        upload: [
-            "uploadPage",
-            "pageUpload"
-        ],
-        profile: [
-            "profilePage",
-            "pageProfile"
-        ],
-        creator: [
-            "creatorPage",
-            "pageCreator"
-        ]
-    };
-
-    qsa(
-        ".page, .app-page, [data-page]"
-    ).forEach(
-        page => {
-            page.style.display =
-                "none";
-
-            page.classList.remove(
-                "active"
-            );
-        }
-    );
-
-    const ids =
-        pageMap[pageName] ||
-        [];
-
-    let shown =
-        false;
-
-    for (
-        const id of ids
-    ) {
-        const page =
-            $(id);
-
-        if (page) {
-            page.style.display =
-                "block";
-
-            page.classList.add(
-                "active"
+            localStorage.setItem(
+                STORAGE.user,
+                JSON.stringify(user)
             );
 
-            shown =
-                true;
-
-            break;
-        }
-    }
-
-    const generic =
-        document.querySelector(
-            `[data-page="${pageName}"]`
-        );
-
-    if (generic) {
-        generic.style.display =
-            "block";
-
-        generic.classList.add(
-            "active"
-        );
-
-        shown =
-            true;
-    }
-
-    if (!shown) {
-        console.warn(
-            "DekhoEarn page not found:",
-            pageName
-        );
-    }
-
-    qsa(
-        "[data-nav]"
-    ).forEach(
-        button => {
-            button.classList.toggle(
-                "active",
-                button.dataset.nav ===
-                    pageName
-            );
-        }
-    );
-
-    window.scrollTo({
-        top: 0,
-        behavior: "smooth"
-    });
-
-    if (
-        pageName === "home" ||
-        pageName === "watch"
-    ) {
-        loadVideos();
-    }
-
-    if (
-        pageName === "earn"
-    ) {
-        loadPointsHistory();
-    }
-
-    if (
-        pageName === "profile"
-    ) {
-        loadWatchHistory();
-        loadMyVideos();
-    }
-
-    if (
-        pageName === "creator"
-    ) {
-        loadCreatorDashboard();
-    }
-}
-
-
-/* ======================================================
-   VIDEO NORMALIZATION
-====================================================== */
-
-function normalizeVideo(
-    video
-) {
-    if (!video) {
-        return null;
-    }
-
-    return {
-        ...video,
-
-        id:
-            video.id ??
-            video.video_id,
-
-        title:
-            video.title ||
-            "Untitled Video",
-
-        description:
-            video.description ||
-            "",
-
-        video_url:
-            video.video_url ||
-            video.url ||
-            video.secure_url ||
-            "",
-
-        thumbnail_url:
-            video.thumbnail_url ||
-            video.thumbnail ||
-            "",
-
-        views:
-            Number(
-                video.views ??
-                video.view_count ??
-                0
-            ),
-
-        likes:
-            Number(
-                video.likes ??
-                video.like_count ??
-                0
-            ),
-
-        comments:
-            Number(
-                video.comments ??
-                video.comment_count ??
-                0
-            ),
-
-        liked:
-            Boolean(
-                video.liked ??
-                video.is_liked ??
-                false
-            ),
-
-        following:
-            Boolean(
-                video.following ??
-                video.is_following ??
-                false
-            ),
-
-        creator_id:
-            video.creator_id ??
-            video.user_id ??
-            null,
-
-        creator_name:
-            video.creator_name ||
-            video.username ||
-            video.name ||
-            "Creator",
-
-        creator_username:
-            video.creator_username ||
-            video.username ||
-            "",
-
-        creator_avatar:
-            video.creator_avatar ||
-            video.avatar_url ||
-            ""
-    };
-}
-
-
-/* ======================================================
-   VIDEO FEED
-====================================================== */
-
-async function loadVideos() {
-    const containers = [
-        $("videoFeed"),
-        $("videosContainer"),
-        $("homeVideos"),
-        $("feed")
-    ].filter(Boolean);
-
-    if (!containers.length) {
-        return;
-    }
-
-    containers.forEach(
-        container => {
-            container.innerHTML =
-                `<div class="loading">
-                    Loading videos...
-                 </div>`;
-        }
-    );
-
-    try {
-        const data =
-            await api(
-                "/api/videos"
-            );
-
-        let videos =
-            data.videos ||
-            data.items ||
-            data.data ||
-            data;
-
-        if (!Array.isArray(videos)) {
-            videos = [];
-        }
-
-        videos =
-            videos
-                .map(
-                    normalizeVideo
-                )
-                .filter(Boolean)
-                .filter(
-                    video =>
-                        video.id &&
-                        video.video_url
-                );
-
-        containers.forEach(
-            container => {
-                renderVideoFeed(
-                    container,
-                    videos
+            if (user.username) {
+                localStorage.setItem(
+                    STORAGE.username,
+                    user.username
                 );
             }
-        );
 
-    } catch (error) {
-        console.error(
-            "VIDEO FEED ERROR:",
-            error
-        );
+            const firstName =
+                user.name ||
+                user.first_name ||
+                user.firstName ||
+                user.username ||
+                "";
 
-        containers.forEach(
-            container => {
-                container.innerHTML =
-                    `<div class="empty-state">
-                        Unable to load videos.
-                     </div>`;
-            }
-        );
-    }
-}
+            if (firstName) {
 
-function renderVideoFeed(
-    container,
-    videos
-) {
-    if (!videos.length) {
-        container.innerHTML =
-            `<div class="empty-state">
-                No videos available yet.
-             </div>`;
-
-        return;
-    }
-
-    container.innerHTML =
-        videos
-            .map(video => {
-                const thumbnail =
-                    video.thumbnail_url;
-
-                return `
-                <article
-                    class="video-card"
-                    data-video-id="${escapeHTML(video.id)}"
-                    onclick="openVideo('${escapeHTML(video.id)}')"
-                >
-                    <div class="video-thumb">
-
-                        ${
-                            thumbnail
-                            ? `
-                                <img
-                                    src="${escapeHTML(thumbnail)}"
-                                    alt=""
-                                    loading="lazy"
-                                >
-                            `
-                            : `
-                                <video
-                                    src="${escapeHTML(video.video_url)}"
-                                    muted
-                                    preload="metadata"
-                                    playsinline
-                                ></video>
-                            `
-                        }
-
-                        <span class="video-views">
-                            ${formatNumber(video.views)} views
-                        </span>
-
-                    </div>
-
-                    <div class="video-info">
-
-                        <h3>
-                            ${escapeHTML(video.title)}
-                        </h3>
-
-                        <div class="video-creator">
-
-                            ${
-                                video.creator_avatar
-                                ? `
-                                    <img
-                                        src="${escapeHTML(video.creator_avatar)}"
-                                        alt=""
-                                        loading="lazy"
-                                    >
-                                `
-                                : ""
-                            }
-
-                            <span>
-                                ${escapeHTML(
-                                    video.creator_name
-                                )}
-                            </span>
-
-                        </div>
-
-                        <div class="video-stats">
-
-                            <span>
-                                ❤️ ${formatNumber(video.likes)}
-                            </span>
-
-                            <span>
-                                💬 ${formatNumber(video.comments)}
-                            </span>
-
-                        </div>
-
-                    </div>
-                </article>
-                `;
-            })
-            .join("");
-}
-
-
-/* ======================================================
-   OPEN VIDEO
-====================================================== */
-
-async function openVideo(
-    videoId
-) {
-    stopWatchTimer();
-
-    watchSeconds = 0;
-    watchRewardSent = false;
-
-    updateWatchProgress();
-
-    if (!videoId) {
-        return;
-    }
-
-    try {
-        const data =
-            await api(
-                `/api/videos/${encodeURIComponent(
-                    videoId
-                )}`
-            );
-
-        currentVideo =
-            normalizeVideo(
-                data.video ||
-                data
-            );
-
-        if (!currentVideo) {
-            throw new Error(
-                "Video not found."
-            );
-        }
-
-        showPage("player");
-
-        renderPlayer(
-            currentVideo
-        );
-
-    } catch (error) {
-        console.error(
-            "OPEN VIDEO ERROR:",
-            error
-        );
-
-        showMessage(
-            error.message ||
-            "Unable to open video.",
-            "error"
-        );
-    }
-}
-
-function renderPlayer(
-    video
-) {
-    const player =
-        $("videoPlayer") ||
-        $("playerVideo");
-
-    const title =
-        $("playerTitle");
-
-    const description =
-        $("playerDescription");
-
-    const views =
-        $("playerViews");
-
-    const likes =
-        $("playerLikes");
-
-    const comments =
-        $("playerComments");
-
-    if (title) {
-        title.textContent =
-            video.title;
-    }
-
-    if (description) {
-        description.textContent =
-            video.description;
-    }
-
-    if (views) {
-        views.textContent =
-            formatNumber(
-                video.views
-            );
-    }
-
-    if (likes) {
-        likes.textContent =
-            formatNumber(
-                video.likes
-            );
-    }
-
-    if (comments) {
-        comments.textContent =
-            formatNumber(
-                video.comments
-            );
-    }
-
-    if (player) {
-        player.pause();
-
-        player.removeAttribute(
-            "src"
-        );
-
-        player.load();
-
-        player.src =
-            video.video_url;
-
-        player.setAttribute(
-            "playsinline",
-            ""
-        );
-
-        player.setAttribute(
-            "webkit-playsinline",
-            ""
-        );
-
-        player.onplay =
-            startWatchTimer;
-
-        player.onpause =
-            stopWatchTimer;
-
-        player.onended =
-            stopWatchTimer;
-
-        player.onerror =
-            () => {
-                showMessage(
-                    "Unable to play this video.",
-                    "error"
+                localStorage.setItem(
+                    STORAGE.firstName,
+                    firstName
                 );
-            };
-
-        player.load();
-    }
-
-    updateLikeButton(
-        video
-    );
-
-    updateFollowButton(
-        video
-    );
-
-    loadComments(
-        video.id
-    );
-}
-
-
-/* ======================================================
-   WATCH TIMER
-====================================================== */
-
-function startWatchTimer() {
-    if (watchTimer) {
-        return;
-    }
-
-    watchTimer =
-        setInterval(
-            () => {
-                watchSeconds++;
-
-                updateWatchProgress();
-
-                if (
-                    watchSeconds >=
-                        MIN_WATCH_SECONDS &&
-                    !watchRewardSent
-                ) {
-                    completeWatchReward();
-                }
-            },
-            1000
-        );
-}
-
-function stopWatchTimer() {
-    if (watchTimer) {
-        clearInterval(
-            watchTimer
-        );
-
-        watchTimer = null;
-    }
-}
-
-function updateWatchProgress() {
-    const progress =
-        $("watchProgress");
-
-    const percent =
-        Math.min(
-            100,
-            (
-                watchSeconds /
-                MIN_WATCH_SECONDS
-            ) * 100
-        );
-
-    if (progress) {
-        if (
-            progress.tagName ===
-            "PROGRESS"
-        ) {
-            progress.value =
-                percent;
-        } else {
-            progress.style.width =
-                percent + "%";
+            }
         }
     }
 
-    const counter =
-        $("watchCounter");
 
-    if (counter) {
-        counter.textContent =
-            `${Math.min(
-                watchSeconds,
-                MIN_WATCH_SECONDS
-            )}/${MIN_WATCH_SECONDS}s`;
-    }
-}
+    function clearSession() {
 
+        Object.values(STORAGE).forEach(key => {
+            localStorage.removeItem(key);
+        });
 
-/* ======================================================
-   WATCH REWARD
-====================================================== */
-
-async function completeWatchReward() {
-    if (
-        !currentVideo ||
-        watchRewardSent
-    ) {
-        return;
+        currentUser = null;
+        currentVideo = null;
     }
 
-    watchRewardSent = true;
 
-    try {
-        const data =
-            await api(
-                "/api/watch/complete",
-                {
-                    method: "POST",
-                    body: JSON.stringify({
-                        video_id:
-                            currentVideo.id,
-                        watch_seconds:
-                            watchSeconds
-                    })
-                }
-            );
+    /* =====================================================
+       TOAST
+    ===================================================== */
 
-        const reward =
-            Number(
-                data.points ??
-                data.reward ??
-                data.earned_points ??
-                0
-            );
+    function showMessage(message, type = "info") {
 
-        if (
-            currentUser &&
-            reward > 0
-        ) {
-            currentUser.points =
-                Number(
-                    currentUser.points ||
-                    0
-                ) + reward;
+        const toast = $("toast");
 
-            saveUser(
-                currentUser
-            );
+        if (!toast) {
 
-            updateUserUI();
-        }
-
-        showMessage(
-            reward > 0
-                ? `🎉 You earned ${reward} point${reward === 1 ? "" : "s"}!`
-                : (
-                    data.message ||
-                    "Watch reward processed."
-                ),
-            "success"
-        );
-
-    } catch (error) {
-        console.error(
-            "WATCH REWARD ERROR:",
-            error
-        );
-
-        watchRewardSent = false;
-    }
-}
-
-
-/* ======================================================
-   LIKE
-====================================================== */
-
-async function toggleLike() {
-    if (!currentVideo) {
-        return;
-    }
-
-    try {
-        const data =
-            await api(
-                `/api/videos/${encodeURIComponent(
-                    currentVideo.id
-                )}/like`,
-                {
-                    method: "POST"
-                }
-            );
-
-        currentVideo.liked =
-            Boolean(
-                data.liked ??
-                data.is_liked ??
-                !currentVideo.liked
-            );
-
-        currentVideo.likes =
-            Number(
-                data.likes ??
-                data.like_count ??
-                currentVideo.likes +
-                    (
-                        currentVideo.liked
-                            ? 1
-                            : -1
-                    )
-            );
-
-        updateLikeButton(
-            currentVideo
-        );
-
-    } catch (error) {
-        console.error(
-            "LIKE ERROR:",
-            error
-        );
-
-        showMessage(
-            error.message ||
-            "Unable to like video.",
-            "error"
-        );
-    }
-}
-
-function updateLikeButton(
-    video
-) {
-    const buttons = [
-        $("likeButton"),
-        $("btnLike")
-    ].filter(Boolean);
-
-    buttons.forEach(
-        button => {
-            button.classList.toggle(
-                "liked",
-                Boolean(video.liked)
-            );
-
-            button.textContent =
-                video.liked
-                    ? `❤️ ${formatNumber(video.likes)}`
-                    : `♡ ${formatNumber(video.likes)}`;
-        }
-    );
-}
-
-
-/* ======================================================
-   COMMENTS
-====================================================== */
-
-async function loadComments(
-    videoId
-) {
-    const container =
-        $("commentsList") ||
-        $("commentList");
-
-    if (!container) {
-        return;
-    }
-
-    container.innerHTML =
-        `<div class="loading">
-            Loading comments...
-         </div>`;
-
-    try {
-        const data =
-            await api(
-                `/api/videos/${encodeURIComponent(
-                    videoId
-                )}/comments`
-            );
-
-        let comments =
-            data.comments ||
-            data.items ||
-            data.data ||
-            data;
-
-        if (!Array.isArray(comments)) {
-            comments = [];
-        }
-
-        if (!comments.length) {
-            container.innerHTML =
-                `<div class="empty-state">
-                    No comments yet.
-                 </div>`;
+            alert(message);
 
             return;
         }
 
-        container.innerHTML =
-            comments
-                .map(
-                    comment => `
+        toast.textContent = message;
+
+        toast.className = `toast ${type}`;
+
+        toast.classList.add("show");
+
+        clearTimeout(showMessage.timer);
+
+        showMessage.timer = setTimeout(() => {
+
+            toast.classList.remove("show");
+
+        }, 3200);
+    }
+
+
+    /* =====================================================
+       API
+    ===================================================== */
+
+    async function api(path, options = {}) {
+
+        const headers = new Headers(
+            options.headers || {}
+        );
+
+        const token = getToken();
+
+        if (token) {
+
+            headers.set(
+                "Authorization",
+                `Bearer ${token}`
+            );
+
+            headers.set(
+                "x-auth-token",
+                token
+            );
+        }
+
+        if (
+            options.body &&
+            !(options.body instanceof FormData) &&
+            !headers.has("Content-Type")
+        ) {
+
+            headers.set(
+                "Content-Type",
+                "application/json"
+            );
+        }
+
+        const controller = new AbortController();
+
+        const timeout = setTimeout(() => {
+
+            controller.abort();
+
+        }, options.timeout || 120000);
+
+        try {
+
+            const response = await fetch(
+                API_BASE + path,
+                {
+                    ...options,
+                    headers,
+                    signal: controller.signal
+                }
+            );
+
+            const text = await response.text();
+
+            let data = {};
+
+            try {
+
+                data = text ? JSON.parse(text) : {};
+
+            } catch {
+
+                data = {
+                    message: text
+                };
+            }
+
+
+            if (
+                response.status === 401 ||
+                response.status === 403
+            ) {
+
+                if (path !== "/api/auth/login" &&
+                    path !== "/api/auth/register") {
+
+                    clearSession();
+
+                    showAuthScreen();
+                }
+            }
+
+
+            if (!response.ok) {
+
+                const message =
+                    data.message ||
+                    data.error ||
+                    data.details ||
+                    `Request failed (${response.status})`;
+
+                const error = new Error(message);
+
+                error.status = response.status;
+                error.data = data;
+
+                throw error;
+            }
+
+            return data;
+
+        } catch (error) {
+
+            if (error.name === "AbortError") {
+
+                throw new Error(
+                    "Request timeout. Please try again."
+                );
+            }
+
+            throw error;
+
+        } finally {
+
+            clearTimeout(timeout);
+        }
+    }
+
+
+    /* =====================================================
+       AUTH SCREEN
+    ===================================================== */
+
+    function showAuthScreen() {
+
+        const auth = $("authScreen");
+        const app = $("appShell");
+
+        if (auth) {
+            auth.style.display = "";
+        }
+
+        if (app) {
+            app.style.display = "none";
+        }
+
+        const loginBox = $("loginBox");
+        const registerBox = $("registerBox");
+
+        if (loginBox) {
+            loginBox.style.display = "";
+        }
+
+        if (registerBox) {
+            registerBox.style.display = "none";
+        }
+    }
+
+
+    function showAppScreen() {
+
+        const auth = $("authScreen");
+        const app = $("appShell");
+
+        if (auth) {
+            auth.style.display = "none";
+        }
+
+        if (app) {
+            app.style.display = "";
+        }
+    }
+
+
+    function showLoginBox() {
+
+        const loginBox = $("loginBox");
+        const registerBox = $("registerBox");
+
+        if (loginBox) {
+            loginBox.style.display = "";
+        }
+
+        if (registerBox) {
+            registerBox.style.display = "none";
+        }
+    }
+
+
+    function showRegisterBox() {
+
+        const loginBox = $("loginBox");
+        const registerBox = $("registerBox");
+
+        if (loginBox) {
+            loginBox.style.display = "none";
+        }
+
+        if (registerBox) {
+            registerBox.style.display = "";
+        }
+    }
+
+
+    async function loginUser() {
+
+        const username =
+            $("loginUsername")?.value.trim();
+
+        const password =
+            $("loginPassword")?.value || "";
+
+
+        if (!username) {
+
+            showMessage(
+                "Username enter karo.",
+                "error"
+            );
+
+            $("loginUsername")?.focus();
+
+            return;
+        }
+
+
+        if (!password) {
+
+            showMessage(
+                "Password enter karo.",
+                "error"
+            );
+
+            $("loginPassword")?.focus();
+
+            return;
+        }
+
+
+        const button = $("loginBtn");
+
+        if (button) {
+            button.disabled = true;
+        }
+
+
+        try {
+
+            const data = await api(
+                "/api/auth/login",
+                {
+                    method: "POST",
+                    body: JSON.stringify({
+                        username,
+                        password
+                    }),
+                    timeout: 30000
+                }
+            );
+
+
+            const token =
+                data.token ||
+                data.access_token ||
+                data.session?.token ||
+                data.data?.token;
+
+
+            const user =
+                data.user ||
+                data.data?.user ||
+                data.profile ||
+                null;
+
+
+            if (!token) {
+
+                throw new Error(
+                    "Login token server se nahi mila."
+                );
+            }
+
+
+            saveSession(token, user);
+
+
+            if (user) {
+                currentUser = user;
+            }
+
+
+            showAppScreen();
+
+            await refreshCurrentUser();
+
+            showMessage(
+                "Login successful.",
+                "success"
+            );
+
+            await openPage("homeSection");
+
+
+        } catch (error) {
+
+            showMessage(
+                error.message ||
+                "Login failed.",
+                "error"
+            );
+
+        } finally {
+
+            if (button) {
+                button.disabled = false;
+            }
+        }
+    }
+
+
+    async function registerUser() {
+
+        const name =
+            $("registerName")?.value.trim();
+
+        const username =
+            $("registerUsername")?.value.trim();
+
+        const password =
+            $("registerPassword")?.value || "";
+
+        const referral =
+            $("registerReferral")?.value.trim() || "";
+
+
+        if (!name) {
+
+            showMessage(
+                "Name enter karo.",
+                "error"
+            );
+
+            $("registerName")?.focus();
+
+            return;
+        }
+
+
+        if (!username) {
+
+            showMessage(
+                "Username enter karo.",
+                "error"
+            );
+
+            $("registerUsername")?.focus();
+
+            return;
+        }
+
+
+        if (!password) {
+
+            showMessage(
+                "Password enter karo.",
+                "error"
+            );
+
+            $("registerPassword")?.focus();
+
+            return;
+        }
+
+
+        if (password.length < 6) {
+
+            showMessage(
+                "Password kam se kam 6 characters ka rakho.",
+                "error"
+            );
+
+            return;
+        }
+
+
+        const button = $("registerBtn");
+
+        if (button) {
+            button.disabled = true;
+        }
+
+
+        try {
+
+            /*
+             Server compatibility:
+             name + first_name
+             referral_code + ref
+             Extra fields server ignore kar sakta hai.
+            */
+
+            const body = {
+                name,
+                first_name: name,
+                username,
+                password,
+                email: "",
+                referral_code: referral,
+                ref: referral
+            };
+
+
+            const data = await api(
+                "/api/auth/register",
+                {
+                    method: "POST",
+                    body: JSON.stringify(body),
+                    timeout: 30000
+                }
+            );
+
+
+            const token =
+                data.token ||
+                data.access_token ||
+                data.session?.token ||
+                data.data?.token;
+
+
+            const user =
+                data.user ||
+                data.data?.user ||
+                data.profile ||
+                null;
+
+
+            if (token) {
+
+                saveSession(token, user);
+
+                currentUser = user;
+
+                showAppScreen();
+
+                await refreshCurrentUser();
+
+                showMessage(
+                    "Account successfully create ho gaya.",
+                    "success"
+                );
+
+                await openPage("homeSection");
+
+            } else {
+
+                showLoginBox();
+
+                if ($("loginUsername")) {
+                    $("loginUsername").value = username;
+                }
+
+                showMessage(
+                    "Account create ho gaya. Ab login karo.",
+                    "success"
+                );
+            }
+
+
+        } catch (error) {
+
+            showMessage(
+                error.message ||
+                "Registration failed.",
+                "error"
+            );
+
+        } finally {
+
+            if (button) {
+                button.disabled = false;
+            }
+        }
+    }
+
+
+    async function refreshCurrentUser() {
+
+        try {
+
+            const data =
+                await api("/api/auth/me", {
+                    method: "GET",
+                    timeout: 30000
+                });
+
+
+            const user =
+                data.user ||
+                data.data?.user ||
+                data;
+
+
+            if (user && user.id) {
+
+                currentUser = user;
+
+                saveSession(
+                    getToken(),
+                    user
+                );
+
+                updateUserUI(user);
+
+                return user;
+            }
+
+        } catch (error) {
+
+            /*
+             If /me fails but local session exists,
+             don't immediately destroy UI for temporary
+             network errors.
+            */
+
+            if (
+                error.status === 401 ||
+                error.status === 403
+            ) {
+
+                clearSession();
+
+                showAuthScreen();
+
+                return null;
+            }
+        }
+
+
+        const saved = getSavedUser();
+
+        if (saved) {
+
+            currentUser = saved;
+
+            updateUserUI(saved);
+
+            return saved;
+        }
+
+        return null;
+    }
+
+
+    async function logoutUser() {
+
+        try {
+
+            if (getToken()) {
+
+                await api(
+                    "/api/auth/logout",
+                    {
+                        method: "POST",
+                        timeout: 15000
+                    }
+                );
+            }
+
+        } catch {
+
+            /*
+             Local logout should still happen even if
+             server logout request fails.
+            */
+        }
+
+
+        clearWatchTimer();
+
+        clearSession();
+
+        showAuthScreen();
+
+        showMessage(
+            "Logout ho gaya.",
+            "success"
+        );
+    }
+
+
+    /* =====================================================
+       USER UI
+    ===================================================== */
+
+    function updateUserUI(user) {
+
+        if (!user) return;
+
+
+        const name =
+            user.name ||
+            user.first_name ||
+            user.firstName ||
+            user.username ||
+            "User";
+
+
+        const username =
+            user.username ||
+            "";
+
+
+        const points =
+            number(user.points);
+
+
+        if ($("headerGreeting")) {
+
+            $("headerGreeting").textContent =
+                `Hi, ${name}`;
+        }
+
+
+        if ($("headerPoints")) {
+
+            $("headerPoints").textContent =
+                `${formatNumber(points)} Points`;
+        }
+
+
+        if ($("profileName")) {
+
+            $("profileName").textContent =
+                name;
+        }
+
+
+        if ($("profileUsername")) {
+
+            $("profileUsername").textContent =
+                username
+                    ? `@${username}`
+                    : "";
+        }
+
+
+        if ($("profilePoints")) {
+
+            $("profilePoints").textContent =
+                formatNumber(points);
+        }
+
+
+        if ($("profileVideos")) {
+
+            $("profileVideos").textContent =
+                formatNumber(
+                    user.total_videos ||
+                    user.videos_count ||
+                    0
+                );
+        }
+
+
+        if ($("profileEarned")) {
+
+            $("profileEarned").textContent =
+                formatNumber(
+                    user.total_earned ||
+                    user.earned_points ||
+                    points
+                );
+        }
+    }
+
+
+    /* =====================================================
+       NAVIGATION
+    ===================================================== */
+
+    const PAGE_IDS = [
+        "homeSection",
+        "watchSection",
+        "playerSection",
+        "earnSection",
+        "uploadSection",
+        "profileSection",
+        "creatorSection"
+    ];
+
+
+    function hideAllPages() {
+
+        PAGE_IDS.forEach(id => {
+
+            const element = $(id);
+
+            if (!element) return;
+
+            element.style.display = "none";
+        });
+    }
+
+
+    async function openPage(pageId) {
+
+        hideAllPages();
+
+        const page = $(pageId);
+
+        if (!page) {
+
+            showMessage(
+                "Page nahi mili.",
+                "error"
+            );
+
+            return;
+        }
+
+
+        page.style.display = "";
+
+
+        document
+            .querySelectorAll(".bottom-nav [data-page]")
+            .forEach(button => {
+
+                button.classList.toggle(
+                    "active",
+                    button.dataset.page === pageId
+                );
+            });
+
+
+        if (pageId === "homeSection") {
+
+            await loadVideos();
+        }
+
+
+        if (pageId === "watchSection") {
+
+            await loadWatchHistory();
+        }
+
+
+        if (pageId === "earnSection") {
+
+            await Promise.allSettled([
+                loadPointsHistory(),
+                updateRewardButtons()
+            ]);
+        }
+
+
+        if (pageId === "profileSection") {
+
+            await loadMyVideos();
+        }
+
+
+        if (pageId === "creatorSection") {
+
+            await loadCreatorStats();
+        }
+    }
+
+
+    function goToPlayer() {
+
+        openPage("playerSection");
+    }
+
+
+    /* =====================================================
+       VIDEO NORMALIZATION
+    ===================================================== */
+
+    function normalizeVideo(video) {
+
+        if (!video) return null;
+
+
+        return {
+
+            id: video.id,
+
+            title:
+                video.title ||
+                "Untitled video",
+
+            description:
+                video.description ||
+                "",
+
+            video_url:
+                video.video_url ||
+                video.url ||
+                "",
+
+            thumbnail_url:
+                video.thumbnail_url ||
+                video.thumbnail ||
+                "",
+
+            duration_seconds:
+                number(
+                    video.duration_seconds ||
+                    video.duration ||
+                    0
+                ),
+
+            views:
+                number(
+                    video.views ||
+                    video.view_count ||
+                    0
+                ),
+
+            likes:
+                number(
+                    video.likes_count ??
+                    video.likes ??
+                    0
+                ),
+
+            comments:
+                number(
+                    video.comments_count ??
+                    video.comments ??
+                    0
+                ),
+
+            liked:
+                Boolean(
+                    video.liked ??
+                    video.is_liked ??
+                    false
+                ),
+
+            following:
+                Boolean(
+                    video.following ??
+                    video.is_following ??
+                    false
+                ),
+
+            creator_id:
+                video.creator_id ||
+                video.user_id ||
+                video.owner_id ||
+                null,
+
+            creator_name:
+                video.creator_name ||
+                video.user_name ||
+                video.name ||
+                "Creator",
+
+            creator_username:
+                video.creator_username ||
+                video.username ||
+                "",
+
+            creator_avatar:
+                video.creator_avatar ||
+                video.avatar_url ||
+                "",
+
+            created_at:
+                video.created_at ||
+                video.createdAt ||
+                ""
+        };
+    }
+
+
+    /* =====================================================
+       HOME FEED
+    ===================================================== */
+
+    async function loadVideos() {
+
+        const feed = $("videoFeed");
+
+        if (!feed) return;
+
+
+        feed.innerHTML = `
+            <div class="loading-state">
+                Loading videos...
+            </div>
+        `;
+
+
+        try {
+
+            const data =
+                await api(
+                    "/api/videos",
+                    {
+                        method: "GET",
+                        timeout: 30000
+                    }
+                );
+
+
+            const rawVideos =
+                Array.isArray(data)
+                    ? data
+                    : (
+                        data.videos ||
+                        data.data?.videos ||
+                        data.items ||
+                        data.data ||
+                        []
+                    );
+
+
+            const videos =
+                rawVideos
+                    .map(normalizeVideo)
+                    .filter(Boolean);
+
+
+            renderVideoFeed(videos);
+
+
+        } catch (error) {
+
+            feed.innerHTML = `
+                <div class="empty-state">
+                    <h3>Videos load nahi hue</h3>
+                    <p>${escapeHTML(error.message)}</p>
+                    <button type="button" id="retryFeedButton">
+                        Try Again
+                    </button>
+                </div>
+            `;
+
+
+            $("retryFeedButton")?.addEventListener(
+                "click",
+                loadVideos
+            );
+        }
+    }
+
+
+    function renderVideoFeed(videos) {
+
+        const feed = $("videoFeed");
+
+        if (!feed) return;
+
+
+        if (!videos.length) {
+
+            feed.innerHTML = `
+                <div class="empty-state">
+                    <h3>Abhi koi video nahi hai</h3>
+                    <p>Sabse pehla video upload karo.</p>
+                </div>
+            `;
+
+            return;
+        }
+
+
+        feed.innerHTML =
+            videos.map(video => {
+
+                const thumbnail =
+                    video.thumbnail_url
+                        ? `
+                            <img
+                                src="${escapeHTML(video.thumbnail_url)}"
+                                alt=""
+                                loading="lazy"
+                            >
+                        `
+                        : `
+                            <div class="video-placeholder">
+                                ▶
+                            </div>
+                        `;
+
+
+                return `
+                    <article
+                        class="video-card"
+                        data-video-id="${escapeHTML(video.id)}"
+                    >
+
+                        <div class="video-card-media">
+                            ${thumbnail}
+
+                            <span class="video-duration">
+                                ${formatDuration(video.duration_seconds)}
+                            </span>
+                        </div>
+
+                        <div class="video-card-body">
+
+                            <h3>
+                                ${escapeHTML(video.title)}
+                            </h3>
+
+                            <p>
+                                ${escapeHTML(
+                                    video.creator_name
+                                )}
+                            </p>
+
+                            <div class="video-card-meta">
+
+                                <span>
+                                    👁 ${formatNumber(video.views)}
+                                </span>
+
+                                <span>
+                                    ❤️ ${formatNumber(video.likes)}
+                                </span>
+
+                            </div>
+
+                        </div>
+
+                    </article>
+                `;
+
+            }).join("");
+
+
+        feed
+            .querySelectorAll("[data-video-id]")
+            .forEach(card => {
+
+                card.addEventListener(
+                    "click",
+                    () => {
+
+                        const id =
+                            card.dataset.videoId;
+
+                        openVideo(id);
+                    }
+                );
+            });
+    }
+
+
+    /* =====================================================
+       OPEN VIDEO
+    ===================================================== */
+
+    async function openVideo(videoId) {
+
+        if (!videoId) return;
+
+
+        try {
+
+            const data =
+                await api(
+                    `/api/videos/${encodeURIComponent(videoId)}`,
+                    {
+                        method: "GET",
+                        timeout: 30000
+                    }
+                );
+
+
+            const raw =
+                data.video ||
+                data.data?.video ||
+                data;
+
+
+            const video =
+                normalizeVideo(raw);
+
+
+            if (!video || !video.id) {
+
+                throw new Error(
+                    "Video data nahi mila."
+                );
+            }
+
+
+            currentVideo = video;
+
+            renderPlayer(video);
+
+            await openPage("playerSection");
+
+            await loadComments(video.id);
+
+
+        } catch (error) {
+
+            showMessage(
+                error.message ||
+                "Video open nahi hua.",
+                "error"
+            );
+        }
+    }
+
+
+    function renderPlayer(video) {
+
+        const player = $("mainVideo");
+
+        if (player) {
+
+            clearWatchTimer();
+
+            player.pause();
+
+            player.src = video.video_url;
+
+            if (video.thumbnail_url) {
+
+                player.poster =
+                    video.thumbnail_url;
+            }
+
+            player.load();
+        }
+
+
+        if ($("playerTitle")) {
+
+            $("playerTitle").textContent =
+                video.title;
+        }
+
+
+        if ($("playerDescription")) {
+
+            $("playerDescription").textContent =
+                video.description;
+        }
+
+
+        if ($("playerViews")) {
+
+            $("playerViews").textContent =
+                `${formatNumber(video.views)} views`;
+        }
+
+
+        updateLikeUI(video);
+
+        updateFollowUI(video);
+
+
+        if ($("playerCommentsCount")) {
+
+            $("playerCommentsCount").textContent =
+                formatNumber(video.comments);
+        }
+
+
+        watchedSeconds = 0;
+        watchRewardSent = false;
+    }
+
+
+    /* =====================================================
+       VIDEO WATCH REWARD
+    ===================================================== */
+
+    function startWatchTimer() {
+
+        clearWatchTimer();
+
+
+        if (!currentVideo) return;
+
+
+        watchTimer = setInterval(
+            async () => {
+
+                const video =
+                    $("mainVideo");
+
+                if (!video) return;
+
+                if (video.paused ||
+                    video.ended) {
+                    return;
+                }
+
+
+                watchedSeconds++;
+
+
+                if (
+                    watchedSeconds >=
+                    MIN_WATCH_SECONDS &&
+                    !watchRewardSent
+                ) {
+
+                    watchRewardSent = true;
+
+                    await completeWatch();
+                }
+
+            },
+            1000
+        );
+    }
+
+
+    function clearWatchTimer() {
+
+        if (watchTimer) {
+
+            clearInterval(watchTimer);
+
+            watchTimer = null;
+        }
+    }
+
+
+    async function completeWatch() {
+
+        if (!currentVideo) return;
+
+
+        try {
+
+            const data =
+                await api(
+                    "/api/watch/complete",
+                    {
+                        method: "POST",
+                        body: JSON.stringify({
+                            video_id: currentVideo.id,
+                            watched_seconds:
+                                Math.max(
+                                    MIN_WATCH_SECONDS,
+                                    watchedSeconds
+                                )
+                        }),
+                        timeout: 30000
+                    }
+                );
+
+
+            const reward =
+                number(
+                    data.reward ??
+                    data.points_earned ??
+                    data.points ??
+                    0
+                );
+
+
+            if (reward > 0) {
+
+                showMessage(
+                    `Watch complete! +${reward} points`,
+                    "success"
+                );
+
+            } else {
+
+                showMessage(
+                    "Watch complete.",
+                    "success"
+                );
+            }
+
+
+            await refreshCurrentUser();
+
+
+        } catch (error) {
+
+            /*
+             If reward was already claimed,
+             don't repeatedly show an error.
+            */
+
+            if (
+                !/already|duplicate|rewarded/i
+                    .test(error.message || "")
+            ) {
+
+                showMessage(
+                    error.message ||
+                    "Watch reward process nahi hua.",
+                    "error"
+                );
+            }
+        }
+    }
+
+
+    /* =====================================================
+       LIKE
+    ===================================================== */
+
+    function updateLikeUI(video) {
+
+        const button =
+            $("likeVideoBtn");
+
+        if (!button || !video) return;
+
+
+        const likes =
+            formatNumber(video.likes);
+
+
+        button.textContent =
+            video.liked
+                ? `❤️ ${likes}`
+                : `♡ ${likes}`;
+    }
+
+
+    async function toggleLike() {
+
+        if (!currentVideo) return;
+
+
+        const button =
+            $("likeVideoBtn");
+
+
+        if (button) {
+            button.disabled = true;
+        }
+
+
+        try {
+
+            const data =
+                await api(
+                    `/api/videos/${encodeURIComponent(currentVideo.id)}/like`,
+                    {
+                        method: "POST",
+                        timeout: 30000
+                    }
+                );
+
+
+            const liked =
+                Boolean(
+                    data.liked ??
+                    data.is_liked ??
+                    !currentVideo.liked
+                );
+
+
+            currentVideo.liked = liked;
+
+
+            currentVideo.likes =
+                number(
+                    data.likes_count ??
+                    data.likes ??
+                    (
+                        liked
+                            ? currentVideo.likes + 1
+                            : Math.max(
+                                0,
+                                currentVideo.likes - 1
+                            )
+                    )
+                );
+
+
+            updateLikeUI(currentVideo);
+
+        } catch (error) {
+
+            showMessage(
+                error.message ||
+                "Like update nahi hua.",
+                "error"
+            );
+
+        } finally {
+
+            if (button) {
+                button.disabled = false;
+            }
+        }
+    }
+
+
+    /* =====================================================
+       FOLLOW
+    ===================================================== */
+
+    function updateFollowUI(video) {
+
+        const button =
+            $("followCreatorBtn");
+
+        if (!button || !video) return;
+
+
+        if (!video.creator_id) {
+
+            button.style.display = "none";
+
+            return;
+        }
+
+
+        button.style.display = "";
+
+
+        button.textContent =
+            video.following
+                ? "Following"
+                : "Follow";
+    }
+
+
+    async function toggleFollow() {
+
+        if (!currentVideo) return;
+
+
+        if (!currentVideo.creator_id) {
+
+            showMessage(
+                "Creator information available nahi hai.",
+                "error"
+            );
+
+            return;
+        }
+
+
+        const button =
+            $("followCreatorBtn");
+
+
+        if (button) {
+            button.disabled = true;
+        }
+
+
+        try {
+
+            const data =
+                await api(
+                    `/api/follow/${encodeURIComponent(
+                        currentVideo.creator_id
+                    )}`,
+                    {
+                        method: "POST",
+                        timeout: 30000
+                    }
+                );
+
+
+            currentVideo.following =
+                Boolean(
+                    data.following ??
+                    data.is_following ??
+                    !currentVideo.following
+                );
+
+
+            updateFollowUI(currentVideo);
+
+
+        } catch (error) {
+
+            showMessage(
+                error.message ||
+                "Follow update nahi hua.",
+                "error"
+            );
+
+        } finally {
+
+            if (button) {
+                button.disabled = false;
+            }
+        }
+    }
+
+
+    /* =====================================================
+       REPORT
+    ===================================================== */
+
+    async function reportCurrentVideo() {
+
+        if (!currentVideo) return;
+
+
+        const confirmed =
+            window.confirm(
+                "Kya aap is video ko report karna chahte hain?"
+            );
+
+
+        if (!confirmed) return;
+
+
+        try {
+
+            await api(
+                `/api/videos/${encodeURIComponent(
+                    currentVideo.id
+                )}/report`,
+                {
+                    method: "POST",
+                    body: JSON.stringify({
+                        reason: "Reported by user"
+                    }),
+                    timeout: 30000
+                }
+            );
+
+
+            showMessage(
+                "Video report kar diya gaya.",
+                "success"
+            );
+
+
+        } catch (error) {
+
+            showMessage(
+                error.message ||
+                "Report submit nahi hua.",
+                "error"
+            );
+        }
+    }
+
+
+    /* =====================================================
+       COMMENTS
+    ===================================================== */
+
+    async function loadComments(videoId) {
+
+        const list =
+            $("commentsList");
+
+        if (!list) return;
+
+
+        list.innerHTML = `
+            <div class="loading-state">
+                Comments loading...
+            </div>
+        `;
+
+
+        try {
+
+            const data =
+                await api(
+                    `/api/videos/${encodeURIComponent(videoId)}/comments`,
+                    {
+                        method: "GET",
+                        timeout: 30000
+                    }
+                );
+
+
+            const rawComments =
+                Array.isArray(data)
+                    ? data
+                    : (
+                        data.comments ||
+                        data.data?.comments ||
+                        data.items ||
+                        []
+                    );
+
+
+            renderComments(rawComments);
+
+
+        } catch (error) {
+
+            list.innerHTML = `
+                <div class="empty-state">
+                    Comments load nahi hue.
+                </div>
+            `;
+        }
+    }
+
+
+    function renderComments(comments) {
+
+        const list =
+            $("commentsList");
+
+        if (!list) return;
+
+
+        if (!comments.length) {
+
+            list.innerHTML = `
+                <div class="empty-state">
+                    Abhi koi comment nahi hai.
+                </div>
+            `;
+
+            return;
+        }
+
+
+        list.innerHTML =
+            comments.map(comment => {
+
+                const name =
+                    comment.user_name ||
+                    comment.name ||
+                    comment.username ||
+                    "User";
+
+
+                const text =
+                    comment.comment ||
+                    comment.text ||
+                    comment.content ||
+                    "";
+
+
+                return `
                     <div class="comment-item">
 
-                        <strong>
-                            ${escapeHTML(
-                                comment.username ||
-                                comment.name ||
-                                "User"
-                            )}
-                        </strong>
+                        <div class="comment-author">
+                            ${escapeHTML(name)}
+                        </div>
 
-                        <p>
-                            ${escapeHTML(
-                                comment.comment ||
-                                comment.text ||
-                                ""
-                            )}
-                        </p>
+                        <div class="comment-text">
+                            ${escapeHTML(text)}
+                        </div>
 
-                        <small>
-                            ${formatDate(
-                                comment.created_at
+                        <div class="comment-date">
+                            ${escapeHTML(
+                                formatDate(
+                                    comment.created_at
+                                )
                             )}
-                        </small>
+                        </div>
 
                     </div>
-                    `
-                )
-                .join("");
+                `;
 
-    } catch (error) {
-        console.error(
-            "COMMENTS ERROR:",
-            error
-        );
-
-        container.innerHTML =
-            `<div class="empty-state">
-                Unable to load comments.
-             </div>`;
-    }
-}
-
-async function addComment() {
-    if (!currentVideo) {
-        return;
+            }).join("");
     }
 
-    const input =
-        $("commentInput");
 
-    if (!input) {
-        return;
-    }
+    async function addComment() {
 
-    const comment =
-        input.value.trim();
+        if (!currentVideo) return;
 
-    if (!comment) {
-        showMessage(
-            "Please write a comment.",
-            "error"
-        );
 
-        return;
-    }
+        const input =
+            $("commentInput");
 
-    try {
-        const data =
+
+        if (!input) return;
+
+
+        const text =
+            input.value.trim();
+
+
+        if (!text) {
+
+            showMessage(
+                "Comment likho.",
+                "error"
+            );
+
+            input.focus();
+
+            return;
+        }
+
+
+        const button =
+            $("commentBtn");
+
+
+        if (button) {
+            button.disabled = true;
+        }
+
+
+        try {
+
             await api(
                 `/api/videos/${encodeURIComponent(
                     currentVideo.id
@@ -1651,1128 +1914,982 @@ async function addComment() {
                 {
                     method: "POST",
                     body: JSON.stringify({
-                        comment
-                    })
+                        comment: text,
+                        text
+                    }),
+                    timeout: 30000
                 }
             );
 
-        input.value = "";
 
-        currentVideo.comments =
-            Number(
-                data.comments ??
-                data.comment_count ??
-                currentVideo.comments + 1
-            );
+            input.value = "";
 
-        if ($("playerComments")) {
-            $("playerComments")
-                .textContent =
-                formatNumber(
+
+            currentVideo.comments =
+                number(
                     currentVideo.comments
-                );
-        }
-
-        await loadComments(
-            currentVideo.id
-        );
-
-        showMessage(
-            "Comment added.",
-            "success"
-        );
-
-    } catch (error) {
-        console.error(
-            "COMMENT ERROR:",
-            error
-        );
-
-        showMessage(
-            error.message ||
-            "Unable to add comment.",
-            "error"
-        );
-    }
-}
+                ) + 1;
 
 
-/* ======================================================
-   REPORT
-====================================================== */
+            if ($("playerCommentsCount")) {
 
-async function reportVideo() {
-    if (!currentVideo) {
-        return;
-    }
+                $("playerCommentsCount").textContent =
+                    formatNumber(
+                        currentVideo.comments
+                    );
+            }
 
-    const reason =
-        prompt(
-            "Why are you reporting this video?"
-        );
 
-    if (reason === null) {
-        return;
-    }
-
-    const cleanReason =
-        reason.trim();
-
-    if (!cleanReason) {
-        showMessage(
-            "Please enter a reason.",
-            "error"
-        );
-
-        return;
-    }
-
-    try {
-        await api(
-            `/api/videos/${encodeURIComponent(
+            await loadComments(
                 currentVideo.id
-            )}/report`,
-            {
-                method: "POST",
-                body: JSON.stringify({
-                    reason:
-                        cleanReason
-                })
+            );
+
+
+        } catch (error) {
+
+            showMessage(
+                error.message ||
+                "Comment post nahi hua.",
+                "error"
+            );
+
+        } finally {
+
+            if (button) {
+                button.disabled = false;
             }
-        );
-
-        showMessage(
-            "Report submitted.",
-            "success"
-        );
-
-    } catch (error) {
-        console.error(
-            "REPORT ERROR:",
-            error
-        );
-
-        showMessage(
-            error.message ||
-            "Unable to report video.",
-            "error"
-        );
-    }
-}
-
-
-/* ======================================================
-   FOLLOW / SUBSCRIBE
-====================================================== */
-
-async function toggleFollow() {
-    if (!currentVideo) {
-        return;
-    }
-
-    const creatorId =
-        currentVideo.creator_id;
-
-    if (!creatorId) {
-        showMessage(
-            "Creator information unavailable.",
-            "error"
-        );
-
-        return;
-    }
-
-    try {
-        const data =
-            await api(
-                `/api/follow/${encodeURIComponent(
-                    creatorId
-                )}`,
-                {
-                    method: "POST"
-                }
-            );
-
-        currentVideo.following =
-            Boolean(
-                data.following ??
-                data.is_following ??
-                !currentVideo.following
-            );
-
-        updateFollowButton(
-            currentVideo
-        );
-
-    } catch (error) {
-        console.error(
-            "FOLLOW ERROR:",
-            error
-        );
-
-        showMessage(
-            error.message ||
-            "Unable to subscribe.",
-            "error"
-        );
-    }
-}
-
-function updateFollowButton(
-    video
-) {
-    const buttons = [
-        $("followButton"),
-        $("subscribeButton"),
-        $("btnFollow"),
-        $("btnSubscribe")
-    ].filter(Boolean);
-
-    buttons.forEach(
-        button => {
-            button.classList.toggle(
-                "following",
-                Boolean(
-                    video.following
-                )
-            );
-
-            button.textContent =
-                video.following
-                    ? "✓ Subscribed"
-                    : "Subscribe";
         }
-    );
-}
-
-
-/* ======================================================
-   DAILY REWARD
-====================================================== */
-
-async function claimDailyReward() {
-    const buttons = [
-        $("dailyRewardButton"),
-        $("claimDailyButton")
-    ].filter(Boolean);
-
-    if (!buttons.length) {
-        return;
     }
 
-    buttons.forEach(
-        button => {
-            button.disabled =
-                true;
-        }
-    );
 
-    try {
-        const data =
-            await api(
-                "/api/rewards/daily",
-                {
-                    method: "POST"
-                }
-            );
+    /* =====================================================
+       DAILY REWARD
+    ===================================================== */
 
-        const points =
-            Number(
-                data.points ??
-                data.reward ??
-                data.earned_points ??
-                10
-            );
+    async function claimDailyReward() {
 
-        if (
-            currentUser &&
-            points > 0
-        ) {
-            currentUser.points =
-                Number(
-                    currentUser.points ||
-                    0
-                ) + points;
-
-            saveUser(
-                currentUser
-            );
-
-            updateUserUI();
-        }
-
-        buttons.forEach(
-            button => {
-                button.textContent =
-                    "✓ Claimed";
-            }
-        );
-
-        showMessage(
-            `🎁 You earned ${points} points!`,
-            "success"
-        );
-
-    } catch (error) {
-        buttons.forEach(
-            button => {
-                button.disabled =
-                    false;
-            }
-        );
-
-        console.error(
-            "DAILY REWARD ERROR:",
-            error
-        );
-
-        showMessage(
-            error.message ||
-            "Daily reward unavailable.",
-            "error"
-        );
-    }
-}
+        const button =
+            $("dailyRewardBtn");
 
 
-/* ======================================================
-   REWARDED AD
-====================================================== */
-
-async function claimRewardedAd() {
-    const button =
-        $("rewardedAdButton") ||
-        $("rewardAdButton");
-
-    if (button) {
-        button.disabled =
-            true;
-    }
-
-    try {
-        const confirmed =
-            confirm(
-                "Watch the rewarded ad to earn points?"
-            );
-
-        if (!confirmed) {
-            return;
-        }
-
-        const data =
-            await api(
-                "/api/rewards/ad",
-                {
-                    method: "POST"
-                }
-            );
-
-        const points =
-            Number(
-                data.points ??
-                data.reward ??
-                data.earned_points ??
-                5
-            );
-
-        if (
-            currentUser &&
-            points > 0
-        ) {
-            currentUser.points =
-                Number(
-                    currentUser.points ||
-                    0
-                ) + points;
-
-            saveUser(
-                currentUser
-            );
-
-            updateUserUI();
-        }
-
-        showMessage(
-            `🎁 You earned ${points} points!`,
-            "success"
-        );
-
-    } catch (error) {
-        console.error(
-            "REWARDED AD ERROR:",
-            error
-        );
-
-        showMessage(
-            error.message ||
-            "Rewarded ad unavailable.",
-            "error"
-        );
-
-    } finally {
         if (button) {
-            button.disabled =
-                false;
+            button.disabled = true;
         }
-    }
-}
 
 
-/* ======================================================
-   POINTS HISTORY
-====================================================== */
+        try {
 
-async function loadPointsHistory() {
-    const container =
-        $("pointsHistory") ||
-        $("historyList");
+            const data =
+                await api(
+                    "/api/rewards/daily",
+                    {
+                        method: "POST",
+                        timeout: 30000
+                    }
+                );
 
-    if (!container) {
-        return;
-    }
 
-    container.innerHTML =
-        `<div class="loading">
-            Loading points history...
-         </div>`;
+            const points =
+                number(
+                    data.points_earned ??
+                    data.reward ??
+                    data.points ??
+                    0
+                );
 
-    try {
-        const data =
-            await api(
-                "/api/points/history"
+
+            showMessage(
+                points
+                    ? `Daily reward +${points} points`
+                    : "Daily reward processed.",
+                "success"
             );
 
-        let history =
-            data.history ||
-            data.items ||
-            data.data ||
-            data;
 
-        if (!Array.isArray(history)) {
-            history = [];
+            await refreshCurrentUser();
+
+            await updateRewardButtons();
+
+
+        } catch (error) {
+
+            showMessage(
+                error.message ||
+                "Daily reward nahi mila.",
+                "error"
+            );
+
+        } finally {
+
+            if (button) {
+                button.disabled = false;
+            }
+        }
+    }
+
+
+    /* =====================================================
+       REWARDED AD
+    ===================================================== */
+
+    async function claimRewardedAd() {
+
+        const button =
+            $("rewardedAdBtn");
+
+
+        if (button) {
+            button.disabled = true;
         }
 
-        if (!history.length) {
+
+        try {
+
+            /*
+             Server v4.0.1 rewards endpoint.
+             Actual ad network integration can be
+             connected later. Current button represents
+             completed rewarded-ad action.
+            */
+
+            const data =
+                await api(
+                    "/api/rewards/ad",
+                    {
+                        method: "POST",
+                        body: JSON.stringify({
+                            completed: true
+                        }),
+                        timeout: 30000
+                    }
+                );
+
+
+            const points =
+                number(
+                    data.points_earned ??
+                    data.reward ??
+                    data.points ??
+                    0
+                );
+
+
+            showMessage(
+                points
+                    ? `Rewarded ad complete! +${points} points`
+                    : "Reward processed.",
+                "success"
+            );
+
+
+            await refreshCurrentUser();
+
+
+        } catch (error) {
+
+            showMessage(
+                error.message ||
+                "Rewarded ad reward nahi mila.",
+                "error"
+            );
+
+        } finally {
+
+            if (button) {
+                button.disabled = false;
+            }
+        }
+    }
+
+
+    async function updateRewardButtons() {
+
+        /*
+         The server is authoritative for duplicate daily
+         reward checks. Buttons remain enabled here unless
+         server reports that the reward is already claimed.
+        */
+
+        return true;
+    }
+
+
+    /* =====================================================
+       POINTS HISTORY
+    ===================================================== */
+
+    async function loadPointsHistory() {
+
+        const container =
+            $("pointsHistory");
+
+        if (!container) return;
+
+
+        container.innerHTML = `
+            <div class="loading-state">
+                Loading points history...
+            </div>
+        `;
+
+
+        try {
+
+            const data =
+                await api(
+                    "/api/points/history",
+                    {
+                        method: "GET",
+                        timeout: 30000
+                    }
+                );
+
+
+            const items =
+                Array.isArray(data)
+                    ? data
+                    : (
+                        data.history ||
+                        data.items ||
+                        data.data?.history ||
+                        data.data ||
+                        []
+                    );
+
+
+            if (!items.length) {
+
+                container.innerHTML = `
+                    <div class="empty-state">
+                        Abhi points history nahi hai.
+                    </div>
+                `;
+
+                return;
+            }
+
+
             container.innerHTML =
-                `<div class="empty-state">
-                    No points history yet.
-                 </div>`;
+                items.map(item => {
 
-            return;
-        }
-
-        container.innerHTML =
-            history
-                .map(item => {
                     const points =
-                        Number(
+                        number(
                             item.points ??
                             item.amount ??
+                            item.delta ??
                             0
                         );
 
-                    return `
-                    <div class="history-item">
 
-                        <div>
+                    const reason =
+                        item.reason ||
+                        item.description ||
+                        item.type ||
+                        "Points";
+
+
+                    return `
+                        <div class="history-item">
+
+                            <div>
+                                <strong>
+                                    ${escapeHTML(reason)}
+                                </strong>
+
+                                <small>
+                                    ${escapeHTML(
+                                        formatDate(
+                                            item.created_at
+                                        )
+                                    )}
+                                </small>
+                            </div>
+
                             <strong>
-                                ${escapeHTML(
-                                    item.reason ||
-                                    item.description ||
-                                    item.type ||
-                                    "Reward"
-                                )}
+                                ${points >= 0 ? "+" : ""}
+                                ${formatNumber(points)}
                             </strong>
 
-                            <small>
-                                ${formatDate(
-                                    item.created_at ||
-                                    item.date
-                                )}
-                            </small>
                         </div>
-
-                        <strong>
-                            ${
-                                points >= 0
-                                    ? "+"
-                                    : ""
-                            }${points}
-                        </strong>
-
-                    </div>
                     `;
-                })
-                .join("");
 
-    } catch (error) {
-        console.error(
-            "POINTS HISTORY ERROR:",
-            error
-        );
-
-        container.innerHTML =
-            `<div class="empty-state">
-                Unable to load points history.
-             </div>`;
-    }
-}
+                }).join("");
 
 
-/* ======================================================
-   WATCH HISTORY
-====================================================== */
+        } catch (error) {
 
-async function loadWatchHistory() {
-    const container =
-        $("watchHistory") ||
-        $("watchHistoryList");
-
-    if (!container) {
-        return;
-    }
-
-    container.innerHTML =
-        `<div class="loading">
-            Loading watch history...
-         </div>`;
-
-    try {
-        const data =
-            await api(
-                "/api/watch/history"
-            );
-
-        let history =
-            data.history ||
-            data.items ||
-            data.data ||
-            data;
-
-        if (!Array.isArray(history)) {
-            history = [];
+            container.innerHTML = `
+                <div class="empty-state">
+                    History load nahi hui.
+                </div>
+            `;
         }
+    }
 
-        if (!history.length) {
+
+    /* =====================================================
+       WATCH HISTORY
+    ===================================================== */
+
+    async function loadWatchHistory() {
+
+        const container =
+            $("watchHistoryList");
+
+        if (!container) return;
+
+
+        container.innerHTML = `
+            <div class="loading-state">
+                Loading watch history...
+            </div>
+        `;
+
+
+        try {
+
+            const data =
+                await api(
+                    "/api/watch/history",
+                    {
+                        method: "GET",
+                        timeout: 30000
+                    }
+                );
+
+
+            const items =
+                Array.isArray(data)
+                    ? data
+                    : (
+                        data.history ||
+                        data.items ||
+                        data.data?.history ||
+                        data.data ||
+                        []
+                    );
+
+
+            if (!items.length) {
+
+                container.innerHTML = `
+                    <div class="empty-state">
+                        Abhi watch history nahi hai.
+                    </div>
+                `;
+
+                return;
+            }
+
+
             container.innerHTML =
-                `<div class="empty-state">
-                    No watch history yet.
-                 </div>`;
+                items.map(item => {
 
-            return;
-        }
-
-        container.innerHTML =
-            history
-                .map(item => {
                     const video =
                         normalizeVideo(
                             item.video ||
                             item
                         );
 
-                    if (
-                        !video ||
-                        !video.id
-                    ) {
-                        return "";
-                    }
+
+                    const title =
+                        video?.title ||
+                        item.title ||
+                        "Video";
+
 
                     return `
-                    <div
-                        class="history-video"
-                        onclick="openVideo('${escapeHTML(
-                            video.id
-                        )}')"
-                    >
+                        <div
+                            class="history-item watch-history-item"
+                            data-video-id="${escapeHTML(
+                                video?.id ||
+                                item.video_id ||
+                                ""
+                            )}"
+                        >
 
-                        ${
-                            video.thumbnail_url
-                            ? `
-                                <img
-                                    src="${escapeHTML(
-                                        video.thumbnail_url
-                                    )}"
-                                    alt=""
-                                    loading="lazy"
-                                >
-                            `
-                            : ""
-                        }
+                            <div>
+                                <strong>
+                                    ${escapeHTML(title)}
+                                </strong>
 
-                        <div>
+                                <small>
+                                    Watched:
+                                    ${formatDuration(
+                                        item.watched_seconds ||
+                                        0
+                                    )}
+                                </small>
+                            </div>
 
-                            <strong>
-                                ${escapeHTML(
-                                    video.title
-                                )}
-                            </strong>
-
-                            <small>
-                                Watched:
-                                ${formatDuration(
-                                    item.watch_seconds ??
-                                    item.watched_seconds ??
-                                    0
-                                )}
-                            </small>
+                            <span>▶</span>
 
                         </div>
-
-                    </div>
                     `;
-                })
-                .join("");
 
-    } catch (error) {
-        console.error(
-            "WATCH HISTORY ERROR:",
-            error
-        );
+                }).join("");
 
-        container.innerHTML =
-            `<div class="empty-state">
-                Unable to load watch history.
-             </div>`;
+
+            container
+                .querySelectorAll("[data-video-id]")
+                .forEach(item => {
+
+                    item.addEventListener(
+                        "click",
+                        () => {
+
+                            if (
+                                item.dataset.videoId
+                            ) {
+
+                                openVideo(
+                                    item.dataset.videoId
+                                );
+                            }
+                        }
+                    );
+                });
+
+
+        } catch (error) {
+
+            container.innerHTML = `
+                <div class="empty-state">
+                    Watch history load nahi hui.
+                </div>
+            `;
+        }
     }
-}
 
 
-/* ======================================================
-   MY VIDEOS
-====================================================== */
+    /* =====================================================
+       CLOUDINARY SIGNATURE
+    ===================================================== */
 
-async function loadMyVideos() {
-    const container =
-        $("myVideos") ||
-        $("myVideosList");
+    async function getCloudinarySignature() {
 
-    if (!container) {
-        return;
-    }
-
-    container.innerHTML =
-        `<div class="loading">
-            Loading your videos...
-         </div>`;
-
-    try {
         const data =
             await api(
-                "/api/videos/mine"
+                "/api/cloudinary/signature",
+                {
+                    method: "GET",
+                    timeout: 30000
+                }
             );
 
-        let videos =
-            data.videos ||
-            data.items ||
-            data.data ||
-            data;
 
-        if (!Array.isArray(videos)) {
-            videos = [];
+        return (
+            data.data ||
+            data
+        );
+    }
+
+
+    /* =====================================================
+       UPLOAD UI
+    ===================================================== */
+
+    function getUploadElements() {
+
+        return {
+
+            input:
+                $("videoFile"),
+
+            fileName:
+                $("videoFileName"),
+
+            preview:
+                $("uploadPreview"),
+
+            previewVideo:
+                $("uploadPreviewVideo"),
+
+            title:
+                $("videoTitle"),
+
+            description:
+                $("videoDescription"),
+
+            progressBox:
+                $("uploadProgressBox"),
+
+            progressText:
+                $("uploadProgressText"),
+
+            progressPercent:
+                $("uploadProgressPercent"),
+
+            progressBar:
+                $("uploadProgressBar"),
+
+            button:
+                $("uploadVideoBtn")
+        };
+    }
+
+
+    function setUploadProgress(percent, text) {
+
+        const elements =
+            getUploadElements();
+
+
+        const safePercent =
+            Math.max(
+                0,
+                Math.min(
+                    100,
+                    Math.round(
+                        number(percent)
+                    )
+                )
+            );
+
+
+        if (elements.progressBox) {
+
+            elements.progressBox.style.display =
+                "";
         }
 
-        videos =
-            videos
-                .map(
-                    normalizeVideo
-                )
-                .filter(Boolean);
 
-        if (!videos.length) {
-            container.innerHTML =
-                `<div class="empty-state">
-                    You haven't uploaded any videos yet.
-                 </div>`;
+        if (elements.progressText) {
+
+            elements.progressText.textContent =
+                text ||
+                "Uploading...";
+        }
+
+
+        if (elements.progressPercent) {
+
+            elements.progressPercent.textContent =
+                `${safePercent}%`;
+        }
+
+
+        if (elements.progressBar) {
+
+            elements.progressBar.style.width =
+                `${safePercent}%`;
+
+            elements.progressBar.setAttribute(
+                "aria-valuenow",
+                String(safePercent)
+            );
+        }
+    }
+
+
+    function hideUploadProgress() {
+
+        const box =
+            $("uploadProgressBox");
+
+        if (box) {
+
+            box.style.display =
+                "none";
+        }
+    }
+
+
+    function resetUploadForm() {
+
+        const elements =
+            getUploadElements();
+
+
+        selectedVideoFile = null;
+        selectedVideoDuration = 0;
+
+
+        if (
+            selectedVideoObjectUrl
+        ) {
+
+            URL.revokeObjectURL(
+                selectedVideoObjectUrl
+            );
+
+            selectedVideoObjectUrl = null;
+        }
+
+
+        if (elements.input) {
+
+            elements.input.value = "";
+        }
+
+
+        if (elements.fileName) {
+
+            elements.fileName.textContent =
+                "No video selected";
+        }
+
+
+        if (elements.title) {
+
+            elements.title.value = "";
+        }
+
+
+        if (elements.description) {
+
+            elements.description.value = "";
+        }
+
+
+        if (elements.previewVideo) {
+
+            elements.previewVideo.pause();
+
+            elements.previewVideo.removeAttribute(
+                "src"
+            );
+
+            elements.previewVideo.load();
+        }
+
+
+        setUploadProgress(
+            0,
+            ""
+        );
+
+        hideUploadProgress();
+    }
+
+
+    function handleVideoFileChange() {
+
+        const elements =
+            getUploadElements();
+
+
+        const file =
+            elements.input?.files?.[0];
+
+
+        if (!file) {
+
+            selectedVideoFile = null;
 
             return;
         }
 
-        container.innerHTML =
-            videos
-                .map(video => `
-                    <div class="my-video-item">
 
-                        <div
-                            class="my-video-info"
-                            onclick="openVideo('${escapeHTML(
-                                video.id
-                            )}')"
-                        >
+        if (
+            !file.type ||
+            !file.type.startsWith("video/")
+        ) {
 
-                            ${
-                                video.thumbnail_url
-                                ? `
-                                    <img
-                                        src="${escapeHTML(
-                                            video.thumbnail_url
-                                        )}"
-                                        alt=""
-                                        loading="lazy"
-                                    >
-                                `
-                                : ""
-                            }
+            elements.input.value = "";
 
-                            <div>
+            selectedVideoFile = null;
 
-                                <strong>
-                                    ${escapeHTML(
-                                        video.title
-                                    )}
-                                </strong>
+            showMessage(
+                "Sirf video file select karo.",
+                "error"
+            );
 
-                                <small>
-                                    ${formatNumber(
-                                        video.views
-                                    )} views
-                                </small>
+            return;
+        }
 
-                            </div>
 
-                        </div>
+        if (file.size > MAX_VIDEO_SIZE) {
 
-                        <button
-                            type="button"
-                            onclick="deleteMyVideo('${escapeHTML(
-                                video.id
-                            )}')"
-                        >
-                            Delete
-                        </button>
+            elements.input.value = "";
 
-                    </div>
-                `)
-                .join("");
+            selectedVideoFile = null;
 
-    } catch (error) {
-        console.error(
-            "MY VIDEOS ERROR:",
-            error
-        );
+            showMessage(
+                "Video maximum 100 MB ho sakta hai.",
+                "error"
+            );
 
-        container.innerHTML =
-            `<div class="empty-state">
-                Unable to load your videos.
-             </div>`;
-    }
-}
+            return;
+        }
 
-async function deleteMyVideo(
-    videoId
-) {
-    if (!videoId) {
-        return;
-    }
 
-    const confirmed =
-        confirm(
-            "Are you sure you want to delete this video?"
-        );
+        selectedVideoFile = file;
 
-    if (!confirmed) {
-        return;
-    }
 
-    try {
-        await api(
-            `/api/videos/${encodeURIComponent(
-                videoId
-            )}`,
-            {
-                method: "DELETE"
-            }
-        );
+        if (elements.fileName) {
+
+            elements.fileName.textContent =
+                `${file.name} • ${(
+                    file.size /
+                    1024 /
+                    1024
+                ).toFixed(1)} MB`;
+        }
+
+
+        if (
+            selectedVideoObjectUrl
+        ) {
+
+            URL.revokeObjectURL(
+                selectedVideoObjectUrl
+            );
+        }
+
+
+        selectedVideoObjectUrl =
+            URL.createObjectURL(file);
+
+
+        if (elements.previewVideo) {
+
+            elements.previewVideo.src =
+                selectedVideoObjectUrl;
+
+            elements.previewVideo.load();
+
+            elements.previewVideo.style.display =
+                "";
+        }
+
+
+        if (elements.preview) {
+
+            elements.preview.style.display =
+                "";
+        }
+
 
         showMessage(
-            "Video deleted successfully.",
+            "Video ready hai.",
             "success"
         );
-
-        await loadMyVideos();
-
-        await loadVideos();
-
-    } catch (error) {
-        console.error(
-            "DELETE VIDEO ERROR:",
-            error
-        );
-
-        showMessage(
-            error.message ||
-            "Unable to delete video.",
-            "error"
-        );
-    }
-}
-
-
-/* ======================================================
-   CLOUDINARY UPLOAD ELEMENTS
-====================================================== */
-
-function getUploadElements() {
-    return {
-        input:
-            $("videoFile") ||
-            $("videoInput") ||
-            $("galleryVideo"),
-
-        title:
-            $("videoTitle") ||
-            $("uploadTitle"),
-
-        description:
-            $("videoDescription") ||
-            $("uploadDescription"),
-
-        preview:
-            $("videoPreview") ||
-            $("uploadPreview"),
-
-        progress:
-            $("uploadProgress"),
-
-        progressText:
-            $("uploadProgressText") ||
-            $("uploadPercent"),
-
-        button:
-            $("uploadButton") ||
-            $("publishVideoButton")
-    };
-}
-
-
-/* ======================================================
-   VIDEO PREVIEW
-====================================================== */
-
-function setupVideoPreview() {
-    const {
-        input,
-        preview
-    } = getUploadElements();
-
-    if (!input) {
-        return;
     }
 
-    input.addEventListener(
-        "change",
-        () => {
-            const file =
-                input.files?.[0];
 
-            if (!file) {
-                return;
-            }
+    function handlePreviewMetadata() {
 
-            if (
-                !file.type.startsWith(
-                    "video/"
-                )
-            ) {
-                input.value = "";
+        const video =
+            $("uploadPreviewVideo");
 
-                showMessage(
-                    "Please select a video file.",
-                    "error"
-                );
 
-                return;
-            }
+        if (!video) return;
 
-            if (
-                file.size >
-                MAX_VIDEO_SIZE
-            ) {
-                input.value = "";
 
-                showMessage(
-                    "Maximum video size is 100 MB.",
-                    "error"
-                );
+        if (
+            Number.isFinite(
+                video.duration
+            ) &&
+            video.duration > 0
+        ) {
 
-                return;
-            }
+            selectedVideoDuration =
+                video.duration;
+        }
+    }
 
-            if (!preview) {
-                return;
-            }
 
-            const url =
-                URL.createObjectURL(
+    /* =====================================================
+       CLOUDINARY UPLOAD
+    ===================================================== */
+
+    function uploadToCloudinary(
+        file,
+        signature
+    ) {
+
+        return new Promise(
+            (resolve, reject) => {
+
+                const cloudName =
+                    signature.cloud_name;
+
+
+                const apiKey =
+                    signature.api_key;
+
+
+                const timestamp =
+                    signature.timestamp;
+
+
+                const signed =
+                    signature.signature;
+
+
+                const folder =
+                    signature.folder ||
+                    "dekhoearn/videos";
+
+
+                if (
+                    !cloudName ||
+                    !apiKey ||
+                    !timestamp ||
+                    !signed
+                ) {
+
+                    reject(
+                        new Error(
+                            "Cloudinary signature incomplete hai."
+                        )
+                    );
+
+                    return;
+                }
+
+
+                const form =
+                    new FormData();
+
+
+                form.append(
+                    "file",
                     file
                 );
 
-            if (
-                preview.tagName ===
-                "VIDEO"
-            ) {
-                preview.src =
-                    url;
 
-                preview.controls =
-                    true;
-
-                preview.muted =
-                    true;
-
-                preview.playsInline =
-                    true;
-
-                preview.style.display =
-                    "block";
-
-            } else {
-                preview.innerHTML = `
-                    <video
-                        src="${url}"
-                        controls
-                        muted
-                        playsinline
-                        webkit-playsinline
-                        style="width:100%;max-width:100%;"
-                    ></video>
-                `;
-
-                preview.style.display =
-                    "block";
-            }
-        }
-    );
-}
-
-
-/* ======================================================
-   UPLOAD PROGRESS
-====================================================== */
-
-function updateUploadProgress(
-    percent
-) {
-    const {
-        progress,
-        progressText
-    } = getUploadElements();
-
-    const value =
-        Math.max(
-            0,
-            Math.min(
-                100,
-                Number(percent || 0)
-            )
-        );
-
-    if (progress) {
-        if (
-            progress.tagName ===
-            "PROGRESS"
-        ) {
-            progress.max =
-                100;
-
-            progress.value =
-                value;
-        } else {
-            progress.style.width =
-                value + "%";
-        }
-    }
-
-    if (progressText) {
-        progressText.textContent =
-            `${Math.round(value)}%`;
-    }
-}
-
-
-/* ======================================================
-   CLOUDINARY SIGNATURE
-====================================================== */
-
-async function getCloudinarySignature() {
-    const data =
-        await api(
-            "/api/cloudinary/signature"
-        );
-
-    /*
-     * Some server versions return:
-     * { signature: ... }
-     *
-     * Some return:
-     * { data: {...} }
-     */
-
-    return (
-        data.signatureData ||
-        data.data ||
-        data
-    );
-}
-
-
-/* ======================================================
-   DIRECT CLOUDINARY UPLOAD
-====================================================== */
-
-function uploadToCloudinary(
-    file,
-    signatureData,
-    onProgress
-) {
-    return new Promise(
-        (
-            resolve,
-            reject
-        ) => {
-            const xhr =
-                new XMLHttpRequest();
-
-            const cloudName =
-                signatureData.cloud_name ||
-                signatureData.cloudName;
-
-            const apiKey =
-                signatureData.api_key ||
-                signatureData.apiKey;
-
-            const timestamp =
-                signatureData.timestamp;
-
-            const signature =
-                signatureData.signature;
-
-            const folder =
-                signatureData.folder ||
-                "";
-
-            if (
-                !cloudName ||
-                !apiKey ||
-                !timestamp ||
-                !signature
-            ) {
-                reject(
-                    new Error(
-                        "Invalid Cloudinary signature response."
-                    )
+                form.append(
+                    "api_key",
+                    apiKey
                 );
 
-                return;
-            }
 
-            const form =
-                new FormData();
+                form.append(
+                    "timestamp",
+                    String(timestamp)
+                );
 
-            form.append(
-                "file",
-                file
-            );
 
-            form.append(
-                "api_key",
-                apiKey
-            );
+                form.append(
+                    "signature",
+                    signed
+                );
 
-            form.append(
-                "timestamp",
-                timestamp
-            );
 
-            form.append(
-                "signature",
-                signature
-            );
-
-            if (folder) {
                 form.append(
                     "folder",
                     folder
                 );
-            }
 
-            const uploadURL =
-                `https://api.cloudinary.com/v1_1/${encodeURIComponent(
-                    cloudName
-                )}/video/upload`;
 
-            xhr.open(
-                "POST",
-                uploadURL,
-                true
-            );
+                const xhr =
+                    new XMLHttpRequest();
 
-            xhr.upload.onprogress =
-                event => {
-                    if (
-                        event.lengthComputable
-                    ) {
-                        const percent =
-                            (
-                                event.loaded /
-                                event.total
-                            ) * 100;
 
-                        if (
-                            typeof onProgress ===
-                            "function"
-                        ) {
-                            onProgress(
-                                percent
-                            );
+                xhr.open(
+                    "POST",
+                    `https://api.cloudinary.com/v1_1/${encodeURIComponent(
+                        cloudName
+                    )}/video/upload`
+                );
+
+
+                xhr.timeout =
+                    15 * 60 * 1000;
+
+
+                xhr.upload.onprogress =
+                    event => {
+
+                        if (!event.lengthComputable) {
+                            return;
                         }
-                    }
-                };
 
-            xhr.onload =
-                () => {
+
+                        const percent =
+                            event.loaded /
+                            event.total *
+                            100;
+
+
+                        /*
+                         5% -> 90%
+                        */
+
+                        const overall =
+                            5 +
+                            (
+                                percent * 0.85
+                            );
+
+
+                        setUploadProgress(
+                            overall,
+                            "Cloudinary par video upload ho rahi hai..."
+                        );
+                    };
+
+
+                xhr.onload = () => {
+
                     let data = {};
 
+
                     try {
+
                         data =
                             xhr.responseText
                                 ? JSON.parse(
                                     xhr.responseText
                                 )
                                 : {};
+
                     } catch {
-                        data = {};
+
+                        reject(
+                            new Error(
+                                "Cloudinary response invalid hai."
+                            )
+                        );
+
+                        return;
                     }
+
 
                     if (
                         xhr.status >= 200 &&
                         xhr.status < 300
                     ) {
-                        resolve(
-                            data
-                        );
+
+                        resolve(data);
+
                     } else {
+
                         reject(
                             new Error(
                                 data.error?.message ||
                                 data.message ||
-                                `Cloudinary upload failed (${xhr.status}).`
+                                "Cloudinary upload failed."
                             )
                         );
                     }
                 };
 
-            xhr.onerror =
-                () => {
+
+                xhr.onerror = () => {
+
                     reject(
                         new Error(
-                            "Network error during upload."
+                            "Cloudinary network error."
                         )
                     );
                 };
 
-            xhr.onabort =
-                () => {
+
+                xhr.ontimeout = () => {
+
+                    reject(
+                        new Error(
+                            "Cloudinary upload timeout."
+                        )
+                    );
+                };
+
+
+                xhr.onabort = () => {
+
                     reject(
                         new Error(
                             "Upload cancelled."
@@ -2780,1349 +2897,1285 @@ function uploadToCloudinary(
                     );
                 };
 
-            xhr.ontimeout =
-                () => {
-                    reject(
-                        new Error(
-                            "Upload timed out. Please try again."
-                        )
-                    );
-                };
 
-            xhr.timeout =
-                15 * 60 * 1000;
+                xhr.send(form);
+            }
+        );
+    }
 
-            xhr.send(
-                form
+
+    /* =====================================================
+       SAVE VIDEO METADATA
+    ===================================================== */
+
+    async function saveUploadedVideo(
+        uploadData,
+        title,
+        description
+    ) {
+
+        const videoUrl =
+            uploadData.secure_url ||
+            uploadData.url;
+
+
+        const publicId =
+            uploadData.public_id;
+
+
+        if (!videoUrl) {
+
+            throw new Error(
+                "Cloudinary video URL nahi mila."
             );
         }
-    );
-}
 
 
-/* ======================================================
-   SAVE VIDEO METADATA
-====================================================== */
+        if (!publicId) {
 
-async function saveUploadedVideo(
-    title,
-    description,
-    uploadData
-) {
-    const videoUrl =
-        uploadData.secure_url ||
-        uploadData.url;
-
-    const publicId =
-        uploadData.public_id ||
-        null;
-
-    if (!videoUrl) {
-        throw new Error(
-            "Cloudinary did not return video URL."
-        );
-    }
-
-    return await api(
-        "/api/videos",
-        {
-            method: "POST",
-            body: JSON.stringify({
-                title,
-                description,
-                video_url:
-                    videoUrl,
-                cloudinary_public_id:
-                    publicId,
-                resource_type:
-                    uploadData.resource_type ||
-                    "video"
-            })
+            throw new Error(
+                "Cloudinary public ID nahi mila."
+            );
         }
-    );
-}
 
 
-/* ======================================================
-   UPLOAD VIDEO
-====================================================== */
+        const cloudName =
+            uploadData.cloud_name ||
+            (
+                await getCloudinarySignature()
+            ).cloud_name;
 
-async function uploadVideo() {
-    if (uploadInProgress) {
-        return;
-    }
 
-    const {
-        input,
-        title,
-        description,
-        button
-    } = getUploadElements();
+        let thumbnailUrl = "";
 
-    if (!input) {
-        showMessage(
-            "Video picker not found.",
-            "error"
+
+        if (cloudName) {
+
+            thumbnailUrl =
+                `https://res.cloudinary.com/${encodeURIComponent(
+                    cloudName
+                )}/video/upload/so_0/${publicId}.jpg`;
+        }
+
+
+        const duration =
+            number(
+                uploadData.duration ||
+                selectedVideoDuration ||
+                0
+            );
+
+
+        const body = {
+
+            title,
+
+            description,
+
+            video_url:
+                videoUrl,
+
+            cloudinary_public_id:
+                publicId,
+
+            cloudinary_resource_type:
+                uploadData.resource_type ||
+                "video",
+
+            thumbnail_url:
+                thumbnailUrl,
+
+            duration_seconds:
+                duration
+        };
+
+
+        return api(
+            "/api/videos",
+            {
+                method: "POST",
+                body: JSON.stringify(body),
+                timeout: 30000
+            }
         );
-
-        return;
     }
 
-    const file =
-        input.files?.[0];
 
-    if (!file) {
-        showMessage(
-            "Please select a video.",
-            "error"
-        );
+    /* =====================================================
+       MAIN UPLOAD
+    ===================================================== */
 
-        return;
-    }
+    async function uploadVideo() {
 
-    if (
-        !file.type.startsWith(
-            "video/"
-        )
-    ) {
-        showMessage(
-            "Please select a valid video file.",
-            "error"
-        );
+        if (uploadInProgress) {
+            return;
+        }
 
-        return;
-    }
 
-    if (
-        file.size >
-        MAX_VIDEO_SIZE
-    ) {
-        showMessage(
-            "Maximum video size is 100 MB.",
-            "error"
-        );
+        if (!getToken()) {
 
-        return;
-    }
+            showMessage(
+                "Pehle login karo.",
+                "error"
+            );
 
-    const videoTitle =
-        title?.value?.trim() ||
-        "";
+            showAuthScreen();
 
-    const videoDescription =
-        description?.value?.trim() ||
-        "";
+            return;
+        }
 
-    if (!videoTitle) {
-        showMessage(
-            "Please enter a video title.",
-            "error"
-        );
 
-        return;
-    }
+        const elements =
+            getUploadElements();
 
-    uploadInProgress =
-        true;
 
-    if (button) {
-        button.disabled =
-            true;
+        const file =
+            selectedVideoFile ||
+            elements.input?.files?.[0];
 
-        button.textContent =
-            "Preparing...";
-    }
 
-    updateUploadProgress(
-        0
-    );
+        const title =
+            elements.title?.value.trim() ||
+            "";
 
-    try {
-        /*
-         * STEP 1
-         * Ask server for signed Cloudinary data.
-         */
 
-        const signatureData =
-            await getCloudinarySignature();
+        const description =
+            elements.description?.value.trim() ||
+            "";
 
-        updateUploadProgress(
-            5
-        );
 
-        if (button) {
-            button.textContent =
+        if (!file) {
+
+            showMessage(
+                "Pehle video select karo.",
+                "error"
+            );
+
+            return;
+        }
+
+
+        if (file.size > MAX_VIDEO_SIZE) {
+
+            showMessage(
+                "Video maximum 100 MB ho sakta hai.",
+                "error"
+            );
+
+            return;
+        }
+
+
+        if (!title) {
+
+            showMessage(
+                "Video title enter karo.",
+                "error"
+            );
+
+            elements.title?.focus();
+
+            return;
+        }
+
+
+        uploadInProgress = true;
+
+
+        if (elements.button) {
+
+            elements.button.disabled = true;
+
+            elements.button.dataset.oldText =
+                elements.button.textContent;
+
+            elements.button.textContent =
                 "Uploading...";
         }
 
-        /*
-         * STEP 2
-         * Direct browser -> Cloudinary.
-         */
 
-        const uploadData =
-            await uploadToCloudinary(
-                file,
-                signatureData,
-                percent => {
-                    const total =
-                        5 +
-                        (
-                            percent *
-                            0.85
-                        );
+        try {
 
-                    updateUploadProgress(
-                        total
-                    );
-                }
+            setUploadProgress(
+                2,
+                "Upload prepare ho raha hai..."
             );
 
-        updateUploadProgress(
-            90
-        );
 
-        if (button) {
-            button.textContent =
-                "Saving...";
-        }
+            const signature =
+                await getCloudinarySignature();
 
-        /*
-         * STEP 3
-         * Save metadata in Neon through server.
-         */
 
-        await saveUploadedVideo(
-            videoTitle,
-            videoDescription,
-            uploadData
-        );
+            setUploadProgress(
+                5,
+                "Cloudinary upload start ho raha hai..."
+            );
 
-        updateUploadProgress(
-            100
-        );
 
-        showMessage(
-            "🎉 Video uploaded successfully!",
-            "success"
-        );
-
-        /*
-         * Reset form.
-         */
-
-        input.value = "";
-
-        if (title) {
-            title.value = "";
-        }
-
-        if (description) {
-            description.value = "";
-        }
-
-        const preview =
-            getUploadElements()
-                .preview;
-
-        if (preview) {
-            if (
-                preview.tagName ===
-                "VIDEO"
-            ) {
-                preview.pause();
-
-                preview.removeAttribute(
-                    "src"
+            const uploadData =
+                await uploadToCloudinary(
+                    file,
+                    signature
                 );
 
-                preview.load();
 
-                preview.style.display =
-                    "none";
-            } else {
-                preview.innerHTML =
-                    "";
+            setUploadProgress(
+                92,
+                "Video metadata save ho raha hai..."
+            );
 
-                preview.style.display =
-                    "none";
+
+            await saveUploadedVideo(
+                uploadData,
+                title,
+                description
+            );
+
+
+            setUploadProgress(
+                100,
+                "Video successfully publish ho gaya!"
+            );
+
+
+            showMessage(
+                "Video successfully upload ho gaya! 🎉",
+                "success"
+            );
+
+
+            await loadVideos();
+
+
+            setTimeout(() => {
+
+                resetUploadForm();
+
+            }, 800);
+
+
+            await openPage(
+                "homeSection"
+            );
+
+
+        } catch (error) {
+
+            console.error(
+                "Upload error:",
+                error
+            );
+
+
+            setUploadProgress(
+                0,
+                "Upload failed"
+            );
+
+
+            showMessage(
+                error.message ||
+                "Video upload failed.",
+                "error"
+            );
+
+
+        } finally {
+
+            uploadInProgress = false;
+
+
+            if (elements.button) {
+
+                elements.button.disabled =
+                    false;
+
+                elements.button.textContent =
+                    elements.button.dataset.oldText ||
+                    "Upload Video";
             }
         }
-
-        await loadVideos();
-
-        await loadMyVideos();
-
-        showPage(
-            "home"
-        );
-
-    } catch (error) {
-        console.error(
-            "UPLOAD ERROR:",
-            error
-        );
-
-        showMessage(
-            error.message ||
-            "Upload failed. Please try again.",
-            "error"
-        );
-
-    } finally {
-        uploadInProgress =
-            false;
-
-        if (button) {
-            button.disabled =
-                false;
-
-            button.textContent =
-                "Upload Video";
-        }
-    }
-}
-
-
-/* ======================================================
-   CREATOR DASHBOARD
-====================================================== */
-
-async function loadCreatorDashboard() {
-    const container =
-        $("creatorDashboard") ||
-        $("creatorStats");
-
-    if (!container) {
-        return;
     }
 
-    container.innerHTML =
-        `<div class="loading">
-            Loading creator dashboard...
-         </div>`;
 
-    try {
-        const data =
-            await api(
-                "/api/creator/stats"
-            );
+    /* =====================================================
+       MY VIDEOS
+    ===================================================== */
 
-        const stats =
-            data.stats ||
-            data.creator ||
-            data;
+    async function loadMyVideos() {
 
-        const followers =
-            Number(
-                stats.followers ??
-                stats.followers_count ??
-                0
-            );
+        const container =
+            $("myVideosList");
 
-        const videos =
-            Number(
-                stats.videos ??
-                stats.total_videos ??
-                0
-            );
+        if (!container) return;
 
-        const watchHours =
-            Number(
-                stats.watch_hours ??
-                0
-            );
-
-        const earnings =
-            Number(
-                stats.earnings ??
-                stats.creator_earnings ??
-                0
-            );
 
         container.innerHTML = `
-            <div class="creator-stat-grid">
-
-                <div class="creator-stat">
-                    <strong>
-                        ${formatNumber(
-                            followers
-                        )}
-                    </strong>
-                    <span>
-                        Followers
-                    </span>
-                </div>
-
-                <div class="creator-stat">
-                    <strong>
-                        ${formatNumber(
-                            videos
-                        )}
-                    </strong>
-                    <span>
-                        Videos
-                    </span>
-                </div>
-
-                <div class="creator-stat">
-                    <strong>
-                        ${formatNumber(
-                            watchHours
-                        )}
-                    </strong>
-                    <span>
-                        Watch Hours
-                    </span>
-                </div>
-
-                <div class="creator-stat">
-                    <strong>
-                        ${formatNumber(
-                            earnings
-                        )}
-                    </strong>
-                    <span>
-                        Earnings
-                    </span>
-                </div>
-
+            <div class="loading-state">
+                Loading your videos...
             </div>
         `;
 
-        updateCreatorEligibility(
-            stats
-        );
 
-    } catch (error) {
-        console.error(
-            "CREATOR DASHBOARD ERROR:",
-            error
-        );
+        try {
 
-        container.innerHTML =
-            `<div class="empty-state">
-                Creator dashboard is not available yet.
-             </div>`;
-    }
-}
-
-function updateCreatorEligibility(
-    stats
-) {
-    const element =
-        $("creatorEligibility");
-
-    if (!element) {
-        return;
-    }
-
-    const status =
-        stats.creator_status ||
-        stats.status ||
-        currentUser?.creator_status ||
-        "";
-
-    const applied =
-        Boolean(
-            stats.applied ??
-            stats.creator_applied ??
-            currentUser?.creator_applied ??
-            false
-        );
-
-    if (status) {
-        element.textContent =
-            `Creator status: ${status}`;
-    } else if (applied) {
-        element.textContent =
-            "Creator application submitted.";
-    } else {
-        element.textContent =
-            "Creator eligibility available.";
-    }
-}
-
-
-/* ======================================================
-   CREATOR APPLICATION
-====================================================== */
-
-async function applyForCreator() {
-    const button =
-        $("creatorApplyButton");
-
-    if (button) {
-        button.disabled =
-            true;
-    }
-
-    try {
-        await api(
-            "/api/creator/apply",
-            {
-                method: "POST"
-            }
-        );
-
-        showMessage(
-            "Creator application submitted.",
-            "success"
-        );
-
-        await loadCreatorDashboard();
-
-    } catch (error) {
-        console.error(
-            "CREATOR APPLY ERROR:",
-            error
-        );
-
-        showMessage(
-            error.message ||
-            "Unable to submit creator application.",
-            "error"
-        );
-
-    } finally {
-        if (button) {
-            button.disabled =
-                false;
-        }
-    }
-}
-
-
-/* ======================================================
-   PAYOUT ACCOUNT FOUNDATION
-====================================================== */
-
-async function savePayoutAccount() {
-    const name =
-        $("payoutName")
-            ?.value
-            ?.trim() ||
-        "";
-
-    const accountNumber =
-        $("payoutAccountNumber")
-            ?.value
-            ?.trim() ||
-        "";
-
-    const ifsc =
-        $("payoutIFSC")
-            ?.value
-            ?.trim()
-            .toUpperCase() ||
-        "";
-
-    if (
-        !name ||
-        !accountNumber ||
-        !ifsc
-    ) {
-        showMessage(
-            "Please fill all payout account fields.",
-            "error"
-        );
-
-        return;
-    }
-
-    try {
-        await api(
-            "/api/creator/payout",
-            {
-                method: "POST",
-                body: JSON.stringify({
-                    account_name:
-                        name,
-                    account_number:
-                        accountNumber,
-                    ifsc
-                })
-            }
-        );
-
-        showMessage(
-            "Payout account saved.",
-            "success"
-        );
-
-    } catch (error) {
-        console.error(
-            "PAYOUT ERROR:",
-            error
-        );
-
-        showMessage(
-            error.message ||
-            "Unable to save payout account.",
-            "error"
-        );
-    }
-}
-
-
-/* ======================================================
-   PWA INSTALL
-====================================================== */
-
-window.addEventListener(
-    "beforeinstallprompt",
-    event => {
-        event.preventDefault();
-
-        deferredPrompt =
-            event;
-
-        qsa(
-            "#installButton, [data-install]"
-        ).forEach(
-            button => {
-                button.style.display =
-                    "block";
-            }
-        );
-    }
-);
-
-async function installApp() {
-    if (!deferredPrompt) {
-        showMessage(
-            "Install option is not available right now.",
-            "info"
-        );
-
-        return;
-    }
-
-    try {
-        deferredPrompt.prompt();
-
-        await deferredPrompt.userChoice;
-
-    } catch (error) {
-        console.warn(
-            "PWA install error:",
-            error
-        );
-    }
-
-    deferredPrompt =
-        null;
-
-    qsa(
-        "#installButton, [data-install]"
-    ).forEach(
-        button => {
-            button.style.display =
-                "none";
-        }
-    );
-}
-
-window.addEventListener(
-    "appinstalled",
-    () => {
-        deferredPrompt =
-            null;
-
-        qsa(
-            "#installButton, [data-install]"
-        ).forEach(
-            button => {
-                button.style.display =
-                    "none";
-            }
-        );
-    }
-);
-
-
-/* ======================================================
-   NAVIGATION BINDING
-====================================================== */
-
-function bindNavigation() {
-    qsa(
-        "[data-nav]"
-    ).forEach(
-        button => {
-            button.addEventListener(
-                "click",
-                event => {
-                    event.preventDefault();
-
-                    const page =
-                        button.dataset.nav;
-
-                    if (page) {
-                        showPage(
-                            page
-                        );
+            const data =
+                await api(
+                    "/api/videos/mine",
+                    {
+                        method: "GET",
+                        timeout: 30000
                     }
-                }
-            );
-        }
-    );
-
-    const mappings = {
-        home: [
-            "homeButton",
-            "navHome"
-        ],
-
-        watch: [
-            "watchButton",
-            "navWatch"
-        ],
-
-        earn: [
-            "earnButton",
-            "navEarn"
-        ],
-
-        upload: [
-            "uploadNavButton",
-            "navUpload"
-        ],
-
-        profile: [
-            "profileButton",
-            "navProfile"
-        ],
-
-        creator: [
-            "creatorButton",
-            "navCreator"
-        ]
-    };
-
-    Object.entries(
-        mappings
-    ).forEach(
-        ([page, ids]) => {
-            ids.forEach(
-                id => {
-                    const button =
-                        $(id);
-
-                    if (
-                        button &&
-                        !button.dataset
-                            .dekhoearnBound
-                    ) {
-                        button.dataset
-                            .dekhoearnBound =
-                            "true";
-
-                        button.addEventListener(
-                            "click",
-                            event => {
-                                event.preventDefault();
-
-                                showPage(
-                                    page
-                                );
-                            }
-                        );
-                    }
-                }
-            );
-        }
-    );
-}
-
-
-/* ======================================================
-   ACTION BINDING
-====================================================== */
-
-function bindActions() {
-    const actions = [
-        [
-            [
-                "likeButton",
-                "btnLike"
-            ],
-            toggleLike
-        ],
-
-        [
-            [
-                "commentButton",
-                "btnComment"
-            ],
-            addComment
-        ],
-
-        [
-            [
-                "reportButton",
-                "btnReport"
-            ],
-            reportVideo
-        ],
-
-        [
-            [
-                "followButton",
-                "subscribeButton",
-                "btnFollow",
-                "btnSubscribe"
-            ],
-            toggleFollow
-        ],
-
-        [
-            [
-                "dailyRewardButton",
-                "claimDailyButton"
-            ],
-            claimDailyReward
-        ],
-
-        [
-            [
-                "rewardedAdButton",
-                "rewardAdButton"
-            ],
-            claimRewardedAd
-        ],
-
-        [
-            [
-                "uploadButton",
-                "publishVideoButton"
-            ],
-            uploadVideo
-        ],
-
-        [
-            [
-                "creatorApplyButton"
-            ],
-            applyForCreator
-        ],
-
-        [
-            [
-                "savePayoutButton"
-            ],
-            savePayoutAccount
-        ],
-
-        [
-            [
-                "installButton"
-            ],
-            installApp
-        ],
-
-        [
-            [
-                "logoutButton"
-            ],
-            logoutUser
-        ]
-    ];
-
-    actions.forEach(
-        ([ids, handler]) => {
-            const element =
-                ids
-                    .map(id => $(id))
-                    .find(Boolean);
-
-            if (
-                element &&
-                !element.dataset
-                    .dekhoearnBound
-            ) {
-                element.dataset
-                    .dekhoearnBound =
-                    "true";
-
-                element.addEventListener(
-                    "click",
-                    handler
                 );
-            }
-        }
-    );
-}
 
 
-/* ======================================================
-   AUTH FORM
-====================================================== */
+            const raw =
+                Array.isArray(data)
+                    ? data
+                    : (
+                        data.videos ||
+                        data.items ||
+                        data.data?.videos ||
+                        data.data ||
+                        []
+                    );
 
-function bindAuthForm() {
-    const form =
-        $("authForm") ||
-        $("loginForm");
 
-    if (!form) {
-        return;
-    }
+            const videos =
+                raw
+                    .map(normalizeVideo)
+                    .filter(Boolean);
 
-    if (
-        form.dataset
-            .dekhoearnBound
-    ) {
-        return;
-    }
 
-    form.dataset
-        .dekhoearnBound =
-        "true";
+            if (!videos.length) {
 
-    form.addEventListener(
-        "submit",
-        async event => {
-            event.preventDefault();
-
-            const username =
-                $("username")
-                    ?.value
-                    ?.trim() ||
-                $("loginUsername")
-                    ?.value
-                    ?.trim() ||
-                "";
-
-            const firstName =
-                $("firstName")
-                    ?.value
-                    ?.trim() ||
-                $("first_name")
-                    ?.value
-                    ?.trim() ||
-                "";
-
-            const email =
-                $("email")
-                    ?.value
-                    ?.trim() ||
-                "";
-
-            const password =
-                $("password")
-                    ?.value ||
-                "";
-
-            if (!username) {
-                showMessage(
-                    "Please enter username.",
-                    "error"
-                );
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>No uploaded videos</h3>
+                        <p>Apna pehla video upload karo.</p>
+                    </div>
+                `;
 
                 return;
             }
 
-            try {
-                let data;
 
-                /*
-                 * Password available =
-                 * Login
-                 *
-                 * No password =
-                 * Registration / legacy mode
-                 */
+            container.innerHTML =
+                videos.map(video => {
 
-                if (password) {
-                    data =
-                        await loginUser(
-                            username,
-                            password
-                        );
-                } else {
-                    data =
-                        await registerUser(
-                            username,
-                            firstName ||
-                                username,
-                            email
-                        );
-                }
+                    return `
+                        <div class="my-video-item">
 
-                if (data.token) {
-                    saveToken(
-                        data.token
+                            <div
+                                class="my-video-main"
+                                data-video-id="${escapeHTML(
+                                    video.id
+                                )}"
+                            >
+
+                                <strong>
+                                    ${escapeHTML(video.title)}
+                                </strong>
+
+                                <small>
+                                    👁 ${formatNumber(video.views)}
+                                    &nbsp; ❤️ ${formatNumber(video.likes)}
+                                </small>
+
+                            </div>
+
+                            <button
+                                type="button"
+                                class="delete-video-button"
+                                data-delete-video="${escapeHTML(
+                                    video.id
+                                )}"
+                            >
+                                Delete
+                            </button>
+
+                        </div>
+                    `;
+
+                }).join("");
+
+
+            container
+                .querySelectorAll("[data-video-id]")
+                .forEach(item => {
+
+                    item.addEventListener(
+                        "click",
+                        () => {
+
+                            openVideo(
+                                item.dataset.videoId
+                            );
+                        }
                     );
-                }
-
-                if (data.user) {
-                    saveUser(
-                        data.user
-                    );
-                }
-
-                updateUserUI();
-
-                showMessage(
-                    "Welcome to DekhoEarn!",
-                    "success"
-                );
-
-                showPage(
-                    "home"
-                );
-
-                await loadVideos();
-
-            } catch (error) {
-                console.error(
-                    "AUTH ERROR:",
-                    error
-                );
-
-                showMessage(
-                    error.message ||
-                    "Authentication failed.",
-                    "error"
-                );
-            }
-        }
-    );
-}
+                });
 
 
-/* ======================================================
-   SEARCH
-====================================================== */
-
-function setupSearch() {
-    const input =
-        $("searchInput");
-
-    if (!input) {
-        return;
-    }
-
-    if (
-        input.dataset
-            .dekhoearnBound
-    ) {
-        return;
-    }
-
-    input.dataset
-        .dekhoearnBound =
-        "true";
-
-    let timeout = null;
-
-    input.addEventListener(
-        "input",
-        () => {
-            clearTimeout(
-                timeout
-            );
-
-            timeout =
-                setTimeout(
-                    () => {
-                        filterVisibleVideos(
-                            input.value
-                        );
-                    },
-                    250
-                );
-        }
-    );
-}
-
-function filterVisibleVideos(
-    query
-) {
-    const value =
-        String(
-            query || ""
-        )
-            .trim()
-            .toLowerCase();
-
-    qsa(
-        ".video-card"
-    ).forEach(
-        card => {
-            const text =
-                card.textContent
-                    .toLowerCase();
-
-            card.style.display =
-                !value ||
-                text.includes(
-                    value
+            container
+                .querySelectorAll(
+                    "[data-delete-video]"
                 )
-                    ? ""
-                    : "none";
+                .forEach(button => {
+
+                    button.addEventListener(
+                        "click",
+                        event => {
+
+                            event.stopPropagation();
+
+                            deleteMyVideo(
+                                button.dataset.deleteVideo
+                            );
+                        }
+                    );
+                });
+
+
+        } catch (error) {
+
+            container.innerHTML = `
+                <div class="empty-state">
+                    My videos load nahi hue.
+                </div>
+            `;
         }
-    );
-}
+    }
 
 
-/* ======================================================
-   MOBILE
-====================================================== */
+    async function deleteMyVideo(videoId) {
 
-function setupMobileHandling() {
-    document.body.classList.add(
-        "dekhoearn-mobile-ready"
-    );
+        if (!videoId) return;
 
-    qsa("video").forEach(
-        video => {
-            video.setAttribute(
-                "playsinline",
-                ""
+
+        const confirmed =
+            window.confirm(
+                "Kya aap is video ko delete karna chahte hain?"
             );
 
-            video.setAttribute(
-                "webkit-playsinline",
-                ""
+
+        if (!confirmed) return;
+
+
+        try {
+
+            await api(
+                `/api/videos/${encodeURIComponent(videoId)}`,
+                {
+                    method: "DELETE",
+                    timeout: 30000
+                }
             );
-        }
-    );
-}
 
 
-/* ======================================================
-   ONLINE / OFFLINE
-====================================================== */
-
-function setupNetworkHandling() {
-    window.addEventListener(
-        "offline",
-        () => {
             showMessage(
-                "You are offline.",
-                "error"
-            );
-        }
-    );
-
-    window.addEventListener(
-        "online",
-        () => {
-            showMessage(
-                "Internet connection restored.",
+                "Video delete ho gaya.",
                 "success"
             );
 
-            loadVideos();
+
+            await loadMyVideos();
+
+            await loadVideos();
+
+
+        } catch (error) {
+
+            showMessage(
+                error.message ||
+                "Video delete nahi hua.",
+                "error"
+            );
         }
-    );
-}
-
-
-/* ======================================================
-   SERVICE WORKER
-====================================================== */
-
-function registerServiceWorker() {
-    if (
-        !("serviceWorker" in navigator)
-    ) {
-        return;
     }
 
-    window.addEventListener(
-        "load",
-        () => {
-            navigator.serviceWorker
-                .register(
-                    "./sw.js"
-                )
-                .then(
-                    registration => {
-                        console.log(
-                            "DekhoEarn Service Worker registered:",
-                            registration.scope
-                        );
-                    }
-                )
-                .catch(
-                    error => {
-                        console.warn(
-                            "Service worker registration failed:",
-                            error
-                        );
+
+    /* =====================================================
+       CREATOR DASHBOARD
+    ===================================================== */
+
+    async function loadCreatorStats() {
+
+        const container =
+            $("creatorStats");
+
+        if (!container) return;
+
+
+        container.innerHTML = `
+            <div class="loading-state">
+                Loading creator dashboard...
+            </div>
+        `;
+
+
+        try {
+
+            const data =
+                await api(
+                    "/api/creator/stats",
+                    {
+                        method: "GET",
+                        timeout: 30000
                     }
                 );
+
+
+            const stats =
+                data.stats ||
+                data.data?.stats ||
+                data;
+
+
+            container.innerHTML = `
+
+                <div class="creator-stat-grid">
+
+                    <div class="creator-stat">
+                        <strong>
+                            ${formatNumber(
+                                stats.videos ||
+                                stats.total_videos ||
+                                currentUser?.total_videos ||
+                                0
+                            )}
+                        </strong>
+                        <span>Videos</span>
+                    </div>
+
+                    <div class="creator-stat">
+                        <strong>
+                            ${formatNumber(
+                                stats.views ||
+                                stats.total_views ||
+                                0
+                            )}
+                        </strong>
+                        <span>Views</span>
+                    </div>
+
+                    <div class="creator-stat">
+                        <strong>
+                            ${formatNumber(
+                                stats.followers ||
+                                stats.followers_count ||
+                                currentUser?.followers_count ||
+                                0
+                            )}
+                        </strong>
+                        <span>Followers</span>
+                    </div>
+
+                    <div class="creator-stat">
+                        <strong>
+                            ${formatNumber(
+                                stats.earnings ||
+                                stats.total_earnings ||
+                                0
+                            )}
+                        </strong>
+                        <span>Earnings</span>
+                    </div>
+
+                </div>
+
+            `;
+
+
+        } catch (error) {
+
+            container.innerHTML = `
+                <div class="empty-state">
+                    Creator stats load nahi hue.
+                </div>
+            `;
         }
-    );
-}
+    }
 
 
-/* ======================================================
-   PAGE VISIBILITY
-====================================================== */
+    async function applyCreator() {
 
-document.addEventListener(
-    "visibilitychange",
-    () => {
-        if (
-            document.hidden
-        ) {
-            stopWatchTimer();
-        } else {
-            const player =
-                $("videoPlayer") ||
-                $("playerVideo");
+        const button =
+            $("applyMonetizationBtn");
 
-            if (
-                player &&
-                !player.paused &&
-                !player.ended
-            ) {
-                startWatchTimer();
+
+        if (button) {
+            button.disabled = true;
+        }
+
+
+        try {
+
+            const data =
+                await api(
+                    "/api/creator/apply",
+                    {
+                        method: "POST",
+                        timeout: 30000
+                    }
+                );
+
+
+            showMessage(
+                data.message ||
+                "Creator application submit ho gayi.",
+                "success"
+            );
+
+
+            await refreshCurrentUser();
+
+            await loadCreatorStats();
+
+
+        } catch (error) {
+
+            showMessage(
+                error.message ||
+                "Creator application submit nahi hui.",
+                "error"
+            );
+
+        } finally {
+
+            if (button) {
+                button.disabled = false;
             }
         }
     }
-);
 
 
-/* ======================================================
-   BROWSER BACK HANDLING
-====================================================== */
+    /* =====================================================
+       PWA INSTALL
+    ===================================================== */
 
-window.addEventListener(
-    "beforeunload",
-    () => {
-        stopWatchTimer();
-    }
-);
+    function setupInstallPrompt() {
+
+        window.addEventListener(
+            "beforeinstallprompt",
+            event => {
+
+                event.preventDefault();
+
+                deferredInstallPrompt =
+                    event;
 
 
-/* ======================================================
-   APP INITIALIZATION
-====================================================== */
+                const button =
+                    $("installAppBtn");
 
-async function initApp() {
-    if (appInitialized) {
-        return;
-    }
 
-    appInitialized =
-        true;
+                if (button) {
 
-    console.log(
-        "DekhoEarn Frontend v3.2.0 starting..."
-    );
-
-    loadSavedUser();
-
-    bindNavigation();
-    bindActions();
-    bindAuthForm();
-
-    setupVideoPreview();
-    setupSearch();
-    setupMobileHandling();
-    setupNetworkHandling();
-
-    registerServiceWorker();
-
-    updateUserUI();
-
-    /*
-     * Validate existing login token.
-     */
-
-    const user =
-        await ensureUser();
-
-    if (user) {
-        saveUser(
-            user
+                    button.style.display =
+                        "";
+                }
+            }
         );
 
-        updateUserUI();
+
+        window.addEventListener(
+            "appinstalled",
+            () => {
+
+                deferredInstallPrompt =
+                    null;
+
+
+                showMessage(
+                    "DekhoEarn install ho gaya! 🎉",
+                    "success"
+                );
+            }
+        );
     }
 
-    /*
-     * Always open Home.
-     */
 
-    showPage(
-        "home"
-    );
+    async function installApp() {
 
-    await loadVideos();
+        if (!deferredInstallPrompt) {
 
-    console.log(
-        "DekhoEarn Frontend v3.2.0 ready."
-    );
-}
+            showMessage(
+                "Install option browser menu se available ho sakta hai.",
+                "info"
+            );
 
-
-/* ======================================================
-   GLOBAL FUNCTIONS
-====================================================== */
-
-window.showPage =
-    showPage;
-
-window.openVideo =
-    openVideo;
-
-window.toggleLike =
-    toggleLike;
-
-window.addComment =
-    addComment;
-
-window.reportVideo =
-    reportVideo;
-
-window.toggleFollow =
-    toggleFollow;
-
-window.claimDailyReward =
-    claimDailyReward;
-
-window.claimRewardedAd =
-    claimRewardedAd;
-
-window.uploadVideo =
-    uploadVideo;
-
-window.deleteMyVideo =
-    deleteMyVideo;
-
-window.applyForCreator =
-    applyForCreator;
-
-window.savePayoutAccount =
-    savePayoutAccount;
-
-window.installApp =
-    installApp;
-
-window.logoutUser =
-    logoutUser;
-
-
-/* ======================================================
-   START
-====================================================== */
-
-if (
-    document.readyState ===
-    "loading"
-) {
-    document.addEventListener(
-        "DOMContentLoaded",
-        initApp,
-        {
-            once: true
+            return;
         }
-    );
-} else {
-    initApp();
-}
+
+
+        try {
+
+            await deferredInstallPrompt.prompt();
+
+
+            const result =
+                await deferredInstallPrompt.userChoice;
+
+
+            if (
+                result &&
+                result.outcome === "accepted"
+            ) {
+
+                showMessage(
+                    "DekhoEarn install ho raha hai.",
+                    "success"
+                );
+            }
+
+
+        } catch {
+
+            showMessage(
+                "Install prompt open nahi hua.",
+                "error"
+            );
+        }
+
+
+        deferredInstallPrompt = null;
+    }
+
+
+    /* =====================================================
+       EVENT BINDING
+    ===================================================== */
+
+    function bindAuthEvents() {
+
+        $("loginBtn")?.addEventListener(
+            "click",
+            loginUser
+        );
+
+
+        $("registerBtn")?.addEventListener(
+            "click",
+            registerUser
+        );
+
+
+        $("showRegisterBtn")?.addEventListener(
+            "click",
+            event => {
+
+                event.preventDefault();
+
+                showRegisterBox();
+            }
+        );
+
+
+        $("showLoginBtn")?.addEventListener(
+            "click",
+            event => {
+
+                event.preventDefault();
+
+                showLoginBox();
+            }
+        );
+
+
+        $("loginPassword")?.addEventListener(
+            "keydown",
+            event => {
+
+                if (event.key === "Enter") {
+
+                    event.preventDefault();
+
+                    loginUser();
+                }
+            }
+        );
+
+
+        $("loginUsername")?.addEventListener(
+            "keydown",
+            event => {
+
+                if (event.key === "Enter") {
+
+                    event.preventDefault();
+
+                    loginUser();
+                }
+            }
+        );
+
+
+        $("registerPassword")?.addEventListener(
+            "keydown",
+            event => {
+
+                if (event.key === "Enter") {
+
+                    event.preventDefault();
+
+                    registerUser();
+                }
+            }
+        );
+    }
+
+
+    function bindNavigationEvents() {
+
+        document
+            .querySelectorAll(
+                ".bottom-nav [data-page]"
+            )
+            .forEach(button => {
+
+                button.addEventListener(
+                    "click",
+                    () => {
+
+                        openPage(
+                            button.dataset.page
+                        );
+                    }
+                );
+            });
+
+
+        $("refreshFeedBtn")?.addEventListener(
+            "click",
+            loadVideos
+        );
+
+
+        $("backFromPlayerBtn")?.addEventListener(
+            "click",
+            () => {
+
+                clearWatchTimer();
+
+                openPage(
+                    "homeSection"
+                );
+            }
+        );
+
+
+        $("watchHistoryList")?.addEventListener(
+            "click",
+            event => {
+
+                const target =
+                    event.target.closest(
+                        "[data-video-id]"
+                    );
+
+                if (!target) return;
+
+                openVideo(
+                    target.dataset.videoId
+                );
+            }
+        );
+    }
+
+
+    function bindPlayerEvents() {
+
+        $("mainVideo")?.addEventListener(
+            "play",
+            startWatchTimer
+        );
+
+
+        $("mainVideo")?.addEventListener(
+            "pause",
+            clearWatchTimer
+        );
+
+
+        $("mainVideo")?.addEventListener(
+            "ended",
+            async () => {
+
+                clearWatchTimer();
+
+
+                if (
+                    watchedSeconds >=
+                    MIN_WATCH_SECONDS &&
+                    !watchRewardSent
+                ) {
+
+                    watchRewardSent = true;
+
+                    await completeWatch();
+                }
+            }
+        );
+
+
+        $("likeVideoBtn")?.addEventListener(
+            "click",
+            toggleLike
+        );
+
+
+        $("followCreatorBtn")?.addEventListener(
+            "click",
+            toggleFollow
+        );
+
+
+        $("reportVideoBtn")?.addEventListener(
+            "click",
+            reportCurrentVideo
+        );
+
+
+        $("commentBtn")?.addEventListener(
+            "click",
+            addComment
+        );
+
+
+        $("commentInput")?.addEventListener(
+            "keydown",
+            event => {
+
+                if (
+                    event.key === "Enter" &&
+                    !event.shiftKey
+                ) {
+
+                    event.preventDefault();
+
+                    addComment();
+                }
+            }
+        );
+    }
+
+
+    function bindRewardEvents() {
+
+        $("dailyRewardBtn")?.addEventListener(
+            "click",
+            claimDailyReward
+        );
+
+
+        $("rewardedAdBtn")?.addEventListener(
+            "click",
+            claimRewardedAd
+        );
+    }
+
+
+    function bindUploadEvents() {
+
+        $("videoFile")?.addEventListener(
+            "change",
+            handleVideoFileChange
+        );
+
+
+        $("uploadPreviewVideo")?.addEventListener(
+            "loadedmetadata",
+            handlePreviewMetadata
+        );
+
+
+        $("uploadVideoBtn")?.addEventListener(
+            "click",
+            uploadVideo
+        );
+    }
+
+
+    function bindProfileEvents() {
+
+        $("myVideosBtn")?.addEventListener(
+            "click",
+            async () => {
+
+                await openPage(
+                    "profileSection"
+                );
+
+                await loadMyVideos();
+            }
+        );
+
+
+        $("creatorDashboardBtn")?.addEventListener(
+            "click",
+            () => {
+
+                openPage(
+                    "creatorSection"
+                );
+            }
+        );
+
+
+        $("installAppBtn")?.addEventListener(
+            "click",
+            installApp
+        );
+
+
+        $("logoutBtn")?.addEventListener(
+            "click",
+            logoutUser
+        );
+
+
+        $("applyMonetizationBtn")?.addEventListener(
+            "click",
+            applyCreator
+        );
+    }
+
+
+    /* =====================================================
+       KEYBOARD / PAGE EVENTS
+    ===================================================== */
+
+    function bindGlobalEvents() {
+
+        document.addEventListener(
+            "visibilitychange",
+            () => {
+
+                if (
+                    document.hidden
+                ) {
+
+                    clearWatchTimer();
+                } else {
+
+                    const video =
+                        $("mainVideo");
+
+                    if (
+                        video &&
+                        !video.paused &&
+                        !video.ended &&
+                        currentVideo
+                    ) {
+
+                        startWatchTimer();
+                    }
+                }
+            }
+        );
+
+
+        window.addEventListener(
+            "pagehide",
+            clearWatchTimer
+        );
+
+
+        window.addEventListener(
+            "beforeunload",
+            () => {
+
+                if (
+                    selectedVideoObjectUrl
+                ) {
+
+                    URL.revokeObjectURL(
+                        selectedVideoObjectUrl
+                    );
+                }
+            }
+        );
+    }
+
+
+    /* =====================================================
+       INITIAL AUTH
+    ===================================================== */
+
+    async function initializeAuth() {
+
+        const token =
+            getToken();
+
+
+        if (!token) {
+
+            showAuthScreen();
+
+            return false;
+        }
+
+
+        const saved =
+            getSavedUser();
+
+
+        if (saved) {
+
+            currentUser =
+                saved;
+
+            updateUserUI(
+                saved
+            );
+        }
+
+
+        showAppScreen();
+
+
+        const user =
+            await refreshCurrentUser();
+
+
+        if (!user && !getToken()) {
+
+            showAuthScreen();
+
+            return false;
+        }
+
+
+        return true;
+    }
+
+
+    /* =====================================================
+       INIT
+    ===================================================== */
+
+    async function init() {
+
+        if (initialized) {
+            return;
+        }
+
+
+        initialized = true;
+
+
+        bindAuthEvents();
+
+        bindNavigationEvents();
+
+        bindPlayerEvents();
+
+        bindRewardEvents();
+
+        bindUploadEvents();
+
+        bindProfileEvents();
+
+        bindGlobalEvents();
+
+        setupInstallPrompt();
+
+
+        const loggedIn =
+            await initializeAuth();
+
+
+        if (!loggedIn) {
+            return;
+        }
+
+
+        await openPage(
+            "homeSection"
+        );
+    }
+
+
+    /* =====================================================
+       PUBLIC API
+    ===================================================== */
+
+    window.DekhoEarn = {
+
+        init,
+
+        loginUser,
+
+        registerUser,
+
+        logoutUser,
+
+        loadVideos,
+
+        openVideo,
+
+        uploadVideo,
+
+        loadMyVideos,
+
+        claimDailyReward,
+
+        claimRewardedAd,
+
+        addComment,
+
+        toggleLike,
+
+        toggleFollow,
+
+        installApp,
+
+        openPage,
+
+        refreshCurrentUser
+    };
+
+
+    /*
+     Compatibility helpers.
+    */
+
+    window.openVideo =
+        openVideo;
+
+    window.uploadVideo =
+        uploadVideo;
+
+    window.loginUser =
+        loginUser;
+
+    window.registerUser =
+        registerUser;
+
+    window.logoutUser =
+        logoutUser;
+
+
+    /* =====================================================
+       START
+    ===================================================== */
+
+    if (
+        document.readyState ===
+        "loading"
+    ) {
+
+        document.addEventListener(
+            "DOMContentLoaded",
+            init,
+            {
+                once: true
+            }
+        );
+
+    } else {
+
+        init();
+    }
+
+})();
