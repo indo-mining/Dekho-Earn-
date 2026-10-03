@@ -3,13 +3,21 @@
 /*
 =========================================================
  DEKHOEARN FRONTEND
- Version 4.0.0
+ Version 4.0.1
+
  Compatible with:
  - DekhoEarn Server v4.0.1
- - Current index.html
+ - Current index.html v4.0.1
  - Cloudinary direct signed video upload
  - Neon PostgreSQL API
  - Mobile / PWA
+
+ FIXES:
+ - Fixed hidden app screen issue
+ - Fixed login/register screen switching
+ - Fixed page section visibility
+ - Fixed .hidden + inline display conflict
+ - Existing API/upload/reward functionality preserved
 =========================================================
 */
 
@@ -55,6 +63,7 @@
 
     const $ = (id) => document.getElementById(id);
 
+
     function escapeHTML(value) {
 
         return String(value ?? "")
@@ -70,22 +79,31 @@
 
         const n = Number(value);
 
-        return Number.isFinite(n) ? n : fallback;
+        return Number.isFinite(n)
+            ? n
+            : fallback;
     }
 
 
     function formatNumber(value) {
 
-        return number(value).toLocaleString("en-IN");
+        return number(value)
+            .toLocaleString("en-IN");
     }
 
 
     function formatDuration(seconds) {
 
-        seconds = Math.max(0, Math.floor(number(seconds)));
+        seconds = Math.max(
+            0,
+            Math.floor(number(seconds))
+        );
 
-        const minutes = Math.floor(seconds / 60);
-        const secs = seconds % 60;
+        const minutes =
+            Math.floor(seconds / 60);
+
+        const secs =
+            seconds % 60;
 
         return `${minutes}:${String(secs).padStart(2, "0")}`;
     }
@@ -97,19 +115,26 @@
 
         const d = new Date(value);
 
-        if (Number.isNaN(d.getTime())) return "";
+        if (Number.isNaN(d.getTime())) {
+            return "";
+        }
 
-        return d.toLocaleDateString("en-IN", {
-            day: "numeric",
-            month: "short",
-            year: "numeric"
-        });
+        return d.toLocaleDateString(
+            "en-IN",
+            {
+                day: "numeric",
+                month: "short",
+                year: "numeric"
+            }
+        );
     }
 
 
     function getToken() {
 
-        return localStorage.getItem(STORAGE.token) || "";
+        return localStorage.getItem(
+            STORAGE.token
+        ) || "";
     }
 
 
@@ -117,9 +142,14 @@
 
         try {
 
-            const raw = localStorage.getItem(STORAGE.user);
+            const raw =
+                localStorage.getItem(
+                    STORAGE.user
+                );
 
-            return raw ? JSON.parse(raw) : null;
+            return raw
+                ? JSON.parse(raw)
+                : null;
 
         } catch {
 
@@ -131,8 +161,13 @@
     function saveSession(token, user) {
 
         if (token) {
-            localStorage.setItem(STORAGE.token, token);
+
+            localStorage.setItem(
+                STORAGE.token,
+                token
+            );
         }
+
 
         if (user) {
 
@@ -141,12 +176,15 @@
                 JSON.stringify(user)
             );
 
+
             if (user.username) {
+
                 localStorage.setItem(
                     STORAGE.username,
                     user.username
                 );
             }
+
 
             const firstName =
                 user.name ||
@@ -154,6 +192,7 @@
                 user.firstName ||
                 user.username ||
                 "";
+
 
             if (firstName) {
 
@@ -168,9 +207,12 @@
 
     function clearSession() {
 
-        Object.values(STORAGE).forEach(key => {
-            localStorage.removeItem(key);
-        });
+        Object.values(STORAGE)
+            .forEach(key => {
+
+                localStorage.removeItem(key);
+
+            });
 
         currentUser = null;
         currentVideo = null;
@@ -181,9 +223,13 @@
        TOAST
     ===================================================== */
 
-    function showMessage(message, type = "info") {
+    function showMessage(
+        message,
+        type = "info"
+    ) {
 
         const toast = $("toast");
+
 
         if (!toast) {
 
@@ -192,19 +238,33 @@
             return;
         }
 
-        toast.textContent = message;
 
-        toast.className = `toast ${type}`;
+        toast.textContent =
+            message;
 
-        toast.classList.add("show");
 
-        clearTimeout(showMessage.timer);
+        toast.className =
+            `toast ${type}`;
 
-        showMessage.timer = setTimeout(() => {
 
-            toast.classList.remove("show");
+        toast.classList.add(
+            "show"
+        );
 
-        }, 3200);
+
+        clearTimeout(
+            showMessage.timer
+        );
+
+
+        showMessage.timer =
+            setTimeout(() => {
+
+                toast.classList.remove(
+                    "show"
+                );
+
+            }, 3200);
     }
 
 
@@ -212,13 +272,20 @@
        API
     ===================================================== */
 
-    async function api(path, options = {}) {
+    async function api(
+        path,
+        options = {}
+    ) {
 
-        const headers = new Headers(
-            options.headers || {}
-        );
+        const headers =
+            new Headers(
+                options.headers || {}
+            );
 
-        const token = getToken();
+
+        const token =
+            getToken();
+
 
         if (token) {
 
@@ -233,6 +300,7 @@
             );
         }
 
+
         if (
             options.body &&
             !(options.body instanceof FormData) &&
@@ -245,32 +313,46 @@
             );
         }
 
-        const controller = new AbortController();
 
-        const timeout = setTimeout(() => {
+        const controller =
+            new AbortController();
 
-            controller.abort();
 
-        }, options.timeout || 120000);
+        const timeout =
+            setTimeout(() => {
+
+                controller.abort();
+
+            }, options.timeout || 120000);
+
 
         try {
 
-            const response = await fetch(
-                API_BASE + path,
-                {
-                    ...options,
-                    headers,
-                    signal: controller.signal
-                }
-            );
+            const response =
+                await fetch(
+                    API_BASE + path,
+                    {
+                        ...options,
+                        headers,
+                        signal:
+                            controller.signal
+                    }
+                );
 
-            const text = await response.text();
+
+            const text =
+                await response.text();
+
 
             let data = {};
 
+
             try {
 
-                data = text ? JSON.parse(text) : {};
+                data =
+                    text
+                        ? JSON.parse(text)
+                        : {};
 
             } catch {
 
@@ -285,8 +367,10 @@
                 response.status === 403
             ) {
 
-                if (path !== "/api/auth/login" &&
-                    path !== "/api/auth/register") {
+                if (
+                    path !== "/api/auth/login" &&
+                    path !== "/api/auth/register"
+                ) {
 
                     clearSession();
 
@@ -303,24 +387,37 @@
                     data.details ||
                     `Request failed (${response.status})`;
 
-                const error = new Error(message);
 
-                error.status = response.status;
-                error.data = data;
+                const error =
+                    new Error(message);
+
+
+                error.status =
+                    response.status;
+
+
+                error.data =
+                    data;
+
 
                 throw error;
             }
+
 
             return data;
 
         } catch (error) {
 
-            if (error.name === "AbortError") {
+            if (
+                error.name ===
+                "AbortError"
+            ) {
 
                 throw new Error(
                     "Request timeout. Please try again."
                 );
             }
+
 
             throw error;
 
@@ -333,86 +430,181 @@
 
     /* =====================================================
        AUTH SCREEN
+       FIXED: .hidden CLASS
     ===================================================== */
 
     function showAuthScreen() {
 
-        const auth = $("authScreen");
-        const app = $("appShell");
+        const auth =
+            $("authScreen");
+
+        const app =
+            $("appShell");
+
 
         if (auth) {
-            auth.style.display = "";
+
+            auth.classList.remove(
+                "hidden"
+            );
+
+            auth.style.display =
+                "";
         }
+
 
         if (app) {
-            app.style.display = "none";
+
+            app.classList.add(
+                "hidden"
+            );
+
+            app.style.display =
+                "none";
         }
 
-        const loginBox = $("loginBox");
-        const registerBox = $("registerBox");
+
+        const loginBox =
+            $("loginBox");
+
+        const registerBox =
+            $("registerBox");
+
 
         if (loginBox) {
-            loginBox.style.display = "";
+
+            loginBox.classList.remove(
+                "hidden"
+            );
+
+            loginBox.style.display =
+                "";
         }
 
+
         if (registerBox) {
-            registerBox.style.display = "none";
+
+            registerBox.classList.add(
+                "hidden"
+            );
+
+            registerBox.style.display =
+                "none";
         }
     }
 
 
     function showAppScreen() {
 
-        const auth = $("authScreen");
-        const app = $("appShell");
+        const auth =
+            $("authScreen");
+
+        const app =
+            $("appShell");
+
 
         if (auth) {
-            auth.style.display = "none";
+
+            auth.classList.add(
+                "hidden"
+            );
+
+            auth.style.display =
+                "none";
         }
 
+
         if (app) {
-            app.style.display = "";
+
+            app.classList.remove(
+                "hidden"
+            );
+
+            app.style.display =
+                "";
         }
     }
 
 
     function showLoginBox() {
 
-        const loginBox = $("loginBox");
-        const registerBox = $("registerBox");
+        const loginBox =
+            $("loginBox");
+
+        const registerBox =
+            $("registerBox");
+
 
         if (loginBox) {
-            loginBox.style.display = "";
+
+            loginBox.classList.remove(
+                "hidden"
+            );
+
+            loginBox.style.display =
+                "";
         }
 
+
         if (registerBox) {
-            registerBox.style.display = "none";
+
+            registerBox.classList.add(
+                "hidden"
+            );
+
+            registerBox.style.display =
+                "none";
         }
     }
 
 
     function showRegisterBox() {
 
-        const loginBox = $("loginBox");
-        const registerBox = $("registerBox");
+        const loginBox =
+            $("loginBox");
+
+        const registerBox =
+            $("registerBox");
+
 
         if (loginBox) {
-            loginBox.style.display = "none";
+
+            loginBox.classList.add(
+                "hidden"
+            );
+
+            loginBox.style.display =
+                "none";
         }
 
+
         if (registerBox) {
-            registerBox.style.display = "";
+
+            registerBox.classList.remove(
+                "hidden"
+            );
+
+            registerBox.style.display =
+                "";
         }
     }
 
 
+    /* =====================================================
+       LOGIN
+    ===================================================== */
+
     async function loginUser() {
 
         const username =
-            $("loginUsername")?.value.trim();
+            $("loginUsername")
+                ?.value
+                .trim();
+
 
         const password =
-            $("loginPassword")?.value || "";
+            $("loginPassword")
+                ?.value || "";
 
 
         if (!username) {
@@ -441,26 +633,34 @@
         }
 
 
-        const button = $("loginBtn");
+        const button =
+            $("loginBtn");
+
 
         if (button) {
-            button.disabled = true;
+
+            button.disabled =
+                true;
         }
 
 
         try {
 
-            const data = await api(
-                "/api/auth/login",
-                {
-                    method: "POST",
-                    body: JSON.stringify({
-                        username,
-                        password
-                    }),
-                    timeout: 30000
-                }
-            );
+            const data =
+                await api(
+                    "/api/auth/login",
+                    {
+                        method: "POST",
+
+                        body:
+                            JSON.stringify({
+                                username,
+                                password
+                            }),
+
+                        timeout: 30000
+                    }
+                );
 
 
             const token =
@@ -485,24 +685,34 @@
             }
 
 
-            saveSession(token, user);
+            saveSession(
+                token,
+                user
+            );
 
 
             if (user) {
-                currentUser = user;
+
+                currentUser =
+                    user;
             }
 
 
             showAppScreen();
 
+
             await refreshCurrentUser();
+
 
             showMessage(
                 "Login successful.",
                 "success"
             );
 
-            await openPage("homeSection");
+
+            await openPage(
+                "homeSection"
+            );
 
 
         } catch (error) {
@@ -516,25 +726,41 @@
         } finally {
 
             if (button) {
-                button.disabled = false;
+
+                button.disabled =
+                    false;
             }
         }
     }
 
 
+    /* =====================================================
+       REGISTER
+    ===================================================== */
+
     async function registerUser() {
 
         const name =
-            $("registerName")?.value.trim();
+            $("registerName")
+                ?.value
+                .trim();
+
 
         const username =
-            $("registerUsername")?.value.trim();
+            $("registerUsername")
+                ?.value
+                .trim();
+
 
         const password =
-            $("registerPassword")?.value || "";
+            $("registerPassword")
+                ?.value || "";
+
 
         const referral =
-            $("registerReferral")?.value.trim() || "";
+            $("registerReferral")
+                ?.value
+                .trim() || "";
 
 
         if (!name) {
@@ -587,41 +813,53 @@
         }
 
 
-        const button = $("registerBtn");
+        const button =
+            $("registerBtn");
+
 
         if (button) {
-            button.disabled = true;
+
+            button.disabled =
+                true;
         }
 
 
         try {
 
-            /*
-             Server compatibility:
-             name + first_name
-             referral_code + ref
-             Extra fields server ignore kar sakta hai.
-            */
-
             const body = {
+
                 name,
-                first_name: name,
+
+                first_name:
+                    name,
+
                 username,
+
                 password,
-                email: "",
-                referral_code: referral,
-                ref: referral
+
+                email:
+                    "",
+
+                referral_code:
+                    referral,
+
+                ref:
+                    referral
             };
 
 
-            const data = await api(
-                "/api/auth/register",
-                {
-                    method: "POST",
-                    body: JSON.stringify(body),
-                    timeout: 30000
-                }
-            );
+            const data =
+                await api(
+                    "/api/auth/register",
+                    {
+                        method: "POST",
+
+                        body:
+                            JSON.stringify(body),
+
+                        timeout: 30000
+                    }
+                );
 
 
             const token =
@@ -640,35 +878,49 @@
 
             if (token) {
 
-                saveSession(token, user);
+                saveSession(
+                    token,
+                    user
+                );
 
-                currentUser = user;
+
+                currentUser =
+                    user;
+
 
                 showAppScreen();
 
+
                 await refreshCurrentUser();
+
 
                 showMessage(
                     "Account successfully create ho gaya.",
                     "success"
                 );
 
-                await openPage("homeSection");
+
+                await openPage(
+                    "homeSection"
+                );
 
             } else {
 
                 showLoginBox();
 
+
                 if ($("loginUsername")) {
-                    $("loginUsername").value = username;
+
+                    $("loginUsername").value =
+                        username;
                 }
+
 
                 showMessage(
                     "Account create ho gaya. Ab login karo.",
                     "success"
                 );
             }
-
 
         } catch (error) {
 
@@ -681,21 +933,30 @@
         } finally {
 
             if (button) {
-                button.disabled = false;
+
+                button.disabled =
+                    false;
             }
         }
     }
 
+
+    /* =====================================================
+       CURRENT USER
+    ===================================================== */
 
     async function refreshCurrentUser() {
 
         try {
 
             const data =
-                await api("/api/auth/me", {
-                    method: "GET",
-                    timeout: 30000
-                });
+                await api(
+                    "/api/auth/me",
+                    {
+                        method: "GET",
+                        timeout: 30000
+                    }
+                );
 
 
             const user =
@@ -704,27 +965,30 @@
                 data;
 
 
-            if (user && user.id) {
+            if (
+                user &&
+                user.id
+            ) {
 
-                currentUser = user;
+                currentUser =
+                    user;
+
 
                 saveSession(
                     getToken(),
                     user
                 );
 
-                updateUserUI(user);
+
+                updateUserUI(
+                    user
+                );
+
 
                 return user;
             }
 
         } catch (error) {
-
-            /*
-             If /me fails but local session exists,
-             don't immediately destroy UI for temporary
-             network errors.
-            */
 
             if (
                 error.status === 401 ||
@@ -740,16 +1004,24 @@
         }
 
 
-        const saved = getSavedUser();
+        const saved =
+            getSavedUser();
+
 
         if (saved) {
 
-            currentUser = saved;
+            currentUser =
+                saved;
 
-            updateUserUI(saved);
+
+            updateUserUI(
+                saved
+            );
+
 
             return saved;
         }
+
 
         return null;
     }
@@ -771,11 +1043,7 @@
             }
 
         } catch {
-
-            /*
-             Local logout should still happen even if
-             server logout request fails.
-            */
+            /* Local logout continues */
         }
 
 
@@ -784,6 +1052,7 @@
         clearSession();
 
         showAuthScreen();
+
 
         showMessage(
             "Logout ho gaya.",
@@ -880,16 +1149,25 @@
 
     /* =====================================================
        NAVIGATION
+       FIXED: PAGE ACTIVE CLASS
     ===================================================== */
 
     const PAGE_IDS = [
+
         "homeSection",
+
         "watchSection",
+
         "playerSection",
+
         "earnSection",
+
         "uploadSection",
+
         "profileSection",
+
         "creatorSection"
+
     ];
 
 
@@ -897,11 +1175,20 @@
 
         PAGE_IDS.forEach(id => {
 
-            const element = $(id);
+            const element =
+                $(id);
+
 
             if (!element) return;
 
-            element.style.display = "none";
+
+            element.classList.remove(
+                "active"
+            );
+
+
+            element.style.display =
+                "none";
         });
     }
 
@@ -910,7 +1197,10 @@
 
         hideAllPages();
 
-        const page = $(pageId);
+
+        const page =
+            $(pageId);
+
 
         if (!page) {
 
@@ -923,48 +1213,75 @@
         }
 
 
-        page.style.display = "";
+        page.classList.add(
+            "active"
+        );
+
+
+        page.style.display =
+            "";
 
 
         document
-            .querySelectorAll(".bottom-nav [data-page]")
+            .querySelectorAll(
+                ".bottom-nav [data-page]"
+            )
             .forEach(button => {
 
                 button.classList.toggle(
                     "active",
-                    button.dataset.page === pageId
+                    button.dataset.page ===
+                    pageId
                 );
             });
 
 
-        if (pageId === "homeSection") {
+        if (
+            pageId ===
+            "homeSection"
+        ) {
 
             await loadVideos();
         }
 
 
-        if (pageId === "watchSection") {
+        if (
+            pageId ===
+            "watchSection"
+        ) {
 
             await loadWatchHistory();
         }
 
 
-        if (pageId === "earnSection") {
+        if (
+            pageId ===
+            "earnSection"
+        ) {
 
             await Promise.allSettled([
+
                 loadPointsHistory(),
+
                 updateRewardButtons()
+
             ]);
         }
 
 
-        if (pageId === "profileSection") {
+        if (
+            pageId ===
+            "profileSection"
+        ) {
 
             await loadMyVideos();
         }
 
 
-        if (pageId === "creatorSection") {
+        if (
+            pageId ===
+            "creatorSection"
+        ) {
 
             await loadCreatorStats();
         }
@@ -973,7 +1290,9 @@
 
     function goToPlayer() {
 
-        openPage("playerSection");
+        openPage(
+            "playerSection"
+        );
     }
 
 
@@ -988,7 +1307,8 @@
 
         return {
 
-            id: video.id,
+            id:
+                video.id,
 
             title:
                 video.title ||
@@ -1086,7 +1406,9 @@
 
     async function loadVideos() {
 
-        const feed = $("videoFeed");
+        const feed =
+            $("videoFeed");
+
 
         if (!feed) return;
 
@@ -1128,33 +1450,52 @@
                     .filter(Boolean);
 
 
-            renderVideoFeed(videos);
-
+            renderVideoFeed(
+                videos
+            );
 
         } catch (error) {
 
             feed.innerHTML = `
                 <div class="empty-state">
-                    <h3>Videos load nahi hue</h3>
-                    <p>${escapeHTML(error.message)}</p>
-                    <button type="button" id="retryFeedButton">
+
+                    <h3>
+                        Videos load nahi hue
+                    </h3>
+
+                    <p>
+                        ${escapeHTML(
+                            error.message
+                        )}
+                    </p>
+
+                    <button
+                        type="button"
+                        id="retryFeedButton"
+                    >
                         Try Again
                     </button>
+
                 </div>
             `;
 
 
-            $("retryFeedButton")?.addEventListener(
-                "click",
-                loadVideos
-            );
+            $("retryFeedButton")
+                ?.addEventListener(
+                    "click",
+                    loadVideos
+                );
         }
     }
 
 
-    function renderVideoFeed(videos) {
+    function renderVideoFeed(
+        videos
+    ) {
 
-        const feed = $("videoFeed");
+        const feed =
+            $("videoFeed");
+
 
         if (!feed) return;
 
@@ -1163,8 +1504,15 @@
 
             feed.innerHTML = `
                 <div class="empty-state">
-                    <h3>Abhi koi video nahi hai</h3>
-                    <p>Sabse pehla video upload karo.</p>
+
+                    <h3>
+                        Abhi koi video nahi hai
+                    </h3>
+
+                    <p>
+                        Sabse pehla video upload karo.
+                    </p>
+
                 </div>
             `;
 
@@ -1173,82 +1521,111 @@
 
 
         feed.innerHTML =
-            videos.map(video => {
+            videos
+                .map(video => {
 
-                const thumbnail =
-                    video.thumbnail_url
-                        ? `
-                            <img
-                                src="${escapeHTML(video.thumbnail_url)}"
-                                alt=""
-                                loading="lazy"
+                    const thumbnail =
+                        video.thumbnail_url
+                            ? `
+                                <img
+                                    src="${escapeHTML(
+                                        video.thumbnail_url
+                                    )}"
+                                    alt=""
+                                    loading="lazy"
+                                >
+                            `
+                            : `
+                                <div class="video-placeholder">
+                                    ▶
+                                </div>
+                            `;
+
+
+                    return `
+                        <article
+                            class="video-card"
+                            data-video-id="${escapeHTML(
+                                video.id
+                            )}"
+                        >
+
+                            <div
+                                class="video-card-media"
                             >
-                        `
-                        : `
-                            <div class="video-placeholder">
-                                ▶
-                            </div>
-                        `;
 
+                                ${thumbnail}
 
-                return `
-                    <article
-                        class="video-card"
-                        data-video-id="${escapeHTML(video.id)}"
-                    >
-
-                        <div class="video-card-media">
-                            ${thumbnail}
-
-                            <span class="video-duration">
-                                ${formatDuration(video.duration_seconds)}
-                            </span>
-                        </div>
-
-                        <div class="video-card-body">
-
-                            <h3>
-                                ${escapeHTML(video.title)}
-                            </h3>
-
-                            <p>
-                                ${escapeHTML(
-                                    video.creator_name
-                                )}
-                            </p>
-
-                            <div class="video-card-meta">
-
-                                <span>
-                                    👁 ${formatNumber(video.views)}
-                                </span>
-
-                                <span>
-                                    ❤️ ${formatNumber(video.likes)}
+                                <span
+                                    class="video-duration"
+                                >
+                                    ${formatDuration(
+                                        video.duration_seconds
+                                    )}
                                 </span>
 
                             </div>
 
-                        </div>
 
-                    </article>
-                `;
+                            <div
+                                class="video-card-body"
+                            >
 
-            }).join("");
+                                <h3>
+                                    ${escapeHTML(
+                                        video.title
+                                    )}
+                                </h3>
+
+                                <p>
+                                    ${escapeHTML(
+                                        video.creator_name
+                                    )}
+                                </p>
+
+
+                                <div
+                                    class="video-card-meta"
+                                >
+
+                                    <span>
+                                        👁
+                                        ${formatNumber(
+                                            video.views
+                                        )}
+                                    </span>
+
+                                    <span>
+                                        ❤️
+                                        ${formatNumber(
+                                            video.likes
+                                        )}
+                                    </span>
+
+                                </div>
+
+                            </div>
+
+                        </article>
+                    `;
+
+                })
+                .join("");
 
 
         feed
-            .querySelectorAll("[data-video-id]")
+            .querySelectorAll(
+                "[data-video-id]"
+            )
             .forEach(card => {
 
                 card.addEventListener(
                     "click",
                     () => {
 
-                        const id =
-                            card.dataset.videoId;
-
-                        openVideo(id);
+                        openVideo(
+                            card.dataset.videoId
+                        );
                     }
                 );
             });
@@ -1259,7 +1636,9 @@
        OPEN VIDEO
     ===================================================== */
 
-    async function openVideo(videoId) {
+    async function openVideo(
+        videoId
+    ) {
 
         if (!videoId) return;
 
@@ -1268,7 +1647,9 @@
 
             const data =
                 await api(
-                    `/api/videos/${encodeURIComponent(videoId)}`,
+                    `/api/videos/${encodeURIComponent(
+                        videoId
+                    )}`,
                     {
                         method: "GET",
                         timeout: 30000
@@ -1283,10 +1664,15 @@
 
 
             const video =
-                normalizeVideo(raw);
+                normalizeVideo(
+                    raw
+                );
 
 
-            if (!video || !video.id) {
+            if (
+                !video ||
+                !video.id
+            ) {
 
                 throw new Error(
                     "Video data nahi mila."
@@ -1294,14 +1680,23 @@
             }
 
 
-            currentVideo = video;
+            currentVideo =
+                video;
 
-            renderPlayer(video);
 
-            await openPage("playerSection");
+            renderPlayer(
+                video
+            );
 
-            await loadComments(video.id);
 
+            await openPage(
+                "playerSection"
+            );
+
+
+            await loadComments(
+                video.id
+            );
 
         } catch (error) {
 
@@ -1314,9 +1709,13 @@
     }
 
 
-    function renderPlayer(video) {
+    function renderPlayer(
+        video
+    ) {
 
-        const player = $("mainVideo");
+        const player =
+            $("mainVideo");
+
 
         if (player) {
 
@@ -1324,13 +1723,18 @@
 
             player.pause();
 
-            player.src = video.video_url;
+            player.src =
+                video.video_url;
 
-            if (video.thumbnail_url) {
+
+            if (
+                video.thumbnail_url
+            ) {
 
                 player.poster =
                     video.thumbnail_url;
             }
+
 
             player.load();
         }
@@ -1353,29 +1757,42 @@
         if ($("playerViews")) {
 
             $("playerViews").textContent =
-                `${formatNumber(video.views)} views`;
+                `${formatNumber(
+                    video.views
+                )} views`;
         }
 
 
-        updateLikeUI(video);
+        updateLikeUI(
+            video
+        );
 
-        updateFollowUI(video);
+
+        updateFollowUI(
+            video
+        );
 
 
         if ($("playerCommentsCount")) {
 
             $("playerCommentsCount").textContent =
-                formatNumber(video.comments);
+                formatNumber(
+                    video.comments
+                );
         }
 
 
-        watchedSeconds = 0;
-        watchRewardSent = false;
+        watchedSeconds =
+            0;
+
+
+        watchRewardSent =
+            false;
     }
 
 
     /* =====================================================
-       VIDEO WATCH REWARD
+       WATCH REWARD
     ===================================================== */
 
     function startWatchTimer() {
@@ -1386,37 +1803,45 @@
         if (!currentVideo) return;
 
 
-        watchTimer = setInterval(
-            async () => {
+        watchTimer =
+            setInterval(
+                async () => {
 
-                const video =
-                    $("mainVideo");
-
-                if (!video) return;
-
-                if (video.paused ||
-                    video.ended) {
-                    return;
-                }
+                    const video =
+                        $("mainVideo");
 
 
-                watchedSeconds++;
+                    if (!video) return;
 
 
-                if (
-                    watchedSeconds >=
-                    MIN_WATCH_SECONDS &&
-                    !watchRewardSent
-                ) {
+                    if (
+                        video.paused ||
+                        video.ended
+                    ) {
 
-                    watchRewardSent = true;
+                        return;
+                    }
 
-                    await completeWatch();
-                }
 
-            },
-            1000
-        );
+                    watchedSeconds++;
+
+
+                    if (
+                        watchedSeconds >=
+                        MIN_WATCH_SECONDS &&
+                        !watchRewardSent
+                    ) {
+
+                        watchRewardSent =
+                            true;
+
+
+                        await completeWatch();
+                    }
+
+                },
+                1000
+            );
     }
 
 
@@ -1424,9 +1849,12 @@
 
         if (watchTimer) {
 
-            clearInterval(watchTimer);
+            clearInterval(
+                watchTimer
+            );
 
-            watchTimer = null;
+            watchTimer =
+                null;
         }
     }
 
@@ -1443,14 +1871,19 @@
                     "/api/watch/complete",
                     {
                         method: "POST",
-                        body: JSON.stringify({
-                            video_id: currentVideo.id,
-                            watched_seconds:
-                                Math.max(
-                                    MIN_WATCH_SECONDS,
-                                    watchedSeconds
-                                )
-                        }),
+
+                        body:
+                            JSON.stringify({
+                                video_id:
+                                    currentVideo.id,
+
+                                watched_seconds:
+                                    Math.max(
+                                        MIN_WATCH_SECONDS,
+                                        watchedSeconds
+                                    )
+                            }),
+
                         timeout: 30000
                     }
                 );
@@ -1483,17 +1916,13 @@
 
             await refreshCurrentUser();
 
-
         } catch (error) {
-
-            /*
-             If reward was already claimed,
-             don't repeatedly show an error.
-            */
 
             if (
                 !/already|duplicate|rewarded/i
-                    .test(error.message || "")
+                    .test(
+                        error.message || ""
+                    )
             ) {
 
                 showMessage(
@@ -1510,16 +1939,24 @@
        LIKE
     ===================================================== */
 
-    function updateLikeUI(video) {
+    function updateLikeUI(
+        video
+    ) {
 
         const button =
             $("likeVideoBtn");
 
-        if (!button || !video) return;
+
+        if (
+            !button ||
+            !video
+        ) return;
 
 
         const likes =
-            formatNumber(video.likes);
+            formatNumber(
+                video.likes
+            );
 
 
         button.textContent =
@@ -1539,7 +1976,9 @@
 
 
         if (button) {
-            button.disabled = true;
+
+            button.disabled =
+                true;
         }
 
 
@@ -1547,7 +1986,9 @@
 
             const data =
                 await api(
-                    `/api/videos/${encodeURIComponent(currentVideo.id)}/like`,
+                    `/api/videos/${encodeURIComponent(
+                        currentVideo.id
+                    )}/like`,
                     {
                         method: "POST",
                         timeout: 30000
@@ -1563,7 +2004,8 @@
                 );
 
 
-            currentVideo.liked = liked;
+            currentVideo.liked =
+                liked;
 
 
             currentVideo.likes =
@@ -1581,7 +2023,9 @@
                 );
 
 
-            updateLikeUI(currentVideo);
+            updateLikeUI(
+                currentVideo
+            );
 
         } catch (error) {
 
@@ -1594,7 +2038,9 @@
         } finally {
 
             if (button) {
-                button.disabled = false;
+
+                button.disabled =
+                    false;
             }
         }
     }
@@ -1604,23 +2050,31 @@
        FOLLOW
     ===================================================== */
 
-    function updateFollowUI(video) {
+    function updateFollowUI(
+        video
+    ) {
 
         const button =
             $("followCreatorBtn");
 
-        if (!button || !video) return;
+
+        if (
+            !button ||
+            !video
+        ) return;
 
 
         if (!video.creator_id) {
 
-            button.style.display = "none";
+            button.style.display =
+                "none";
 
             return;
         }
 
 
-        button.style.display = "";
+        button.style.display =
+            "";
 
 
         button.textContent =
@@ -1635,7 +2089,9 @@
         if (!currentVideo) return;
 
 
-        if (!currentVideo.creator_id) {
+        if (
+            !currentVideo.creator_id
+        ) {
 
             showMessage(
                 "Creator information available nahi hai.",
@@ -1651,7 +2107,9 @@
 
 
         if (button) {
-            button.disabled = true;
+
+            button.disabled =
+                true;
         }
 
 
@@ -1677,8 +2135,9 @@
                 );
 
 
-            updateFollowUI(currentVideo);
-
+            updateFollowUI(
+                currentVideo
+            );
 
         } catch (error) {
 
@@ -1691,7 +2150,9 @@
         } finally {
 
             if (button) {
-                button.disabled = false;
+
+                button.disabled =
+                    false;
             }
         }
     }
@@ -1723,9 +2184,13 @@
                 )}/report`,
                 {
                     method: "POST",
-                    body: JSON.stringify({
-                        reason: "Reported by user"
-                    }),
+
+                    body:
+                        JSON.stringify({
+                            reason:
+                                "Reported by user"
+                        }),
+
                     timeout: 30000
                 }
             );
@@ -1735,7 +2200,6 @@
                 "Video report kar diya gaya.",
                 "success"
             );
-
 
         } catch (error) {
 
@@ -1752,10 +2216,13 @@
        COMMENTS
     ===================================================== */
 
-    async function loadComments(videoId) {
+    async function loadComments(
+        videoId
+    ) {
 
         const list =
             $("commentsList");
+
 
         if (!list) return;
 
@@ -1771,7 +2238,9 @@
 
             const data =
                 await api(
-                    `/api/videos/${encodeURIComponent(videoId)}/comments`,
+                    `/api/videos/${encodeURIComponent(
+                        videoId
+                    )}/comments`,
                     {
                         method: "GET",
                         timeout: 30000
@@ -1790,10 +2259,11 @@
                     );
 
 
-            renderComments(rawComments);
+            renderComments(
+                rawComments
+            );
 
-
-        } catch (error) {
+        } catch {
 
             list.innerHTML = `
                 <div class="empty-state">
@@ -1804,10 +2274,13 @@
     }
 
 
-    function renderComments(comments) {
+    function renderComments(
+        comments
+    ) {
 
         const list =
             $("commentsList");
+
 
         if (!list) return;
 
@@ -1825,45 +2298,51 @@
 
 
         list.innerHTML =
-            comments.map(comment => {
+            comments
+                .map(comment => {
 
-                const name =
-                    comment.user_name ||
-                    comment.name ||
-                    comment.username ||
-                    "User";
-
-
-                const text =
-                    comment.comment ||
-                    comment.text ||
-                    comment.content ||
-                    "";
+                    const name =
+                        comment.user_name ||
+                        comment.name ||
+                        comment.username ||
+                        "User";
 
 
-                return `
-                    <div class="comment-item">
+                    const text =
+                        comment.comment ||
+                        comment.text ||
+                        comment.content ||
+                        "";
 
-                        <div class="comment-author">
-                            ${escapeHTML(name)}
+
+                    return `
+                        <div class="comment-item">
+
+                            <div class="comment-author">
+                                ${escapeHTML(
+                                    name
+                                )}
+                            </div>
+
+                            <div class="comment-text">
+                                ${escapeHTML(
+                                    text
+                                )}
+                            </div>
+
+                            <div class="comment-date">
+                                ${escapeHTML(
+                                    formatDate(
+                                        comment.created_at
+                                    )
+                                )}
+                            </div>
+
                         </div>
+                    `;
 
-                        <div class="comment-text">
-                            ${escapeHTML(text)}
-                        </div>
-
-                        <div class="comment-date">
-                            ${escapeHTML(
-                                formatDate(
-                                    comment.created_at
-                                )
-                            )}
-                        </div>
-
-                    </div>
-                `;
-
-            }).join("");
+                })
+                .join("");
     }
 
 
@@ -1901,7 +2380,9 @@
 
 
         if (button) {
-            button.disabled = true;
+
+            button.disabled =
+                true;
         }
 
 
@@ -1913,16 +2394,20 @@
                 )}/comments`,
                 {
                     method: "POST",
-                    body: JSON.stringify({
-                        comment: text,
-                        text
-                    }),
+
+                    body:
+                        JSON.stringify({
+                            comment: text,
+                            text
+                        }),
+
                     timeout: 30000
                 }
             );
 
 
-            input.value = "";
+            input.value =
+                "";
 
 
             currentVideo.comments =
@@ -1931,9 +2416,12 @@
                 ) + 1;
 
 
-            if ($("playerCommentsCount")) {
+            if (
+                $("playerCommentsCount")
+            ) {
 
-                $("playerCommentsCount").textContent =
+                $("playerCommentsCount")
+                    .textContent =
                     formatNumber(
                         currentVideo.comments
                     );
@@ -1943,7 +2431,6 @@
             await loadComments(
                 currentVideo.id
             );
-
 
         } catch (error) {
 
@@ -1956,7 +2443,9 @@
         } finally {
 
             if (button) {
-                button.disabled = false;
+
+                button.disabled =
+                    false;
             }
         }
     }
@@ -1973,7 +2462,9 @@
 
 
         if (button) {
-            button.disabled = true;
+
+            button.disabled =
+                true;
         }
 
 
@@ -2010,7 +2501,6 @@
 
             await updateRewardButtons();
 
-
         } catch (error) {
 
             showMessage(
@@ -2022,7 +2512,9 @@
         } finally {
 
             if (button) {
-                button.disabled = false;
+
+                button.disabled =
+                    false;
             }
         }
     }
@@ -2039,27 +2531,26 @@
 
 
         if (button) {
-            button.disabled = true;
+
+            button.disabled =
+                true;
         }
 
 
         try {
-
-            /*
-             Server v4.0.1 rewards endpoint.
-             Actual ad network integration can be
-             connected later. Current button represents
-             completed rewarded-ad action.
-            */
 
             const data =
                 await api(
                     "/api/rewards/ad",
                     {
                         method: "POST",
-                        body: JSON.stringify({
-                            completed: true
-                        }),
+
+                        body:
+                            JSON.stringify({
+                                completed:
+                                    true
+                            }),
+
                         timeout: 30000
                     }
                 );
@@ -2084,7 +2575,6 @@
 
             await refreshCurrentUser();
 
-
         } catch (error) {
 
             showMessage(
@@ -2096,19 +2586,15 @@
         } finally {
 
             if (button) {
-                button.disabled = false;
+
+                button.disabled =
+                    false;
             }
         }
     }
 
 
     async function updateRewardButtons() {
-
-        /*
-         The server is authoritative for duplicate daily
-         reward checks. Buttons remain enabled here unless
-         server reports that the reward is already claimed.
-        */
 
         return true;
     }
@@ -2122,6 +2608,7 @@
 
         const container =
             $("pointsHistory");
+
 
         if (!container) return;
 
@@ -2170,53 +2657,60 @@
 
 
             container.innerHTML =
-                items.map(item => {
+                items
+                    .map(item => {
 
-                    const points =
-                        number(
-                            item.points ??
-                            item.amount ??
-                            item.delta ??
-                            0
-                        );
-
-
-                    const reason =
-                        item.reason ||
-                        item.description ||
-                        item.type ||
-                        "Points";
+                        const points =
+                            number(
+                                item.points ??
+                                item.amount ??
+                                item.delta ??
+                                0
+                            );
 
 
-                    return `
-                        <div class="history-item">
+                        const reason =
+                            item.reason ||
+                            item.description ||
+                            item.type ||
+                            "Points";
 
-                            <div>
+
+                        return `
+                            <div class="history-item">
+
+                                <div>
+
+                                    <strong>
+                                        ${escapeHTML(
+                                            reason
+                                        )}
+                                    </strong>
+
+                                    <small>
+                                        ${escapeHTML(
+                                            formatDate(
+                                                item.created_at
+                                            )
+                                        )}
+                                    </small>
+
+                                </div>
+
                                 <strong>
-                                    ${escapeHTML(reason)}
+                                    ${points >= 0 ? "+" : ""}
+                                    ${formatNumber(
+                                        points
+                                    )}
                                 </strong>
 
-                                <small>
-                                    ${escapeHTML(
-                                        formatDate(
-                                            item.created_at
-                                        )
-                                    )}
-                                </small>
                             </div>
+                        `;
 
-                            <strong>
-                                ${points >= 0 ? "+" : ""}
-                                ${formatNumber(points)}
-                            </strong>
+                    })
+                    .join("");
 
-                        </div>
-                    `;
-
-                }).join("");
-
-
-        } catch (error) {
+        } catch {
 
             container.innerHTML = `
                 <div class="empty-state">
@@ -2235,6 +2729,7 @@
 
         const container =
             $("watchHistoryList");
+
 
         if (!container) return;
 
@@ -2283,55 +2778,65 @@
 
 
             container.innerHTML =
-                items.map(item => {
+                items
+                    .map(item => {
 
-                    const video =
-                        normalizeVideo(
-                            item.video ||
-                            item
-                        );
-
-
-                    const title =
-                        video?.title ||
-                        item.title ||
-                        "Video";
+                        const video =
+                            normalizeVideo(
+                                item.video ||
+                                item
+                            );
 
 
-                    return `
-                        <div
-                            class="history-item watch-history-item"
-                            data-video-id="${escapeHTML(
-                                video?.id ||
-                                item.video_id ||
-                                ""
-                            )}"
-                        >
+                        const title =
+                            video?.title ||
+                            item.title ||
+                            "Video";
 
-                            <div>
-                                <strong>
-                                    ${escapeHTML(title)}
-                                </strong>
 
-                                <small>
-                                    Watched:
-                                    ${formatDuration(
-                                        item.watched_seconds ||
-                                        0
-                                    )}
-                                </small>
+                        return `
+                            <div
+                                class="history-item watch-history-item"
+                                data-video-id="${escapeHTML(
+                                    video?.id ||
+                                    item.video_id ||
+                                    ""
+                                )}"
+                            >
+
+                                <div>
+
+                                    <strong>
+                                        ${escapeHTML(
+                                            title
+                                        )}
+                                    </strong>
+
+                                    <small>
+                                        Watched:
+                                        ${formatDuration(
+                                            item.watched_seconds ||
+                                            0
+                                        )}
+                                    </small>
+
+                                </div>
+
+                                <span>
+                                    ▶
+                                </span>
+
                             </div>
+                        `;
 
-                            <span>▶</span>
-
-                        </div>
-                    `;
-
-                }).join("");
+                    })
+                    .join("");
 
 
             container
-                .querySelectorAll("[data-video-id]")
+                .querySelectorAll(
+                    "[data-video-id]"
+                )
                 .forEach(item => {
 
                     item.addEventListener(
@@ -2350,8 +2855,7 @@
                     );
                 });
 
-
-        } catch (error) {
+        } catch {
 
             container.innerHTML = `
                 <div class="empty-state">
@@ -2429,7 +2933,10 @@
     }
 
 
-    function setUploadProgress(percent, text) {
+    function setUploadProgress(
+        percent,
+        text
+    ) {
 
         const elements =
             getUploadElements();
@@ -2447,14 +2954,18 @@
             );
 
 
-        if (elements.progressBox) {
+        if (
+            elements.progressBox
+        ) {
 
             elements.progressBox.style.display =
                 "";
         }
 
 
-        if (elements.progressText) {
+        if (
+            elements.progressText
+        ) {
 
             elements.progressText.textContent =
                 text ||
@@ -2462,21 +2973,27 @@
         }
 
 
-        if (elements.progressPercent) {
+        if (
+            elements.progressPercent
+        ) {
 
             elements.progressPercent.textContent =
                 `${safePercent}%`;
         }
 
 
-        if (elements.progressBar) {
+        if (
+            elements.progressBar
+        ) {
 
             elements.progressBar.style.width =
                 `${safePercent}%`;
 
             elements.progressBar.setAttribute(
                 "aria-valuenow",
-                String(safePercent)
+                String(
+                    safePercent
+                )
             );
         }
     }
@@ -2486,6 +3003,7 @@
 
         const box =
             $("uploadProgressBox");
+
 
         if (box) {
 
@@ -2501,8 +3019,12 @@
             getUploadElements();
 
 
-        selectedVideoFile = null;
-        selectedVideoDuration = 0;
+        selectedVideoFile =
+            null;
+
+
+        selectedVideoDuration =
+            0;
 
 
         if (
@@ -2513,13 +3035,15 @@
                 selectedVideoObjectUrl
             );
 
-            selectedVideoObjectUrl = null;
+            selectedVideoObjectUrl =
+                null;
         }
 
 
         if (elements.input) {
 
-            elements.input.value = "";
+            elements.input.value =
+                "";
         }
 
 
@@ -2532,23 +3056,28 @@
 
         if (elements.title) {
 
-            elements.title.value = "";
+            elements.title.value =
+                "";
         }
 
 
         if (elements.description) {
 
-            elements.description.value = "";
+            elements.description.value =
+                "";
         }
 
 
-        if (elements.previewVideo) {
+        if (
+            elements.previewVideo
+        ) {
 
             elements.previewVideo.pause();
 
-            elements.previewVideo.removeAttribute(
-                "src"
-            );
+            elements.previewVideo
+                .removeAttribute(
+                    "src"
+                );
 
             elements.previewVideo.load();
         }
@@ -2558,6 +3087,7 @@
             0,
             ""
         );
+
 
         hideUploadProgress();
     }
@@ -2570,12 +3100,14 @@
 
 
         const file =
-            elements.input?.files?.[0];
+            elements.input
+                ?.files?.[0];
 
 
         if (!file) {
 
-            selectedVideoFile = null;
+            selectedVideoFile =
+                null;
 
             return;
         }
@@ -2583,41 +3115,59 @@
 
         if (
             !file.type ||
-            !file.type.startsWith("video/")
+            !file.type.startsWith(
+                "video/"
+            )
         ) {
 
-            elements.input.value = "";
+            elements.input.value =
+                "";
 
-            selectedVideoFile = null;
+
+            selectedVideoFile =
+                null;
+
 
             showMessage(
                 "Sirf video file select karo.",
                 "error"
             );
 
+
             return;
         }
 
 
-        if (file.size > MAX_VIDEO_SIZE) {
+        if (
+            file.size >
+            MAX_VIDEO_SIZE
+        ) {
 
-            elements.input.value = "";
+            elements.input.value =
+                "";
 
-            selectedVideoFile = null;
+
+            selectedVideoFile =
+                null;
+
 
             showMessage(
                 "Video maximum 100 MB ho sakta hai.",
                 "error"
             );
 
+
             return;
         }
 
 
-        selectedVideoFile = file;
+        selectedVideoFile =
+            file;
 
 
-        if (elements.fileName) {
+        if (
+            elements.fileName
+        ) {
 
             elements.fileName.textContent =
                 `${file.name} • ${(
@@ -2639,10 +3189,14 @@
 
 
         selectedVideoObjectUrl =
-            URL.createObjectURL(file);
+            URL.createObjectURL(
+                file
+            );
 
 
-        if (elements.previewVideo) {
+        if (
+            elements.previewVideo
+        ) {
 
             elements.previewVideo.src =
                 selectedVideoObjectUrl;
@@ -2654,7 +3208,9 @@
         }
 
 
-        if (elements.preview) {
+        if (
+            elements.preview
+        ) {
 
             elements.preview.style.display =
                 "";
@@ -2700,7 +3256,10 @@
     ) {
 
         return new Promise(
-            (resolve, reject) => {
+            (
+                resolve,
+                reject
+            ) => {
 
                 const cloudName =
                     signature.cloud_name;
@@ -2758,7 +3317,9 @@
 
                 form.append(
                     "timestamp",
-                    String(timestamp)
+                    String(
+                        timestamp
+                    )
                 );
 
 
@@ -2793,7 +3354,10 @@
                 xhr.upload.onprogress =
                     event => {
 
-                        if (!event.lengthComputable) {
+                        if (
+                            !event.lengthComputable
+                        ) {
+
                             return;
                         }
 
@@ -2804,14 +3368,11 @@
                             100;
 
 
-                        /*
-                         5% -> 90%
-                        */
-
                         const overall =
                             5 +
                             (
-                                percent * 0.85
+                                percent *
+                                0.85
                             );
 
 
@@ -2853,7 +3414,9 @@
                         xhr.status < 300
                     ) {
 
-                        resolve(data);
+                        resolve(
+                            data
+                        );
 
                     } else {
 
@@ -2898,14 +3461,16 @@
                 };
 
 
-                xhr.send(form);
+                xhr.send(
+                    form
+                );
             }
         );
     }
 
 
     /* =====================================================
-       SAVE VIDEO METADATA
+       SAVE VIDEO
     ===================================================== */
 
     async function saveUploadedVideo(
@@ -2946,7 +3511,8 @@
             ).cloud_name;
 
 
-        let thumbnailUrl = "";
+        let thumbnailUrl =
+            "";
 
 
         if (cloudName) {
@@ -2994,7 +3560,12 @@
             "/api/videos",
             {
                 method: "POST",
-                body: JSON.stringify(body),
+
+                body:
+                    JSON.stringify(
+                        body
+                    ),
+
                 timeout: 30000
             }
         );
@@ -3031,16 +3602,21 @@
 
         const file =
             selectedVideoFile ||
-            elements.input?.files?.[0];
+            elements.input
+                ?.files?.[0];
 
 
         const title =
-            elements.title?.value.trim() ||
+            elements.title
+                ?.value
+                .trim() ||
             "";
 
 
         const description =
-            elements.description?.value.trim() ||
+            elements.description
+                ?.value
+                .trim() ||
             "";
 
 
@@ -3055,7 +3631,10 @@
         }
 
 
-        if (file.size > MAX_VIDEO_SIZE) {
+        if (
+            file.size >
+            MAX_VIDEO_SIZE
+        ) {
 
             showMessage(
                 "Video maximum 100 MB ho sakta hai.",
@@ -3079,15 +3658,19 @@
         }
 
 
-        uploadInProgress = true;
+        uploadInProgress =
+            true;
 
 
         if (elements.button) {
 
-            elements.button.disabled = true;
+            elements.button.disabled =
+                true;
+
 
             elements.button.dataset.oldText =
                 elements.button.textContent;
+
 
             elements.button.textContent =
                 "Uploading...";
@@ -3144,7 +3727,9 @@
             );
 
 
-            await loadVideos();
+            await openPage(
+                "homeSection"
+            );
 
 
             setTimeout(() => {
@@ -3152,11 +3737,6 @@
                 resetUploadForm();
 
             }, 800);
-
-
-            await openPage(
-                "homeSection"
-            );
 
 
         } catch (error) {
@@ -3179,16 +3759,17 @@
                 "error"
             );
 
-
         } finally {
 
-            uploadInProgress = false;
+            uploadInProgress =
+                false;
 
 
             if (elements.button) {
 
                 elements.button.disabled =
                     false;
+
 
                 elements.button.textContent =
                     elements.button.dataset.oldText ||
@@ -3206,6 +3787,7 @@
 
         const container =
             $("myVideosList");
+
 
         if (!container) return;
 
@@ -3251,8 +3833,15 @@
 
                 container.innerHTML = `
                     <div class="empty-state">
-                        <h3>No uploaded videos</h3>
-                        <p>Apna pehla video upload karo.</p>
+
+                        <h3>
+                            No uploaded videos
+                        </h3>
+
+                        <p>
+                            Apna pehla video upload karo.
+                        </p>
+
                     </div>
                 `;
 
@@ -3261,47 +3850,63 @@
 
 
             container.innerHTML =
-                videos.map(video => {
+                videos
+                    .map(video => {
 
-                    return `
-                        <div class="my-video-item">
+                        return `
+                            <div class="my-video-item">
 
-                            <div
-                                class="my-video-main"
-                                data-video-id="${escapeHTML(
-                                    video.id
-                                )}"
-                            >
+                                <div
+                                    class="my-video-main"
+                                    data-video-id="${escapeHTML(
+                                        video.id
+                                    )}"
+                                >
 
-                                <strong>
-                                    ${escapeHTML(video.title)}
-                                </strong>
+                                    <strong>
+                                        ${escapeHTML(
+                                            video.title
+                                        )}
+                                    </strong>
 
-                                <small>
-                                    👁 ${formatNumber(video.views)}
-                                    &nbsp; ❤️ ${formatNumber(video.likes)}
-                                </small>
+                                    <small>
+                                        👁
+                                        ${formatNumber(
+                                            video.views
+                                        )}
+
+                                        &nbsp;
+
+                                        ❤️
+                                        ${formatNumber(
+                                            video.likes
+                                        )}
+                                    </small>
+
+                                </div>
+
+
+                                <button
+                                    type="button"
+                                    class="delete-video-button"
+                                    data-delete-video="${escapeHTML(
+                                        video.id
+                                    )}"
+                                >
+                                    Delete
+                                </button>
 
                             </div>
+                        `;
 
-                            <button
-                                type="button"
-                                class="delete-video-button"
-                                data-delete-video="${escapeHTML(
-                                    video.id
-                                )}"
-                            >
-                                Delete
-                            </button>
-
-                        </div>
-                    `;
-
-                }).join("");
+                    })
+                    .join("");
 
 
             container
-                .querySelectorAll("[data-video-id]")
+                .querySelectorAll(
+                    "[data-video-id]"
+                )
                 .forEach(item => {
 
                     item.addEventListener(
@@ -3328,6 +3933,7 @@
 
                             event.stopPropagation();
 
+
                             deleteMyVideo(
                                 button.dataset.deleteVideo
                             );
@@ -3335,8 +3941,7 @@
                     );
                 });
 
-
-        } catch (error) {
+        } catch {
 
             container.innerHTML = `
                 <div class="empty-state">
@@ -3347,7 +3952,9 @@
     }
 
 
-    async function deleteMyVideo(videoId) {
+    async function deleteMyVideo(
+        videoId
+    ) {
 
         if (!videoId) return;
 
@@ -3364,7 +3971,9 @@
         try {
 
             await api(
-                `/api/videos/${encodeURIComponent(videoId)}`,
+                `/api/videos/${encodeURIComponent(
+                    videoId
+                )}`,
                 {
                     method: "DELETE",
                     timeout: 30000
@@ -3381,7 +3990,6 @@
             await loadMyVideos();
 
             await loadVideos();
-
 
         } catch (error) {
 
@@ -3402,6 +4010,7 @@
 
         const container =
             $("creatorStats");
+
 
         if (!container) return;
 
@@ -3436,6 +4045,7 @@
                 <div class="creator-stat-grid">
 
                     <div class="creator-stat">
+
                         <strong>
                             ${formatNumber(
                                 stats.videos ||
@@ -3444,10 +4054,16 @@
                                 0
                             )}
                         </strong>
-                        <span>Videos</span>
+
+                        <span>
+                            Videos
+                        </span>
+
                     </div>
 
+
                     <div class="creator-stat">
+
                         <strong>
                             ${formatNumber(
                                 stats.views ||
@@ -3455,10 +4071,16 @@
                                 0
                             )}
                         </strong>
-                        <span>Views</span>
+
+                        <span>
+                            Views
+                        </span>
+
                     </div>
 
+
                     <div class="creator-stat">
+
                         <strong>
                             ${formatNumber(
                                 stats.followers ||
@@ -3467,10 +4089,16 @@
                                 0
                             )}
                         </strong>
-                        <span>Followers</span>
+
+                        <span>
+                            Followers
+                        </span>
+
                     </div>
 
+
                     <div class="creator-stat">
+
                         <strong>
                             ${formatNumber(
                                 stats.earnings ||
@@ -3478,15 +4106,18 @@
                                 0
                             )}
                         </strong>
-                        <span>Earnings</span>
+
+                        <span>
+                            Earnings
+                        </span>
+
                     </div>
 
                 </div>
 
             `;
 
-
-        } catch (error) {
+        } catch {
 
             container.innerHTML = `
                 <div class="empty-state">
@@ -3504,7 +4135,9 @@
 
 
         if (button) {
-            button.disabled = true;
+
+            button.disabled =
+                true;
         }
 
 
@@ -3531,7 +4164,6 @@
 
             await loadCreatorStats();
 
-
         } catch (error) {
 
             showMessage(
@@ -3543,7 +4175,9 @@
         } finally {
 
             if (button) {
-                button.disabled = false;
+
+                button.disabled =
+                    false;
             }
         }
     }
@@ -3561,6 +4195,7 @@
 
                 event.preventDefault();
 
+
                 deferredInstallPrompt =
                     event;
 
@@ -3570,6 +4205,10 @@
 
 
                 if (button) {
+
+                    button.classList.remove(
+                        "hidden"
+                    );
 
                     button.style.display =
                         "";
@@ -3597,7 +4236,9 @@
 
     async function installApp() {
 
-        if (!deferredInstallPrompt) {
+        if (
+            !deferredInstallPrompt
+        ) {
 
             showMessage(
                 "Install option browser menu se available ho sakta hai.",
@@ -3619,7 +4260,8 @@
 
             if (
                 result &&
-                result.outcome === "accepted"
+                result.outcome ===
+                "accepted"
             ) {
 
                 showMessage(
@@ -3627,7 +4269,6 @@
                     "success"
                 );
             }
-
 
         } catch {
 
@@ -3638,92 +4279,113 @@
         }
 
 
-        deferredInstallPrompt = null;
+        deferredInstallPrompt =
+            null;
     }
 
 
     /* =====================================================
-       EVENT BINDING
+       AUTH EVENTS
     ===================================================== */
 
     function bindAuthEvents() {
 
-        $("loginBtn")?.addEventListener(
-            "click",
-            loginUser
-        );
+        $("loginBtn")
+            ?.addEventListener(
+                "click",
+                loginUser
+            );
 
 
-        $("registerBtn")?.addEventListener(
-            "click",
-            registerUser
-        );
+        $("registerBtn")
+            ?.addEventListener(
+                "click",
+                registerUser
+            );
 
 
-        $("showRegisterBtn")?.addEventListener(
-            "click",
-            event => {
-
-                event.preventDefault();
-
-                showRegisterBox();
-            }
-        );
-
-
-        $("showLoginBtn")?.addEventListener(
-            "click",
-            event => {
-
-                event.preventDefault();
-
-                showLoginBox();
-            }
-        );
-
-
-        $("loginPassword")?.addEventListener(
-            "keydown",
-            event => {
-
-                if (event.key === "Enter") {
+        $("showRegisterBtn")
+            ?.addEventListener(
+                "click",
+                event => {
 
                     event.preventDefault();
 
-                    loginUser();
+                    showRegisterBox();
                 }
-            }
-        );
+            );
 
 
-        $("loginUsername")?.addEventListener(
-            "keydown",
-            event => {
-
-                if (event.key === "Enter") {
+        $("showLoginBtn")
+            ?.addEventListener(
+                "click",
+                event => {
 
                     event.preventDefault();
 
-                    loginUser();
+                    showLoginBox();
                 }
-            }
-        );
+            );
 
 
-        $("registerPassword")?.addEventListener(
-            "keydown",
-            event => {
+        $("loginPassword")
+            ?.addEventListener(
+                "keydown",
+                event => {
 
-                if (event.key === "Enter") {
+                    if (
+                        event.key ===
+                        "Enter"
+                    ) {
 
-                    event.preventDefault();
+                        event.preventDefault();
 
-                    registerUser();
+                        loginUser();
+                    }
                 }
-            }
-        );
+            );
+
+
+        $("loginUsername")
+            ?.addEventListener(
+                "keydown",
+                event => {
+
+                    if (
+                        event.key ===
+                        "Enter"
+                    ) {
+
+                        event.preventDefault();
+
+                        loginUser();
+                    }
+                }
+            );
+
+
+        $("registerPassword")
+            ?.addEventListener(
+                "keydown",
+                event => {
+
+                    if (
+                        event.key ===
+                        "Enter"
+                    ) {
+
+                        event.preventDefault();
+
+                        registerUser();
+                    }
+                }
+            );
     }
 
+
+    /* =====================================================
+       NAVIGATION EVENTS
+    ===================================================== */
 
     function bindNavigationEvents() {
 
@@ -3745,204 +4407,246 @@
             });
 
 
-        $("refreshFeedBtn")?.addEventListener(
-            "click",
-            loadVideos
-        );
+        $("refreshFeedBtn")
+            ?.addEventListener(
+                "click",
+                loadVideos
+            );
 
 
-        $("backFromPlayerBtn")?.addEventListener(
-            "click",
-            () => {
+        $("backFromPlayerBtn")
+            ?.addEventListener(
+                "click",
+                () => {
 
-                clearWatchTimer();
+                    clearWatchTimer();
 
-                openPage(
-                    "homeSection"
-                );
-            }
-        );
-
-
-        $("watchHistoryList")?.addEventListener(
-            "click",
-            event => {
-
-                const target =
-                    event.target.closest(
-                        "[data-video-id]"
+                    openPage(
+                        "homeSection"
                     );
-
-                if (!target) return;
-
-                openVideo(
-                    target.dataset.videoId
-                );
-            }
-        );
-    }
-
-
-    function bindPlayerEvents() {
-
-        $("mainVideo")?.addEventListener(
-            "play",
-            startWatchTimer
-        );
-
-
-        $("mainVideo")?.addEventListener(
-            "pause",
-            clearWatchTimer
-        );
-
-
-        $("mainVideo")?.addEventListener(
-            "ended",
-            async () => {
-
-                clearWatchTimer();
-
-
-                if (
-                    watchedSeconds >=
-                    MIN_WATCH_SECONDS &&
-                    !watchRewardSent
-                ) {
-
-                    watchRewardSent = true;
-
-                    await completeWatch();
                 }
-            }
-        );
+            );
 
 
-        $("likeVideoBtn")?.addEventListener(
-            "click",
-            toggleLike
-        );
+        $("watchHistoryList")
+            ?.addEventListener(
+                "click",
+                event => {
+
+                    const target =
+                        event.target.closest(
+                            "[data-video-id]"
+                        );
 
 
-        $("followCreatorBtn")?.addEventListener(
-            "click",
-            toggleFollow
-        );
+                    if (!target) return;
 
 
-        $("reportVideoBtn")?.addEventListener(
-            "click",
-            reportCurrentVideo
-        );
-
-
-        $("commentBtn")?.addEventListener(
-            "click",
-            addComment
-        );
-
-
-        $("commentInput")?.addEventListener(
-            "keydown",
-            event => {
-
-                if (
-                    event.key === "Enter" &&
-                    !event.shiftKey
-                ) {
-
-                    event.preventDefault();
-
-                    addComment();
+                    openVideo(
+                        target.dataset.videoId
+                    );
                 }
-            }
-        );
-    }
-
-
-    function bindRewardEvents() {
-
-        $("dailyRewardBtn")?.addEventListener(
-            "click",
-            claimDailyReward
-        );
-
-
-        $("rewardedAdBtn")?.addEventListener(
-            "click",
-            claimRewardedAd
-        );
-    }
-
-
-    function bindUploadEvents() {
-
-        $("videoFile")?.addEventListener(
-            "change",
-            handleVideoFileChange
-        );
-
-
-        $("uploadPreviewVideo")?.addEventListener(
-            "loadedmetadata",
-            handlePreviewMetadata
-        );
-
-
-        $("uploadVideoBtn")?.addEventListener(
-            "click",
-            uploadVideo
-        );
-    }
-
-
-    function bindProfileEvents() {
-
-        $("myVideosBtn")?.addEventListener(
-            "click",
-            async () => {
-
-                await openPage(
-                    "profileSection"
-                );
-
-                await loadMyVideos();
-            }
-        );
-
-
-        $("creatorDashboardBtn")?.addEventListener(
-            "click",
-            () => {
-
-                openPage(
-                    "creatorSection"
-                );
-            }
-        );
-
-
-        $("installAppBtn")?.addEventListener(
-            "click",
-            installApp
-        );
-
-
-        $("logoutBtn")?.addEventListener(
-            "click",
-            logoutUser
-        );
-
-
-        $("applyMonetizationBtn")?.addEventListener(
-            "click",
-            applyCreator
-        );
+            );
     }
 
 
     /* =====================================================
-       KEYBOARD / PAGE EVENTS
+       PLAYER EVENTS
+    ===================================================== */
+
+    function bindPlayerEvents() {
+
+        $("mainVideo")
+            ?.addEventListener(
+                "play",
+                startWatchTimer
+            );
+
+
+        $("mainVideo")
+            ?.addEventListener(
+                "pause",
+                clearWatchTimer
+            );
+
+
+        $("mainVideo")
+            ?.addEventListener(
+                "ended",
+                async () => {
+
+                    clearWatchTimer();
+
+
+                    if (
+                        watchedSeconds >=
+                        MIN_WATCH_SECONDS &&
+                        !watchRewardSent
+                    ) {
+
+                        watchRewardSent =
+                            true;
+
+
+                        await completeWatch();
+                    }
+                }
+            );
+
+
+        $("likeVideoBtn")
+            ?.addEventListener(
+                "click",
+                toggleLike
+            );
+
+
+        $("followCreatorBtn")
+            ?.addEventListener(
+                "click",
+                toggleFollow
+            );
+
+
+        $("reportVideoBtn")
+            ?.addEventListener(
+                "click",
+                reportCurrentVideo
+            );
+
+
+        $("commentBtn")
+            ?.addEventListener(
+                "click",
+                addComment
+            );
+
+
+        $("commentInput")
+            ?.addEventListener(
+                "keydown",
+                event => {
+
+                    if (
+                        event.key ===
+                        "Enter" &&
+                        !event.shiftKey
+                    ) {
+
+                        event.preventDefault();
+
+                        addComment();
+                    }
+                }
+            );
+    }
+
+
+    /* =====================================================
+       REWARD EVENTS
+    ===================================================== */
+
+    function bindRewardEvents() {
+
+        $("dailyRewardBtn")
+            ?.addEventListener(
+                "click",
+                claimDailyReward
+            );
+
+
+        $("rewardedAdBtn")
+            ?.addEventListener(
+                "click",
+                claimRewardedAd
+            );
+    }
+
+
+    /* =====================================================
+       UPLOAD EVENTS
+    ===================================================== */
+
+    function bindUploadEvents() {
+
+        $("videoFile")
+            ?.addEventListener(
+                "change",
+                handleVideoFileChange
+            );
+
+
+        $("uploadPreviewVideo")
+            ?.addEventListener(
+                "loadedmetadata",
+                handlePreviewMetadata
+            );
+
+
+        $("uploadVideoBtn")
+            ?.addEventListener(
+                "click",
+                uploadVideo
+            );
+    }
+
+
+    /* =====================================================
+       PROFILE EVENTS
+    ===================================================== */
+
+    function bindProfileEvents() {
+
+        $("myVideosBtn")
+            ?.addEventListener(
+                "click",
+                async () => {
+
+                    await openPage(
+                        "profileSection"
+                    );
+
+                    await loadMyVideos();
+                }
+            );
+
+
+        $("creatorDashboardBtn")
+            ?.addEventListener(
+                "click",
+                () => {
+
+                    openPage(
+                        "creatorSection"
+                    );
+                }
+            );
+
+
+        $("installAppBtn")
+            ?.addEventListener(
+                "click",
+                installApp
+            );
+
+
+        $("logoutBtn")
+            ?.addEventListener(
+                "click",
+                logoutUser
+            );
+
+
+        $("applyMonetizationBtn")
+            ?.addEventListener(
+                "click",
+                applyCreator
+            );
+    }
+
+
+    /* =====================================================
+       GLOBAL EVENTS
     ===================================================== */
 
     function bindGlobalEvents() {
@@ -3956,10 +4660,12 @@
                 ) {
 
                     clearWatchTimer();
+
                 } else {
 
                     const video =
                         $("mainVideo");
+
 
                     if (
                         video &&
@@ -4025,6 +4731,7 @@
             currentUser =
                 saved;
 
+
             updateUserUI(
                 saved
             );
@@ -4038,7 +4745,10 @@
             await refreshCurrentUser();
 
 
-        if (!user && !getToken()) {
+        if (
+            !user &&
+            !getToken()
+        ) {
 
             showAuthScreen();
 
@@ -4057,11 +4767,13 @@
     async function init() {
 
         if (initialized) {
+
             return;
         }
 
 
-        initialized = true;
+        initialized =
+            true;
 
 
         bindAuthEvents();
@@ -4086,6 +4798,7 @@
 
 
         if (!loggedIn) {
+
             return;
         }
 
@@ -4136,21 +4849,25 @@
     };
 
 
-    /*
-     Compatibility helpers.
-    */
+    /* =====================================================
+       COMPATIBILITY HELPERS
+    ===================================================== */
 
     window.openVideo =
         openVideo;
 
+
     window.uploadVideo =
         uploadVideo;
+
 
     window.loginUser =
         loginUser;
 
+
     window.registerUser =
         registerUser;
+
 
     window.logoutUser =
         logoutUser;
