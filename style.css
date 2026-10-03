@@ -1,899 +1,1062 @@
-/*
-=========================================================
- DEKHOEARN STYLE
- Version 3.1.0
- Light Mobile UI
- Login / Register
- Video Feed
- Upload
- Creator
- Profile
-=========================================================
-*/
+/* =========================================================
+   DEKHOEARN
+   STYLE.CSS v4.0.0
+   Mobile-first • Professional • White UI
+   Matched with index.html + app.js v4.x
+========================================================= */
 
 * {
   box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg: #f5f7fb;
+  --card: #ffffff;
+  --text: #172033;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --success: #16a34a;
+  --danger: #dc2626;
+  --warning: #f59e0b;
+  --shadow: 0 4px 18px rgba(15, 23, 42, 0.07);
+  --radius: 16px;
+  --bottom-nav-height: 72px;
 }
 
 html {
-  background: #ffffff;
+  width: 100%;
+  min-height: 100%;
+  background: var(--bg);
+  scroll-behavior: smooth;
 }
 
 body {
-  margin: 0;
+  width: 100%;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
   font-family:
     Inter,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
     Arial,
-    Helvetica,
     sans-serif;
-  background: #f6f7fb;
-  color: #17181c;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
 }
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
 button {
+  border: 0;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+input,
+textarea,
+select {
+  outline: none;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img,
+video {
+  max-width: 100%;
 }
 
 .hidden {
   display: none !important;
 }
 
-/* ======================================================
-   AUTH
-====================================================== */
+/* =========================================================
+   AUTH SCREEN
+========================================================= */
 
-.auth-screen {
+#authScreen {
   min-height: 100vh;
-  background:
-    linear-gradient(
-      180deg,
-      #ffffff 0%,
-      #f5f7ff 100%
-    );
+  min-height: 100dvh;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 24px 16px;
-}
-
-.auth-logo {
-  text-align: center;
-  margin-bottom: 24px;
-}
-
-.logo-circle {
-  width: 70px;
-  height: 70px;
-  margin: 0 auto 12px;
-  border-radius: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #111827;
-  color: #ffffff;
-  font-size: 28px;
-  box-shadow:
-    0 12px 30px
-    rgba(0,0,0,.15);
-}
-
-.auth-logo h1 {
-  margin: 0;
-  font-size: 30px;
-  letter-spacing: -1px;
-}
-
-.auth-logo p {
-  margin: 6px 0 0;
-  color: #777d89;
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.09), transparent 35%),
+    radial-gradient(circle at bottom right, rgba(22, 163, 74, 0.06), transparent 35%),
+    var(--bg);
 }
 
 .auth-card {
   width: 100%;
   max-width: 430px;
-  background: #ffffff;
-  border: 1px solid #e7e9ef;
-  border-radius: 22px;
-  padding: 24px;
-  box-shadow:
-    0 12px 35px
-    rgba(0,0,0,.07);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 28px 22px;
+  box-shadow: 0 16px 45px rgba(15, 23, 42, 0.10);
 }
 
-.auth-card h2 {
-  margin: 0 0 7px;
-  font-size: 23px;
+.auth-logo {
+  width: 66px;
+  height: 66px;
+  margin: 0 auto 14px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary);
+  color: #fff;
+  font-size: 30px;
+  font-weight: 800;
+}
+
+.auth-card h1 {
+  text-align: center;
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
 }
 
 .auth-subtitle {
-  color: #777d89;
-  margin: 0 0 20px;
+  text-align: center;
+  margin: 7px 0 24px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.auth-box {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.auth-box h2 {
+  font-size: 21px;
+  margin-bottom: 2px;
+}
+
+.auth-box input {
+  width: 100%;
+  height: 48px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0 14px;
+  background: #fff;
+  color: var(--text);
+  transition: 0.2s;
+}
+
+.auth-box input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.10);
+}
+
+.primary-btn,
+.secondary-btn,
+.danger-btn {
+  min-height: 46px;
+  border-radius: 12px;
+  padding: 0 16px;
+  font-weight: 700;
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease,
+    background 0.15s ease;
+}
+
+.primary-btn {
+  background: var(--primary);
+  color: #fff;
+}
+
+.primary-btn:hover {
+  background: var(--primary-dark);
+}
+
+.secondary-btn {
+  background: #eef2ff;
+  color: #1e40af;
+}
+
+.danger-btn {
+  background: #fee2e2;
+  color: var(--danger);
+}
+
+.primary-btn:active,
+.secondary-btn:active,
+.danger-btn:active {
+  transform: scale(0.98);
 }
 
 .auth-switch {
   text-align: center;
-  color: #777d89;
-  margin: 18px 0 0;
+  margin-top: 15px;
+  color: var(--muted);
+  font-size: 14px;
 }
 
 .auth-switch button {
-  border: 0;
   background: transparent;
-  color: #111827;
+  color: var(--primary);
   font-weight: 700;
-  padding: 0;
 }
 
-/* ======================================================
-   APP
-====================================================== */
+/* =========================================================
+   APP SHELL
+========================================================= */
 
-.app-shell {
+#appShell {
   min-height: 100vh;
-  padding-bottom: 82px;
+  min-height: 100dvh;
+  background: var(--bg);
 }
 
-.top-header {
+.app-header {
   position: sticky;
   top: 0;
   z-index: 50;
-  min-height: 72px;
-  padding:
-    12px 16px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+}
+
+.header-inner {
+  width: 100%;
+  max-width: 1100px;
+  min-height: 66px;
+  margin: 0 auto;
+  padding: 10px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(
-    255,
-    255,
-    255,
-    .96
-  );
-  backdrop-filter: blur(12px);
-  border-bottom: 1px solid #e8eaf0;
+  gap: 12px;
 }
 
-.brand {
+.header-brand {
+  min-width: 0;
+}
+
+.header-brand h1 {
+  font-size: 20px;
+  font-weight: 850;
+  letter-spacing: -0.5px;
+}
+
+.header-brand p {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.header-points {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 800;
-  font-size: 19px;
-}
-
-.brand-icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  background: #111827;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-}
-
-.top-header small {
-  display: block;
-  margin-top: 3px;
-  color: #7c828e;
-}
-
-.points-badge {
-  background: #fff7d6;
-  color: #8b6500;
-  border: 1px solid #f1df94;
-  padding: 8px 12px;
+  gap: 6px;
+  padding: 8px 11px;
   border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 13px;
   font-weight: 800;
 }
 
-/* ======================================================
-   SECTIONS
-====================================================== */
+/* =========================================================
+   MAIN CONTENT
+========================================================= */
 
 main {
   width: 100%;
-  max-width: 850px;
+  max-width: 1100px;
   margin: 0 auto;
+  padding: 16px 14px calc(var(--bottom-nav-height) + 28px);
 }
 
-.page-section {
-  display: none;
-  padding: 18px 15px 25px;
-}
-
-.page-section.active {
-  display: block;
+.section {
+  width: 100%;
 }
 
 .section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
-.section-header h2,
-.section-header h3 {
-  margin: 0;
+.section-header h2 {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.4px;
 }
 
 .section-header p {
-  margin: 5px 0 0;
-  color: #7b818c;
-  font-size: 14px;
+  color: var(--muted);
+  font-size: 13px;
 }
+
+/* =========================================================
+   SMALL ACTION BUTTONS
+========================================================= */
 
 .icon-btn {
-  border: 1px solid #e3e5eb;
-  background: #ffffff;
   width: 42px;
   height: 42px;
-  border-radius: 13px;
-}
-
-/* ======================================================
-   INPUT
-====================================================== */
-
-.upload-label {
-  display: block;
-  font-size: 13px;
-  font-weight: 700;
-  margin:
-    15px 0 7px;
-}
-
-.optional {
-  color: #9298a2;
-  font-weight: 400;
-}
-
-.input {
-  width: 100%;
-  min-height: 48px;
-  border: 1px solid #dfe2e8;
-  background: #ffffff;
-  border-radius: 13px;
-  padding: 12px 14px;
-  outline: none;
-  color: #17181c;
-}
-
-.input:focus {
-  border-color: #111827;
-  box-shadow:
-    0 0 0 3px
-    rgba(17,24,39,.07);
-}
-
-.textarea {
-  min-height: 110px;
-  resize: vertical;
-}
-
-/* ======================================================
-   BUTTONS
-====================================================== */
-
-.primary-btn {
-  width: 100%;
-  min-height: 48px;
-  border: 0;
-  border-radius: 13px;
-  background: #111827;
-  color: #ffffff;
-  font-weight: 800;
-  padding: 12px 16px;
-  margin-top: 14px;
-}
-
-.primary-btn:disabled {
-  opacity: .55;
-  cursor: not-allowed;
-}
-
-.secondary-btn {
-  min-height: 42px;
-  border: 1px solid #dfe2e8;
-  background: #ffffff;
   border-radius: 12px;
-  padding: 8px 13px;
-  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 18px;
 }
 
-.back-btn {
-  border: 0;
-  background: transparent;
-  padding: 0;
-  margin-bottom: 12px;
-  font-weight: 700;
+.icon-btn:active {
+  transform: scale(0.96);
 }
 
-.danger-small-btn {
-  border: 0;
-  background: #fff0f0;
-  color: #c0392b;
-  border-radius: 10px;
-  padding: 8px 10px;
-  font-weight: 700;
+.refresh-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--border);
+  font-size: 18px;
 }
 
-/* ======================================================
+/* =========================================================
    VIDEO FEED
-====================================================== */
+========================================================= */
 
-.video-feed {
+#videoFeed {
   display: grid;
+  grid-template-columns: 1fr;
   gap: 14px;
 }
 
 .video-card {
-  background: #ffffff;
-  border: 1px solid #e6e8ed;
-  border-radius: 18px;
   overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
-.video-card-main {
-  width: 100%;
-  padding: 0;
-  text-align: left;
-  background: transparent;
-  border: 0;
-  color: inherit;
+.video-card:active {
+  transform: scale(0.995);
 }
 
-.video-thumbnail {
-  height: 215px;
+.video-card-media {
   position: relative;
-  background: #e8ebf0;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #111827;
   overflow: hidden;
 }
 
-.video-thumbnail img {
+.video-card-media img,
+.video-card-media video {
   width: 100%;
   height: 100%;
+  display: block;
   object-fit: cover;
 }
 
-.video-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 50px;
-  color: #a4a9b2;
+.video-card-body {
+  padding: 13px;
 }
 
-.play-overlay {
-  position: absolute;
-  left: 15px;
-  bottom: 15px;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0,0,0,.72);
-  color: #ffffff;
+.video-card-title {
+  font-size: 16px;
+  font-weight: 750;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.video-card-info {
-  padding: 14px;
-}
-
-.video-card-info h3 {
-  margin: 0;
-  font-size: 17px;
-}
-
-.creator-line {
-  margin: 7px 0;
-  color: #727985;
+.video-card-description {
+  margin-top: 6px;
+  color: var(--muted);
   font-size: 13px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.video-meta {
+.video-card-meta {
   display: flex;
-  gap: 13px;
-  color: #777d88;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 11px;
+  color: var(--muted);
   font-size: 12px;
 }
 
-/* ======================================================
-   PLAYER
-====================================================== */
-
-.player-wrapper {
-  background: #ffffff;
-  border: 1px solid #e5e7ec;
-  border-radius: 18px;
-  padding: 12px;
+.video-card-creator {
+  font-weight: 700;
+  color: #374151;
 }
 
-.main-video {
+.video-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.video-card-actions button {
+  flex: 1;
+  min-height: 40px;
+  border-radius: 10px;
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* =========================================================
+   EMPTY STATE
+========================================================= */
+
+.empty-state {
   width: 100%;
-  max-height: 65vh;
-  background: #000000;
-  border-radius: 14px;
-  display: block;
+  padding: 38px 20px;
+  text-align: center;
+  background: #fff;
+  border: 1px dashed #d1d5db;
+  border-radius: var(--radius);
 }
 
-.player-info {
-  padding: 15px 3px;
+.empty-state-icon {
+  font-size: 34px;
+  margin-bottom: 8px;
 }
 
-.player-info h2 {
-  margin: 0;
-  font-size: 20px;
+.empty-state h3 {
+  font-size: 17px;
 }
 
-.player-info p {
-  color: #727985;
+.empty-state p {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 13px;
   line-height: 1.5;
 }
 
-.player-stats {
+/* =========================================================
+   WATCH HISTORY
+========================================================= */
+
+#watchHistoryList,
+#myVideosList,
+#commentsList,
+#pointsHistory {
   display: flex;
-  gap: 18px;
-  color: #727985;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-item,
+.my-video-item,
+.comment-item,
+.points-item {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  padding: 12px;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.history-thumb {
+  width: 82px;
+  height: 54px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  object-fit: cover;
+  background: #e5e7eb;
+}
+
+.history-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.history-title {
+  font-size: 14px;
+  font-weight: 700;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.history-meta {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* =========================================================
+   PLAYER
+========================================================= */
+
+.player-wrapper {
+  width: 100%;
+}
+
+.player-topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+#mainVideo {
+  width: 100%;
+  max-height: 70vh;
+  display: block;
+  background: #000;
+  border-radius: 14px;
+  object-fit: contain;
+}
+
+.player-info {
+  padding: 14px 2px 0;
+}
+
+#playerTitle {
+  font-size: 21px;
+  line-height: 1.35;
+  font-weight: 800;
+}
+
+#playerDescription {
+  margin-top: 7px;
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 14px;
+  white-space: pre-wrap;
+}
+
+.player-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+  color: var(--muted);
   font-size: 13px;
-  margin: 10px 0;
 }
 
 .player-actions {
   display: flex;
-  flex-wrap: wrap;
   gap: 8px;
+  margin-top: 14px;
+  overflow-x: auto;
+  padding-bottom: 2px;
 }
 
-/* ======================================================
-   COMMENTS
-====================================================== */
+.player-actions button {
+  flex-shrink: 0;
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 11px;
+  background: #fff;
+  border: 1px solid var(--border);
+  font-weight: 700;
+  color: #374151;
+}
+
+.player-actions button.active {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
 
 .comments-box {
-  border-top: 1px solid #eceef2;
-  padding-top: 15px;
+  margin-top: 22px;
 }
 
 .comments-box h3 {
-  margin-top: 0;
-}
-
-.comments-list {
-  display: grid;
-  gap: 12px;
-}
-
-.comment-item {
-  display: flex;
-  gap: 10px;
-}
-
-.comment-avatar {
-  flex: 0 0 36px;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: #f0f2f6;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.comment-content {
-  flex: 1;
-  background: #f6f7f9;
-  border-radius: 13px;
-  padding: 9px 11px;
-}
-
-.comment-content strong {
-  font-size: 13px;
-}
-
-.comment-content p {
-  margin: 4px 0;
-  line-height: 1.4;
-}
-
-.comment-content small {
-  color: #9297a0;
+  font-size: 17px;
+  margin-bottom: 10px;
 }
 
 .comment-form {
   display: flex;
   gap: 8px;
-  margin-top: 15px;
+  margin-bottom: 12px;
 }
 
-.comment-form .input {
+#commentInput {
+  min-width: 0;
   flex: 1;
+  height: 44px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 0 12px;
+  background: #fff;
 }
 
-.comment-form .primary-btn {
-  width: auto;
-  margin: 0;
+#commentBtn {
+  min-width: 80px;
+  border-radius: 11px;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 700;
 }
 
-/* ======================================================
-   EARN
-====================================================== */
-
-.earn-grid {
-  display: grid;
-  grid-template-columns:
-    repeat(2, 1fr);
-  gap: 13px;
+.comment-item strong {
+  font-size: 13px;
 }
 
-.earn-card,
-.history-card,
-.upload-card,
-.profile-card {
-  background: #ffffff;
-  border: 1px solid #e5e7ec;
-  border-radius: 18px;
-  padding: 18px;
-}
-
-.earn-icon {
-  font-size: 32px;
-}
-
-.earn-card h3 {
-  margin: 10px 0 5px;
-}
-
-.earn-card p {
-  color: #777d88;
+.comment-item p {
+  margin-top: 5px;
+  color: #374151;
   font-size: 13px;
   line-height: 1.45;
 }
 
-.history-card {
-  margin-top: 14px;
-}
-
-.history-card h3 {
-  margin-top: 0;
-}
-
-.history-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 0;
-  border-bottom: 1px solid #eceef2;
-}
-
-.history-item:last-child {
-  border-bottom: 0;
-}
-
-.history-item strong,
-.history-item small {
+.comment-item time {
   display: block;
-}
-
-.history-item small {
-  color: #888e98;
-  margin-top: 3px;
-}
-
-.history-points {
-  color: #16803b;
-}
-
-/* ======================================================
-   UPLOAD
-====================================================== */
-
-.upload-card {
-  max-width: 650px;
-  margin: 0 auto;
-}
-
-.video-picker {
-  min-height: 80px;
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  padding: 14px;
-  border: 2px dashed #dfe3ea;
-  border-radius: 15px;
-  cursor: pointer;
-  background: #fafbfc;
-}
-
-.video-picker:hover {
-  border-color: #111827;
-}
-
-.video-picker-icon {
-  width: 48px;
-  height: 48px;
-  flex: 0 0 48px;
-  border-radius: 13px;
-  background: #111827;
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 21px;
-}
-
-.video-picker-content strong,
-.video-picker-content small {
-  display: block;
-}
-
-.video-picker-content small {
-  color: #858b96;
   margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
 }
 
-.upload-preview {
-  margin-top: 15px;
+/* =========================================================
+   EARN SECTION
+========================================================= */
+
+.reward-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
 }
 
-.upload-preview video {
-  width: 100%;
-  max-height: 350px;
-  border-radius: 14px;
-  background: #000;
+.reward-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow);
 }
 
-.upload-progress-box {
-  margin-top: 16px;
+.reward-icon {
+  font-size: 28px;
 }
 
-.upload-progress-text {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 7px;
+.reward-card h3 {
+  margin-top: 8px;
+  font-size: 17px;
+}
+
+.reward-card p {
+  margin-top: 5px;
+  color: var(--muted);
   font-size: 13px;
-}
-
-.progress-track {
-  height: 9px;
-  border-radius: 999px;
-  background: #e8eaf0;
-  overflow: hidden;
-}
-
-.progress-bar {
-  width: 0%;
-  height: 100%;
-  background: #111827;
-  border-radius: inherit;
-  transition: width .2s ease;
-}
-
-.upload-note {
-  color: #888e98;
-  font-size: 12px;
   line-height: 1.5;
 }
 
-/* ======================================================
-   PROFILE
-====================================================== */
-
-.profile-card {
-  text-align: center;
+.reward-card button {
+  width: 100%;
+  margin-top: 13px;
 }
 
-.profile-avatar {
-  width: 72px;
-  height: 72px;
-  margin: 0 auto 10px;
-  border-radius: 50%;
-  background: #f0f2f6;
+.points-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.points-item-main {
+  min-width: 0;
+}
+
+.points-item-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.points-item-date {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.points-positive {
+  color: var(--success);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+/* =========================================================
+   UPLOAD
+========================================================= */
+
+.upload-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+
+.upload-file-box {
+  position: relative;
+  width: 100%;
+  min-height: 130px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 31px;
+  text-align: center;
+  border: 2px dashed #cbd5e1;
+  border-radius: 15px;
+  background: #f8fafc;
+  overflow: hidden;
 }
 
-.profile-card h2 {
-  margin: 0;
+#videoFile {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
 }
 
-.profile-card > p {
-  color: #858b95;
+.upload-file-content {
+  pointer-events: none;
+  padding: 20px;
+}
+
+.upload-file-content .upload-icon {
+  font-size: 32px;
+}
+
+.upload-file-content p {
+  margin-top: 7px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+#videoFileName {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  word-break: break-word;
+}
+
+#uploadPreview {
+  margin-top: 14px;
+}
+
+#uploadPreviewVideo {
+  width: 100%;
+  max-height: 300px;
+  border-radius: 12px;
+  background: #000;
+  object-fit: contain;
+}
+
+.upload-form {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.upload-form input,
+.upload-form textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 12px;
+  background: #fff;
+  color: var(--text);
+}
+
+.upload-form input {
+  height: 46px;
+}
+
+.upload-form textarea {
+  min-height: 105px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.upload-form input:focus,
+.upload-form textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.09);
+}
+
+#uploadProgressBox {
+  margin-top: 14px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+#uploadProgressText {
+  font-size: 12px;
+  color: #475569;
+}
+
+#uploadProgressPercent {
+  float: right;
+  font-weight: 800;
+}
+
+.progress-track {
+  width: 100%;
+  height: 9px;
+  margin-top: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5e7eb;
+}
+
+#uploadProgressBar {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+  transition: width 0.2s ease;
+}
+
+/* =========================================================
+   PROFILE
+========================================================= */
+
+.profile-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 16px;
+  box-shadow: var(--shadow);
+}
+
+.profile-top {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.profile-avatar {
+  width: 62px;
+  height: 62px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #dbeafe;
+  color: #1d4ed8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+#profileName {
+  font-size: 19px;
+  font-weight: 800;
+}
+
+#profileUsername {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .profile-stats {
   display: grid;
-  grid-template-columns:
-    repeat(3, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(3, 1fr);
   margin-top: 18px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
 }
 
-.profile-stats div {
-  padding: 10px 5px;
-  border-radius: 13px;
-  background: #f7f8fa;
+.profile-stat {
+  text-align: center;
 }
 
-.profile-stats strong,
-.profile-stats span {
+.profile-stat:not(:last-child) {
+  border-right: 1px solid var(--border);
+}
+
+.profile-stat strong {
   display: block;
-}
-
-.profile-stats strong {
   font-size: 18px;
 }
 
-.profile-stats span {
-  color: #858b95;
-  font-size: 11px;
+.profile-stat span {
+  display: block;
   margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
 }
 
-.profile-menu {
-  margin-top: 14px;
-  background: #ffffff;
-  border: 1px solid #e5e7ec;
-  border-radius: 18px;
-  overflow: hidden;
+.profile-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 9px;
+  margin-top: 17px;
 }
 
-.menu-btn {
+.profile-actions button {
+  min-height: 44px;
+  border-radius: 11px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  font-weight: 700;
+  color: #374151;
+}
+
+.profile-actions button.primary {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+.profile-actions button.danger {
+  background: #fff;
+  color: var(--danger);
+  border-color: #fecaca;
+}
+
+/* =========================================================
+   CREATOR
+========================================================= */
+
+.creator-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 17px;
+  box-shadow: var(--shadow);
+}
+
+#creatorStats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.creator-stat {
+  padding: 14px;
+  background: #f8fafc;
+  border-radius: 12px;
+}
+
+.creator-stat strong {
+  display: block;
+  font-size: 19px;
+}
+
+.creator-stat span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+#applyMonetizationBtn {
   width: 100%;
-  min-height: 55px;
-  border: 0;
-  border-bottom: 1px solid #eceef2;
-  background: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 16px;
-  text-align: left;
+  margin-top: 14px;
 }
 
-.menu-btn:last-child {
-  border-bottom: 0;
-}
-
-.menu-btn.danger {
-  color: #c0392b;
-}
-
-#myVideosContainer {
-  margin-top: 18px;
-}
+/* =========================================================
+   MY VIDEOS
+========================================================= */
 
 .my-video-item {
-  background: #ffffff;
-  border: 1px solid #e5e7ec;
-  border-radius: 14px;
-  padding: 13px;
   display: flex;
+  gap: 11px;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 9px;
 }
 
-.my-video-info strong,
-.my-video-info small {
+.my-video-thumb {
+  width: 92px;
+  height: 62px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background: #e5e7eb;
+  object-fit: cover;
+}
+
+.my-video-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.my-video-info strong {
   display: block;
-}
-
-.my-video-info small {
-  color: #858b95;
-  margin-top: 4px;
-}
-
-/* ======================================================
-   CREATOR
-====================================================== */
-
-.stats-grid {
-  display: grid;
-  grid-template-columns:
-    repeat(2, 1fr);
-  gap: 12px;
-  margin-bottom: 15px;
-}
-
-.stat-card {
-  background: #ffffff;
-  border: 1px solid #e5e7ec;
-  border-radius: 17px;
-  padding: 17px;
-}
-
-.stat-card span,
-.stat-card strong,
-.stat-card small {
-  display: block;
-}
-
-.stat-card span {
-  font-size: 23px;
-}
-
-.stat-card strong {
-  margin-top: 8px;
-  font-size: 22px;
-}
-
-.stat-card small {
-  color: #858b95;
-  margin-top: 3px;
-}
-
-/* ======================================================
-   STATES
-====================================================== */
-
-.loading-card,
-.empty-card,
-.empty-small,
-.no-comments,
-.comment-loading {
-  background: #ffffff;
-  border: 1px solid #e5e7ec;
-  border-radius: 16px;
-  padding: 22px;
-  text-align: center;
-  color: #777d88;
-}
-
-.empty-icon {
-  font-size: 38px;
-  margin-bottom: 8px;
-}
-
-.empty-card h3 {
-  margin: 5px 0;
-  color: #17181c;
-}
-
-/* ======================================================
-   TOAST
-====================================================== */
-
-.toast {
-  position: fixed;
-  left: 50%;
-  bottom: 92px;
-  z-index: 1000;
-  transform: translateX(-50%);
-  max-width:
-    calc(100vw - 30px);
-  padding: 12px 17px;
-  border-radius: 13px;
-  background: #111827;
-  color: #ffffff;
-  box-shadow:
-    0 10px 30px
-    rgba(0,0,0,.2);
   font-size: 13px;
+  line-height: 1.35;
 }
 
-/* ======================================================
-   BOTTOM NAV
-====================================================== */
+.my-video-info span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.my-video-delete {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: #fee2e2;
+  color: var(--danger);
+  font-size: 15px;
+}
+
+/* =========================================================
+   BOTTOM NAVIGATION
+========================================================= */
 
 .bottom-nav {
   position: fixed;
@@ -901,109 +1064,249 @@ main {
   right: 0;
   bottom: 0;
   z-index: 100;
-  height: 70px;
-  display: grid;
-  grid-template-columns:
-    repeat(5, 1fr);
-  background: rgba(
-    255,
-    255,
-    255,
-    .97
-  );
-  backdrop-filter: blur(12px);
-  border-top: 1px solid #e3e5eb;
+  height: var(--bottom-nav-height);
+  padding:
+    7px
+    max(7px, env(safe-area-inset-right))
+    calc(7px + env(safe-area-inset-bottom))
+    max(7px, env(safe-area-inset-left));
+  background: rgba(255, 255, 255, 0.98);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -5px 22px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(14px);
 }
 
-.nav-btn {
-  border: 0;
+.bottom-nav-inner {
+  width: 100%;
+  max-width: 700px;
+  height: 100%;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 3px;
+}
+
+.bottom-nav button {
+  min-width: 0;
+  height: 100%;
+  border-radius: 12px;
   background: transparent;
-  color: #858b95;
+  color: #6b7280;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 3px;
-}
-
-.nav-btn span {
-  font-size: 20px;
-}
-
-.nav-btn small {
   font-size: 10px;
+  font-weight: 700;
 }
 
-.nav-btn.active {
-  color: #111827;
-  font-weight: 800;
+.bottom-nav button .nav-icon {
+  font-size: 19px;
+  line-height: 1;
 }
 
-.upload-nav span {
-  width: 35px;
-  height: 35px;
-  border-radius: 11px;
+.bottom-nav button.active {
+  background: #eff6ff;
+  color: var(--primary);
+}
+
+/* =========================================================
+   TOAST
+========================================================= */
+
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--bottom-nav-height) + 14px);
+  z-index: 300;
+  width: max-content;
+  max-width: calc(100vw - 30px);
+  padding: 11px 15px;
+  border-radius: 12px;
   background: #111827;
-  color: #ffffff;
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.4;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.20);
+  transform: translate(-50%, 20px);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+#toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* =========================================================
+   LOADING
+========================================================= */
+
+.loading {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-height: 100px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
-/* ======================================================
-   MOBILE
-====================================================== */
+.spinner {
+  width: 22px;
+  height: 22px;
+  margin-right: 8px;
+  border: 3px solid #dbeafe;
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
 
-@media (max-width: 600px) {
-  .auth-screen {
-    justify-content: flex-start;
-    padding-top: 55px;
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* =========================================================
+   RESPONSIVE TABLET
+========================================================= */
+
+@media (min-width: 600px) {
+
+  main {
+    padding-left: 20px;
+    padding-right: 20px;
   }
 
-  .auth-card {
-    padding: 20px;
+  #videoFeed {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .video-thumbnail {
-    height: 190px;
+  .reward-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .earn-grid {
-    grid-template-columns: 1fr;
+  .profile-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .player-actions {
-    display: grid;
-    grid-template-columns:
-      repeat(3, 1fr);
+  .profile-actions button:last-child {
+    grid-column: 1 / -1;
   }
 
-  .secondary-btn {
-    width: 100%;
-    padding: 7px;
-    font-size: 12px;
+}
+
+/* =========================================================
+   DESKTOP
+========================================================= */
+
+@media (min-width: 900px) {
+
+  :root {
+    --bottom-nav-height: 0px;
   }
 
-  .comment-form {
-    align-items: stretch;
+  main {
+    padding-top: 26px;
+    padding-bottom: 40px;
   }
 
-  .comment-form .primary-btn {
-    min-width: 70px;
+  #videoFeed {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 18px;
   }
 
-  .profile-stats strong {
+  .bottom-nav {
+    position: static;
+    height: auto;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 14px 18px;
+    border-top: 0;
+    box-shadow: none;
+    background: transparent;
+    backdrop-filter: none;
+  }
+
+  .bottom-nav-inner {
+    height: 54px;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: 15px;
+    background: #fff;
+    box-shadow: var(--shadow);
+  }
+
+  #toast {
+    bottom: 24px;
+  }
+
+  .player-wrapper {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+}
+
+/* =========================================================
+   LARGE DESKTOP
+========================================================= */
+
+@media (min-width: 1200px) {
+
+  #videoFeed {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  main {
+    max-width: 1180px;
+  }
+
+}
+
+/* =========================================================
+   MOBILE KEYBOARD / SAFE AREA
+========================================================= */
+
+@media (max-width: 599px) {
+
+  input,
+  textarea {
     font-size: 16px;
   }
-}
 
-@media (min-width: 800px) {
-  .video-feed {
-    grid-template-columns:
-      repeat(2, 1fr);
+  body {
+    overscroll-behavior-x: none;
   }
 
-  .video-card-main {
-    height: 100%;
+  main {
+    padding-bottom:
+      calc(var(--bottom-nav-height) + 28px + env(safe-area-inset-bottom));
   }
+
 }
+
+/* =========================================================
+   REDUCED MOTION
+========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+
+}
+
+/* =========================================================
+   DARK MODE INTENTIONALLY NOT ENABLED
+   DekhoEarn currently uses white professional UI.
+========================================================= */
