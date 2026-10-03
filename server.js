@@ -2,7 +2,7 @@
 
 /*
 =========================================================
- DEKHOEARN SERVER v4.0.1
+ DEKHOEARN SERVER v4.0.2
 
  - Authentication / Sessions
  - Videos / Cloudinary
@@ -17,6 +17,7 @@
  - UPI / Bank Payout Account
  - Withdrawal Requests
  - Admin Withdrawal Processing
+ - Password Reset
  - PWA / Static Frontend
 
  IMPORTANT:
@@ -33,12 +34,15 @@ const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const { Pool } = require("pg");
 const path = require("path");
+const fs = require("fs");
 
 const app = express();
 
 /* ======================================================
    CONFIG
 ====================================================== */
+
+const VERSION = "4.0.2";
 
 const PORT =
   Number(process.env.PORT || 10000);
@@ -66,24 +70,47 @@ const CLOUDINARY_FOLDER =
   process.env.CLOUDINARY_FOLDER ||
   "dekhoearn/videos";
 
+/*
+ * Development/testing only.
+ *
+ * When true, forgot-password response can contain
+ * a reset token and reset URL.
+ *
+ * Keep FALSE in normal production use.
+ */
+const RETURN_RESET_TOKEN =
+  String(
+    process.env.RETURN_RESET_TOKEN || ""
+  ).toLowerCase() === "true";
+
 /* ======================================================
    REWARD SETTINGS
 ====================================================== */
 
 const POINTS_PER_WATCH =
-  Number(process.env.POINTS_PER_WATCH || 1);
+  Number(
+    process.env.POINTS_PER_WATCH || 1
+  );
 
 const DAILY_REWARD =
-  Number(process.env.DAILY_REWARD || 10);
+  Number(
+    process.env.DAILY_REWARD || 10
+  );
 
 const REWARDED_AD_POINTS =
-  Number(process.env.REWARDED_AD_POINTS || 5);
+  Number(
+    process.env.REWARDED_AD_POINTS || 5
+  );
 
 const REFERRAL_REWARD =
-  Number(process.env.REFERRAL_REWARD || 10);
+  Number(
+    process.env.REFERRAL_REWARD || 10
+  );
 
 const MIN_WATCH_SECONDS =
-  Number(process.env.MIN_WATCH_SECONDS || 10);
+  Number(
+    process.env.MIN_WATCH_SECONDS || 10
+  );
 
 /* ======================================================
    CASH / WITHDRAWAL SETTINGS
@@ -406,42 +433,29 @@ async function initDB() {
 
   const userColumns = {
     password_hash: "TEXT",
-
     avatar_url: "TEXT",
-
     points:
       "BIGINT NOT NULL DEFAULT 0",
-
     followers_count:
       "BIGINT NOT NULL DEFAULT 0",
-
     following_count:
       "BIGINT NOT NULL DEFAULT 0",
-
     total_watch_seconds:
       "BIGINT NOT NULL DEFAULT 0",
-
     total_videos:
       "BIGINT NOT NULL DEFAULT 0",
-
     creator_status:
       "TEXT NOT NULL DEFAULT 'user'",
-
     creator_applied:
       "BOOLEAN NOT NULL DEFAULT FALSE",
-
     banned:
       "BOOLEAN NOT NULL DEFAULT FALSE",
-
     referral_code:
       "TEXT",
-
     referred_by:
       "BIGINT",
-
     created_at:
       "TIMESTAMPTZ NOT NULL DEFAULT NOW()",
-
     updated_at:
       "TIMESTAMPTZ NOT NULL DEFAULT NOW()"
   };
@@ -488,43 +502,30 @@ async function initDB() {
 
   const videoColumns = {
     description: "TEXT",
-
     cloudinary_public_id:
       "TEXT",
-
     cloudinary_resource_type:
       "TEXT DEFAULT 'video'",
-
     thumbnail_url:
       "TEXT",
-
     duration_seconds:
       "INTEGER DEFAULT 0",
-
     views:
       "BIGINT NOT NULL DEFAULT 0",
-
     likes_count:
       "BIGINT NOT NULL DEFAULT 0",
-
     comments_count:
       "BIGINT NOT NULL DEFAULT 0",
-
     watched_seconds:
       "BIGINT NOT NULL DEFAULT 0",
-
     status:
       "TEXT NOT NULL DEFAULT 'active'",
-
     moderation_status:
       "TEXT NOT NULL DEFAULT 'approved'",
-
     duplicate_warning:
       "BOOLEAN NOT NULL DEFAULT FALSE",
-
     created_at:
       "TIMESTAMPTZ NOT NULL DEFAULT NOW()",
-
     updated_at:
       "TIMESTAMPTZ NOT NULL DEFAULT NOW()"
   };
@@ -763,6 +764,25 @@ async function initDB() {
     )
   `);
 
+  /* PASSWORD RESETS */
+
+  await q(`
+    CREATE TABLE IF NOT EXISTS dekhoearn_password_resets (
+      id BIGSERIAL PRIMARY KEY,
+      user_id BIGINT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TIMESTAMPTZ NOT NULL,
+      used_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await q(`
+    CREATE INDEX IF NOT EXISTS
+    idx_de_password_resets_user
+    ON dekhoearn_password_resets(user_id)
+  `);
+
   /* INDEXES */
 
   await q(`
@@ -851,6 +871,17 @@ async function userFromReq(req) {
   );
 }
 
+/*
+ * IMPORTANT FIX:
+ *
+ * Database/auth service error is 503,
+ * NOT 500 "Authentication error".
+ *
+ * 401 = no/invalid session
+ * 403 = banned
+ * 503 = database/auth service unavailable
+ */
+
 async function requireAuth(
   req,
   res,
@@ -859,6 +890,17 @@ async function requireAuth(
 
   try {
 
+    const suppliedToken =
+      authToken(req);
+
+    if (!suppliedToken) {
+      return error(
+        res,
+        401,
+        "Authentication required"
+      );
+    }
+
     const user =
       await userFromReq(req);
 
@@ -866,7 +908,7 @@ async function requireAuth(
       return error(
         res,
         401,
-        "Authentication required"
+        "Session expired or invalid"
       );
     }
 
@@ -880,16 +922,19 @@ async function requireAuth(
 
     req.user = user;
 
-    next();
+    return next();
 
   } catch (e) {
 
-    console.error(e);
+    console.error(
+      "AUTH DATABASE ERROR:",
+      e
+    );
 
     return error(
       res,
-      500,
-      "Authentication error"
+      503,
+      "Authentication service temporarily unavailable"
     );
   }
 }
@@ -1001,6 +1046,56 @@ async function issueSession(
   return raw;
 }
 
+async function invalidateUserSessions(
+  userId
+) {
+
+  await q(
+    `
+    DELETE FROM dekhoearn_sessions
+    WHERE user_id=$1
+    `,
+    [userId]
+  );
+}
+
+async function createPasswordResetToken(
+  userId
+) {
+
+  const rawToken =
+    token();
+
+  await q(
+    `
+    DELETE FROM dekhoearn_password_resets
+    WHERE user_id=$1
+    `,
+    [userId]
+  );
+
+  await q(
+    `
+    INSERT INTO dekhoearn_password_resets(
+      user_id,
+      token_hash,
+      expires_at
+    )
+    VALUES(
+      $1,
+      $2,
+      NOW()+INTERVAL '15 minutes'
+    )
+    `,
+    [
+      userId,
+      hash(rawToken)
+    ]
+  );
+
+  return rawToken;
+}
+
 async function ledgerPoints(
   client,
   userId,
@@ -1082,7 +1177,7 @@ app.get(
       service:
         "DekhoEarn",
       version:
-        "4.0.1",
+        VERSION,
       database,
       time:
         new Date().toISOString()
@@ -1097,7 +1192,7 @@ app.get(
       res,
       {
         version:
-          "4.0.1",
+          VERSION,
 
         min_watch_seconds:
           MIN_WATCH_SECONDS,
@@ -1302,7 +1397,10 @@ app.post(
 
     } catch (e) {
 
-      console.error(e);
+      console.error(
+        "REGISTRATION ERROR:",
+        e
+      );
 
       return error(
         res,
@@ -1320,10 +1418,11 @@ app.post(
     try {
 
       const identifier =
-        email(
+        clean(
           req.body.email ||
-          req.body.username
-        );
+          req.body.username,
+          320
+        ).toLowerCase();
 
       const password =
         String(
@@ -1335,8 +1434,8 @@ app.post(
           `
           SELECT *
           FROM dekhoearn_users
-          WHERE email=$1
-             OR username=$1
+          WHERE LOWER(email)=$1
+             OR LOWER(username)=$1
           LIMIT 1
           `,
           [identifier]
@@ -1386,13 +1485,306 @@ app.post(
 
     } catch (e) {
 
-      console.error(e);
+      console.error(
+        "LOGIN ERROR:",
+        e
+      );
 
       return error(
         res,
         500,
         "Login failed"
       );
+    }
+  }
+);
+
+/* ======================================================
+   FORGOT PASSWORD
+====================================================== */
+
+app.post(
+  "/api/auth/forgot-password",
+  async (req, res) => {
+
+    try {
+
+      if (!pool) {
+        return error(
+          res,
+          503,
+          "Database unavailable"
+        );
+      }
+
+      const identifier =
+        clean(
+          req.body.identifier ||
+          req.body.email ||
+          req.body.username,
+          320
+        ).toLowerCase();
+
+      if (!identifier) {
+        return error(
+          res,
+          400,
+          "Email or username is required"
+        );
+      }
+
+      const result =
+        await q(
+          `
+          SELECT id
+          FROM dekhoearn_users
+          WHERE LOWER(email)=$1
+             OR LOWER(username)=$1
+          LIMIT 1
+          `,
+          [identifier]
+        );
+
+      /*
+       * Do not reveal whether an account exists.
+       */
+      if (!result.rowCount) {
+
+        return json(
+          res,
+          {
+            message:
+              "If the account exists, password reset instructions will be sent."
+          }
+        );
+      }
+
+      const userId =
+        result.rows[0].id;
+
+      const resetToken =
+        await createPasswordResetToken(
+          userId
+        );
+
+      console.log(
+        "Password reset requested for user:",
+        userId
+      );
+
+      const response = {
+        message:
+          "If the account exists, password reset instructions will be sent."
+      };
+
+      /*
+       * DEVELOPMENT / TESTING ONLY.
+       */
+      if (
+        RETURN_RESET_TOKEN
+      ) {
+
+        response.dev_reset_token =
+          resetToken;
+
+        response.dev_reset_url =
+          `${APP_BASE_URL}/?reset_token=${encodeURIComponent(resetToken)}`;
+      }
+
+      return json(
+        res,
+        response
+      );
+
+    } catch (e) {
+
+      console.error(
+        "FORGOT PASSWORD ERROR:",
+        e
+      );
+
+      return error(
+        res,
+        500,
+        "Password reset request failed"
+      );
+    }
+  }
+);
+
+/* ======================================================
+   RESET PASSWORD
+====================================================== */
+
+app.post(
+  "/api/auth/reset-password",
+  async (req, res) => {
+
+    if (!pool) {
+      return error(
+        res,
+        503,
+        "Database unavailable"
+      );
+    }
+
+    const resetToken =
+      clean(
+        req.body.token,
+        300
+      );
+
+    const newPassword =
+      String(
+        req.body.password || ""
+      );
+
+    if (!resetToken) {
+      return error(
+        res,
+        400,
+        "Reset token is required"
+      );
+    }
+
+    if (
+      newPassword.length < 6
+    ) {
+      return error(
+        res,
+        400,
+        "Password must be at least 6 characters"
+      );
+    }
+
+    const client =
+      await pool.connect();
+
+    try {
+
+      await client.query(
+        "BEGIN"
+      );
+
+      const reset =
+        await client.query(
+          `
+          SELECT *
+          FROM dekhoearn_password_resets
+          WHERE token_hash=$1
+            AND expires_at>NOW()
+            AND used_at IS NULL
+          LIMIT 1
+          FOR UPDATE
+          `,
+          [
+            hash(resetToken)
+          ]
+        );
+
+      if (!reset.rowCount) {
+
+        await client.query(
+          "ROLLBACK"
+        );
+
+        return error(
+          res,
+          400,
+          "Invalid or expired reset token"
+        );
+      }
+
+      const resetRow =
+        reset.rows[0];
+
+      const passwordHash =
+        await bcrypt.hash(
+          newPassword,
+          12
+        );
+
+      await client.query(
+        `
+        UPDATE dekhoearn_users
+        SET
+          password_hash=$1,
+          updated_at=NOW()
+        WHERE id=$2
+        `,
+        [
+          passwordHash,
+          resetRow.user_id
+        ]
+      );
+
+      await client.query(
+        `
+        DELETE FROM dekhoearn_sessions
+        WHERE user_id=$1
+        `,
+        [
+          resetRow.user_id
+        ]
+      );
+
+      await client.query(
+        `
+        UPDATE dekhoearn_password_resets
+        SET used_at=NOW()
+        WHERE id=$1
+        `,
+        [
+          resetRow.id
+        ]
+      );
+
+      await client.query(
+        `
+        DELETE FROM dekhoearn_password_resets
+        WHERE user_id=$1
+          AND id<>$2
+        `,
+        [
+          resetRow.user_id,
+          resetRow.id
+        ]
+      );
+
+      await client.query(
+        "COMMIT"
+      );
+
+      return json(
+        res,
+        {
+          message:
+            "Password reset successful. Please login again."
+        }
+      );
+
+    } catch (e) {
+
+      try {
+        await client.query(
+          "ROLLBACK"
+        );
+      } catch {}
+
+      console.error(
+        "RESET PASSWORD ERROR:",
+        e
+      );
+
+      return error(
+        res,
+        500,
+        "Password reset failed"
+      );
+
+    } finally {
+
+      client.release();
     }
   }
 );
@@ -1887,11 +2279,12 @@ app.get(
         Date.now() / 1000
       );
 
+    /*
+     * SECURITY FIX:
+     * Never allow browser to choose the
+     * signed upload folder.
+     */
     const folder =
-      clean(
-        req.query.folder,
-        200
-      ) ||
       CLOUDINARY_FOLDER;
 
     const toSign =
@@ -2614,10 +3007,25 @@ app.post(
   requireAuth,
   async (req, res) => {
 
+    if (!pool) {
+      return error(
+        res,
+        503,
+        "Database unavailable"
+      );
+    }
+
+    const client =
+      await pool.connect();
+
     try {
 
+      await client.query(
+        "BEGIN"
+      );
+
       const result =
-        await q(
+        await client.query(
           `
           INSERT INTO dekhoearn_daily_rewards(
             user_id,
@@ -2643,6 +3051,10 @@ app.post(
 
       if (!result.rowCount) {
 
+        await client.query(
+          "ROLLBACK"
+        );
+
         return json(
           res,
           {
@@ -2652,41 +3064,17 @@ app.post(
         );
       }
 
-      await q(
-        `
-        UPDATE dekhoearn_users
-        SET points=
-          points+$1
-        WHERE id=$2
-        `,
-        [
-          DAILY_REWARD,
-          req.user.id
-        ]
+      await ledgerPoints(
+        client,
+        req.user.id,
+        DAILY_REWARD,
+        "daily",
+        "Daily reward",
+        `daily:${req.user.id}:${dateOnly()}`
       );
 
-      await q(
-        `
-        INSERT INTO dekhoearn_points_ledger(
-          user_id,
-          amount,
-          type,
-          description,
-          reference_id
-        )
-        VALUES(
-          $1,
-          $2,
-          'daily',
-          'Daily reward',
-          $3
-        )
-        `,
-        [
-          req.user.id,
-          DAILY_REWARD,
-          `daily:${req.user.id}:${dateOnly()}`
-        ]
+      await client.query(
+        "COMMIT"
       );
 
       return json(
@@ -2699,11 +3087,26 @@ app.post(
 
     } catch (e) {
 
+      try {
+        await client.query(
+          "ROLLBACK"
+        );
+      } catch {}
+
+      console.error(
+        "DAILY REWARD ERROR:",
+        e
+      );
+
       return error(
         res,
         500,
         "Daily reward failed"
       );
+
+    } finally {
+
+      client.release();
     }
   }
 );
@@ -2717,9 +3120,24 @@ app.post(
   requireAuth,
   async (req, res) => {
 
+    if (!pool) {
+      return error(
+        res,
+        503,
+        "Database unavailable"
+      );
+    }
+
+    const client =
+      await pool.connect();
+
     try {
 
-      await q(
+      await client.query(
+        "BEGIN"
+      );
+
+      await client.query(
         `
         INSERT INTO dekhoearn_rewarded_ads(
           user_id,
@@ -2735,38 +3153,17 @@ app.post(
         ]
       );
 
-      await q(
-        `
-        UPDATE dekhoearn_users
-        SET points=
-          points+$1
-        WHERE id=$2
-        `,
-        [
-          REWARDED_AD_POINTS,
-          req.user.id
-        ]
+      await ledgerPoints(
+        client,
+        req.user.id,
+        REWARDED_AD_POINTS,
+        "rewarded_ad",
+        "Rewarded ad reward",
+        `ad:${req.user.id}:${crypto.randomUUID()}`
       );
 
-      await q(
-        `
-        INSERT INTO dekhoearn_points_ledger(
-          user_id,
-          amount,
-          type,
-          description
-        )
-        VALUES(
-          $1,
-          $2,
-          'rewarded_ad',
-          'Rewarded ad reward'
-        )
-        `,
-        [
-          req.user.id,
-          REWARDED_AD_POINTS
-        ]
+      await client.query(
+        "COMMIT"
       );
 
       return json(
@@ -2779,11 +3176,21 @@ app.post(
 
     } catch (e) {
 
+      try {
+        await client.query(
+          "ROLLBACK"
+        );
+      } catch {}
+
       return error(
         res,
         500,
         "Ad reward failed"
       );
+
+    } finally {
+
+      client.release();
     }
   }
 );
@@ -2896,15 +3303,15 @@ app.get(
         await q(
           `
           SELECT
-            COUNT(*) videos,
+            COUNT(*) AS videos,
             COALESCE(
               SUM(views),
               0
-            ) views,
+            ) AS views,
             COALESCE(
               SUM(watched_seconds),
               0
-            ) watched_seconds
+            ) AS watched_seconds
           FROM dekhoearn_videos
           WHERE user_id=$1
           `,
@@ -2920,7 +3327,7 @@ app.get(
             COALESCE(
               SUM(creator_amount),
               0
-            ) earnings
+            ) AS earnings
           FROM dekhoearn_creator_earnings
           WHERE creator_id=$1
             AND status IN(
@@ -2933,16 +3340,32 @@ app.get(
           ]
         );
 
+      const row =
+        stats.rows[0] || {};
+
       return json(
         res,
         {
           stats: {
-            ...stats.rows[0],
+            videos:
+              Number(
+                row.videos || 0
+              ),
+
+            views:
+              Number(
+                row.views || 0
+              ),
+
+            watched_seconds:
+              Number(
+                row.watched_seconds || 0
+              ),
 
             earnings:
               Number(
                 earnings.rows[0]
-                  .earnings || 0
+                  ?.earnings || 0
               ),
 
             followers:
@@ -2955,6 +3378,11 @@ app.get(
       );
 
     } catch (e) {
+
+      console.error(
+        "CREATOR STATS ERROR:",
+        e
+      );
 
       return error(
         res,
@@ -2982,7 +3410,8 @@ app.post(
               WHEN creator_status='user'
               THEN 'pending'
               ELSE creator_status
-            END
+            END,
+          updated_at=NOW()
         WHERE id=$1
         `,
         [
@@ -3985,11 +4414,6 @@ app.post(
         );
       }
 
-      /*
-       * If a withdrawal is rejected or failed,
-       * return the held amount to wallet.
-       */
-
       if (
         (
           status === "failed" ||
@@ -4265,11 +4689,23 @@ app.get(
 
 /* ======================================================
    STATIC FRONTEND
-   MUST BE AFTER ALL API ROUTES
 ====================================================== */
 
+const publicCandidate =
+  path.join(
+    __dirname,
+    "public"
+  );
+
 const publicDir =
-  __dirname;
+  fs.existsSync(
+    path.join(
+      publicCandidate,
+      "index.html"
+    )
+  )
+    ? publicCandidate
+    : __dirname;
 
 app.use(
   express.static(
@@ -4282,10 +4718,9 @@ app.use(
   )
 );
 
-/*
- * Express 5 catch-all.
- * API routes have already been registered above.
- */
+/* ======================================================
+   EXPRESS 5 CATCH-ALL
+====================================================== */
 
 app.get(
   "/{*splat}",
@@ -4351,7 +4786,7 @@ async function start() {
         () => {
 
           console.log(
-            `DekhoEarn server v4.0.1 running on ${APP_BASE_URL}`
+            `DekhoEarn server v${VERSION} running on ${APP_BASE_URL}`
           );
 
           console.log(
@@ -4374,7 +4809,6 @@ async function start() {
 
 /* ======================================================
    GRACEFUL SHUTDOWN
-   ONLY ONE SIGTERM + ONE SIGINT
 ====================================================== */
 
 let shuttingDown = false;
@@ -4477,16 +4911,11 @@ process.on(
       "Uncaught Exception:",
       error
     );
-
-    /*
-     * Do not immediately kill the process here.
-     * Render/Node can still report the error.
-     */
   }
 );
 
 /* ======================================================
-   START APPLICATION
+   START
 ====================================================== */
 
 start();
