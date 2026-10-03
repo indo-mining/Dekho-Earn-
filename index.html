@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
 
   <meta charset="UTF-8">
@@ -39,26 +40,23 @@
     content="DekhoEarn"
   >
 
-
-  <!-- =================================================
-       PWA MANIFEST
-  ================================================== -->
+  <!-- =====================================================
+       PWA
+  ====================================================== -->
 
   <link
     rel="manifest"
-    href="/manifest.json"
+    href="/manifest.json?v=4.0.1"
   >
 
-
-  <!-- =================================================
-       STYLESHEET
-  ================================================== -->
+  <!-- =====================================================
+       STYLES
+  ====================================================== -->
 
   <link
     rel="stylesheet"
-    href="/style.css?v=3.1.4"
+    href="/style.css?v=4.0.1"
   >
-
 
   <title>DekhoEarn</title>
 
@@ -314,9 +312,7 @@
 
       <div class="greeting">
 
-        <strong
-          id="headerGreeting"
-        >
+        <strong id="headerGreeting">
           Hi 👋
         </strong>
 
@@ -331,7 +327,7 @@
         id="headerPoints"
         class="points-pill"
       >
-        0 pts
+        0 Points
       </div>
 
     </div>
@@ -379,7 +375,13 @@
     <div
       id="videoFeed"
       class="video-feed"
-    ></div>
+    >
+
+      <div class="loading-state">
+        Loading videos...
+      </div>
+
+    </div>
 
   </section>
 
@@ -410,9 +412,13 @@
     </div>
 
 
-    <div
-      id="watchHistoryList"
-    ></div>
+    <div id="watchHistoryList">
+
+      <div class="loading-state">
+        Watch history will appear here.
+      </div>
+
+    </div>
 
   </section>
 
@@ -451,34 +457,28 @@
 
       <div class="player-info">
 
-        <h2
-          id="playerTitle"
-        ></h2>
+        <h2 id="playerTitle">
+        </h2>
 
 
         <p
           id="playerDescription"
           class="player-description"
-        ></p>
+        >
+        </p>
 
 
         <div class="player-stats">
 
-          <span
-            id="playerViews"
-          >
+          <span id="playerViews">
             0 views
           </span>
 
-          <span
-            id="playerLikes"
-          >
+          <span id="playerLikes">
             0 likes
           </span>
 
-          <span
-            id="playerCommentsCount"
-          >
+          <span id="playerCommentsCount">
             0 comments
           </span>
 
@@ -552,9 +552,7 @@
       </div>
 
 
-      <div
-        id="commentsList"
-      ></div>
+      <div id="commentsList"></div>
 
     </div>
 
@@ -590,9 +588,7 @@
     <div class="earn-grid">
 
 
-      <!-- =================================================
-           DAILY REWARD
-      ================================================== -->
+      <!-- DAILY REWARD -->
 
       <div class="earn-card">
 
@@ -622,9 +618,7 @@
       </div>
 
 
-      <!-- =================================================
-           REWARDED AD
-      ================================================== -->
+      <!-- REWARDED AD -->
 
       <div class="earn-card">
 
@@ -639,7 +633,7 @@
 
 
         <p>
-          Demo reward system. Real ad network can be connected later.
+          Complete the rewarded action and collect points.
         </p>
 
 
@@ -648,7 +642,7 @@
           type="button"
           class="primary-btn"
         >
-          🎁 Reward Ad Demo
+          🎁 Reward Ad
         </button>
 
       </div>
@@ -656,9 +650,7 @@
     </div>
 
 
-    <!-- =================================================
-         POINTS HISTORY
-    ================================================== -->
+    <!-- POINTS HISTORY -->
 
     <div class="points-history">
 
@@ -667,9 +659,13 @@
       </h3>
 
 
-      <div
-        id="pointsHistory"
-      ></div>
+      <div id="pointsHistory">
+
+        <div class="loading-state">
+          Points history will appear here.
+        </div>
+
+      </div>
 
     </div>
 
@@ -703,6 +699,7 @@
 
 
     <div class="upload-card">
+
 
       <!-- VIDEO SELECT -->
 
@@ -745,9 +742,7 @@
       </div>
 
 
-      <!-- =================================================
-           VIDEO PREVIEW
-      ================================================== -->
+      <!-- VIDEO PREVIEW -->
 
       <div
         id="uploadPreview"
@@ -764,9 +759,7 @@
       </div>
 
 
-      <!-- =================================================
-           TITLE
-      ================================================== -->
+      <!-- TITLE -->
 
       <div class="field">
 
@@ -785,9 +778,7 @@
       </div>
 
 
-      <!-- =================================================
-           DESCRIPTION
-      ================================================== -->
+      <!-- DESCRIPTION -->
 
       <div class="field">
 
@@ -805,9 +796,7 @@
       </div>
 
 
-      <!-- =================================================
-           UPLOAD PROGRESS
-      ================================================== -->
+      <!-- UPLOAD PROGRESS -->
 
       <div
         id="uploadProgressBox"
@@ -817,16 +806,12 @@
 
         <div class="progress-text">
 
-          <span
-            id="uploadProgressText"
-          >
+          <span id="uploadProgressText">
             Preparing...
           </span>
 
 
-          <span
-            id="uploadProgressPercent"
-          >
+          <span id="uploadProgressPercent">
             0%
           </span>
 
@@ -846,9 +831,7 @@
       </div>
 
 
-      <!-- =================================================
-           UPLOAD BUTTON
-      ================================================== -->
+      <!-- UPLOAD BUTTON -->
 
       <button
         id="uploadVideoBtn"
@@ -879,16 +862,12 @@
       </div>
 
 
-      <h2
-        id="profileName"
-      >
+      <h2 id="profileName">
         User
       </h2>
 
 
-      <p
-        id="profileUsername"
-      >
+      <p id="profileUsername">
         @user
       </p>
 
@@ -898,9 +877,7 @@
 
         <div class="profile-stat">
 
-          <strong
-            id="profilePoints"
-          >
+          <strong id="profilePoints">
             0
           </strong>
 
@@ -913,14 +890,12 @@
 
         <div class="profile-stat">
 
-          <strong
-            id="profileVideos"
-          >
+          <strong id="profileVideos">
             0
           </strong>
 
           <span>
-            Watched
+            Videos
           </span>
 
         </div>
@@ -928,9 +903,7 @@
 
         <div class="profile-stat">
 
-          <strong
-            id="profileEarned"
-          >
+          <strong id="profileEarned">
             0
           </strong>
 
@@ -943,9 +916,7 @@
       </div>
 
 
-      <!-- =================================================
-           PROFILE ACTIONS
-      ================================================== -->
+      <!-- PROFILE ACTIONS -->
 
       <div class="profile-actions">
 
@@ -989,18 +960,14 @@
     </div>
 
 
-    <!-- =================================================
-         MY VIDEOS
-    ================================================== -->
+    <!-- MY VIDEOS -->
 
     <div
       id="myVideosContainer"
       class="my-videos-container"
     >
 
-      <div
-        id="myVideosList"
-      ></div>
+      <div id="myVideosList"></div>
 
     </div>
 
@@ -1035,9 +1002,13 @@
 
     <div class="creator-card">
 
-      <div
-        id="creatorStats"
-      ></div>
+      <div id="creatorStats">
+
+        <div class="loading-state">
+          Creator stats will appear here.
+        </div>
+
+      </div>
 
 
       <button
@@ -1130,7 +1101,7 @@
 ====================================================== -->
 
 <script
-  src="/app.js?v=3.1.4"
+  src="/app.js?v=4.0.1"
   defer
 ></script>
 
@@ -1145,26 +1116,80 @@
 
     window.addEventListener(
       "load",
-      () => {
+      async () => {
 
-        navigator.serviceWorker
-          .register("/sw.js?v=3.1.4")
-          .then(registration => {
+        try {
 
-            console.log(
-              "DekhoEarn Service Worker registered:",
-              registration.scope
+          /*
+           Unregister old DekhoEarn service workers
+           so old cached JS/CSS cannot keep loading.
+          */
+
+          const registrations =
+            await navigator.serviceWorker.getRegistrations();
+
+          for (const registration of registrations) {
+
+            const scope =
+              registration.scope || "";
+
+            if (
+              scope.includes(location.origin)
+            ) {
+
+              await registration.unregister();
+            }
+          }
+
+
+          /*
+           Register fresh service worker.
+          */
+
+          const registration =
+            await navigator.serviceWorker.register(
+              "/sw.js?v=4.0.1"
             );
 
-          })
-          .catch(error => {
+          console.log(
+            "DekhoEarn Service Worker registered:",
+            registration.scope
+          );
 
-            console.error(
-              "Service Worker registration failed:",
-              error
-            );
 
-          });
+          /*
+           Remove old DekhoEarn caches.
+          */
+
+          if ("caches" in window) {
+
+            const cacheNames =
+              await caches.keys();
+
+            for (const cacheName of cacheNames) {
+
+              if (
+                cacheName.startsWith(
+                  "dekhoearn-"
+                )
+              ) {
+
+                await caches.delete(
+                  cacheName
+                );
+              }
+            }
+          }
+
+
+        } catch (error) {
+
+          console.error(
+            "DekhoEarn Service Worker error:",
+            error
+          );
+
+        }
 
       }
     );
