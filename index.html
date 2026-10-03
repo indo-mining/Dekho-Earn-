@@ -24,17 +24,18 @@
 
   <link
     rel="manifest"
-    href="/manifest.json?v=4.0.2"
+    href="/manifest.json?v=4.0.3"
   >
 
   <link
     rel="stylesheet"
-    href="/style.css?v=4.0.2"
+    href="/style.css?v=4.0.3"
   >
 
 </head>
 
 <body>
+
 
 <!-- =====================================================
      AUTH
@@ -48,6 +49,7 @@
   <div class="auth-card">
 
     <div class="auth-logo">
+
       <div class="logo-mark">
         DE
       </div>
@@ -59,7 +61,9 @@
       <p>
         Dekho. Earn Karo. Reward Lo.
       </p>
+
     </div>
+
 
     <!-- LOGIN -->
 
@@ -115,6 +119,7 @@
       </button>
 
     </div>
+
 
     <!-- REGISTER -->
 
@@ -176,6 +181,7 @@
 
     </div>
 
+
     <!-- FORGOT PASSWORD -->
 
     <div
@@ -215,6 +221,7 @@
       </button>
 
     </div>
+
 
     <!-- RESET PASSWORD -->
 
@@ -275,6 +282,7 @@
 </section>
 
 
+
 <!-- =====================================================
      APP
 ====================================================== -->
@@ -283,6 +291,7 @@
   id="appShell"
   class="app-shell hidden"
 >
+
 
   <!-- HEADER -->
 
@@ -316,6 +325,7 @@
     </div>
 
   </header>
+
 
 
   <!-- HOME -->
@@ -356,6 +366,7 @@
   </section>
 
 
+
   <!-- WATCH HISTORY -->
 
   <section
@@ -385,6 +396,7 @@
     ></div>
 
   </section>
+
 
 
   <!-- PLAYER -->
@@ -475,6 +487,7 @@
 
     </div>
 
+
     <div class="comments-box">
 
       <h3>
@@ -507,6 +520,7 @@
     </div>
 
   </section>
+
 
 
   <!-- EARN -->
@@ -558,6 +572,7 @@
 
       </div>
 
+
       <div class="reward-card">
 
         <div class="reward-icon">
@@ -584,6 +599,7 @@
 
     </div>
 
+
     <div class="history-section">
 
       <h3>
@@ -598,6 +614,7 @@
     </div>
 
   </section>
+
 
 
   <!-- UPLOAD -->
@@ -623,6 +640,7 @@
 
     </div>
 
+
     <div class="upload-card">
 
       <label
@@ -644,6 +662,7 @@
 
       </label>
 
+
       <input
         id="videoFile"
         type="file"
@@ -651,10 +670,12 @@
         hidden
       >
 
+
       <div
         id="videoFileName"
         class="file-name"
       ></div>
+
 
       <div
         id="uploadPreview"
@@ -669,12 +690,14 @@
 
       </div>
 
+
       <input
         id="videoTitle"
         type="text"
         placeholder="Video title"
         maxlength="200"
       >
+
 
       <textarea
         id="videoDescription"
@@ -683,14 +706,13 @@
         maxlength="2000"
       ></textarea>
 
+
       <div
         id="uploadProgressBox"
         class="upload-progress hidden"
       >
 
-        <div
-          id="uploadProgressText"
-        >
+        <div id="uploadProgressText">
           Uploading...
         </div>
 
@@ -703,13 +725,12 @@
 
         </div>
 
-        <div
-          id="uploadProgressPercent"
-        >
+        <div id="uploadProgressPercent">
           0%
         </div>
 
       </div>
+
 
       <button
         id="uploadVideoBtn"
@@ -722,6 +743,7 @@
     </div>
 
   </section>
+
 
 
   <!-- PROFILE -->
@@ -739,15 +761,11 @@
 
       <div>
 
-        <h2
-          id="profileName"
-        >
+        <h2 id="profileName">
           -
         </h2>
 
-        <p
-          id="profileUsername"
-        >
+        <p id="profileUsername">
           -
         </p>
 
@@ -755,13 +773,12 @@
 
     </div>
 
+
     <div class="stats-grid">
 
       <div class="stat-card">
 
-        <strong
-          id="profilePoints"
-        >
+        <strong id="profilePoints">
           0
         </strong>
 
@@ -771,11 +788,10 @@
 
       </div>
 
+
       <div class="stat-card">
 
-        <strong
-          id="profileVideos"
-        >
+        <strong id="profileVideos">
           0
         </strong>
 
@@ -785,11 +801,10 @@
 
       </div>
 
+
       <div class="stat-card">
 
-        <strong
-          id="profileEarned"
-        >
+        <strong id="profileEarned">
           0
         </strong>
 
@@ -800,6 +815,7 @@
       </div>
 
     </div>
+
 
     <div class="profile-actions">
 
@@ -835,6 +851,7 @@
 
     </div>
 
+
     <div
       id="myVideosContainer"
       class="history-section"
@@ -852,6 +869,7 @@
     </div>
 
   </section>
+
 
 
   <!-- CREATOR -->
@@ -877,6 +895,7 @@
 
     </div>
 
+
     <div
       id="creatorStats"
       class="creator-stats"
@@ -887,6 +906,7 @@
       </div>
 
     </div>
+
 
     <button
       id="applyMonetizationBtn"
@@ -899,71 +919,89 @@
   </section>
 
 
+
   <!-- BOTTOM NAV -->
 
-  <nav
-    class="bottom-nav"
-  >
+  <nav class="bottom-nav">
 
     <button
       type="button"
       data-page="homeSection"
       class="active"
     >
+
       <span>
         🏠
       </span>
+
       <small>
         Home
       </small>
+
     </button>
+
 
     <button
       type="button"
       data-page="watchSection"
     >
+
       <span>
         ▶️
       </span>
+
       <small>
         Watch
       </small>
+
     </button>
+
 
     <button
       type="button"
       data-page="earnSection"
     >
+
       <span>
         🎁
       </span>
+
       <small>
         Earn
       </small>
+
     </button>
+
 
     <button
       type="button"
       data-page="uploadSection"
     >
+
       <span>
         ＋
       </span>
+
       <small>
         Upload
       </small>
+
     </button>
+
 
     <button
       type="button"
       data-page="profileSection"
     >
+
       <span>
         👤
       </span>
+
       <small>
         Profile
       </small>
+
     </button>
 
   </nav>
@@ -971,7 +1009,10 @@
 </main>
 
 
-<!-- TOAST -->
+
+<!-- =====================================================
+     TOAST
+====================================================== -->
 
 <div
   id="toast"
@@ -981,7 +1022,10 @@
 ></div>
 
 
-<!-- SCRIPT -->
+
+<!-- =====================================================
+     APP JAVASCRIPT
+====================================================== -->
 
 <script
   src="/app.js?v=4.0.2"
@@ -989,18 +1033,16 @@
 ></script>
 
 
-<!-- SERVICE WORKER -->
+
+<!-- =====================================================
+     SERVICE WORKER CLEANUP
+====================================================== -->
 
 <script>
 
   window.addEventListener(
     "load",
     () => {
-
-      /*
-       * Remove old DekhoEarn service workers/caches
-       * so v4.0.2 files are not stuck on the old UI.
-       */
 
       if (
         "serviceWorker" in navigator
@@ -1020,7 +1062,18 @@
               );
 
             }
+          )
+          .catch(
+            error => {
+
+              console.warn(
+                "Service worker cleanup failed:",
+                error
+              );
+
+            }
           );
+
 
         if (
           "caches" in window
@@ -1030,22 +1083,36 @@
             .then(
               keys => {
 
-                keys.forEach(
-                  key => {
+                return Promise.all(
+                  keys.map(
+                    key => {
 
-                    if (
-                      key.startsWith(
-                        "dekhoearn-"
-                      )
-                    ) {
+                      if (
+                        key.startsWith(
+                          "dekhoearn-"
+                        )
+                      ) {
 
-                      caches.delete(
-                        key
-                      );
+                        return caches.delete(
+                          key
+                        );
+
+                      }
+
+                      return false;
 
                     }
+                  )
+                );
 
-                  }
+              }
+            )
+            .catch(
+              error => {
+
+                console.warn(
+                  "Cache cleanup failed:",
+                  error
                 );
 
               }
@@ -1059,6 +1126,7 @@
   );
 
 </script>
+
 
 </body>
 
