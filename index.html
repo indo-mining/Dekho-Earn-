@@ -17,57 +17,27 @@
 
   <meta
     name="description"
-    content="DekhoEarn - Watch videos, earn points and rewards."
+    content="DekhoEarn - Dekho. Earn Karo. Reward Lo."
   >
 
-  <meta
-    name="mobile-web-app-capable"
-    content="yes"
-  >
-
-  <meta
-    name="apple-mobile-web-app-capable"
-    content="yes"
-  >
-
-  <meta
-    name="apple-mobile-web-app-status-bar-style"
-    content="default"
-  >
-
-  <meta
-    name="apple-mobile-web-app-title"
-    content="DekhoEarn"
-  >
-
-  <!-- =====================================================
-       PWA
-  ====================================================== -->
+  <title>DekhoEarn - Dekho. Earn Karo. Reward Lo.</title>
 
   <link
     rel="manifest"
-    href="/manifest.json?v=4.0.1"
+    href="/manifest.json?v=4.0.2"
   >
-
-  <!-- =====================================================
-       STYLES
-  ====================================================== -->
 
   <link
     rel="stylesheet"
-    href="/style.css?v=4.0.1"
+    href="/style.css?v=4.0.2"
   >
-
-  <title>DekhoEarn</title>
 
 </head>
 
-
 <body>
 
-
 <!-- =====================================================
-     AUTH SCREEN
+     AUTH
 ====================================================== -->
 
 <section
@@ -75,15 +45,11 @@
   class="auth-screen"
 >
 
-  <div class="auth-container">
+  <div class="auth-card">
 
-
-    <!-- BRAND -->
-
-    <div class="brand-block">
-
-      <div class="brand-logo">
-        ▶
+    <div class="auth-logo">
+      <div class="logo-mark">
+        DE
       </div>
 
       <h1>
@@ -91,60 +57,38 @@
       </h1>
 
       <p>
-        Watch • Earn • Share
+        Dekho. Earn Karo. Reward Lo.
       </p>
-
     </div>
 
-
-    <!-- =================================================
-         LOGIN
-    ================================================== -->
+    <!-- LOGIN -->
 
     <div
       id="loginBox"
-      class="auth-card"
+      class="auth-box"
     >
 
       <h2>
-        Welcome back
+        Welcome Back
       </h2>
 
+      <p>
+        Login to continue
+      </p>
 
-      <div class="field">
+      <input
+        id="loginUsername"
+        type="text"
+        placeholder="Username or Email"
+        autocomplete="username"
+      >
 
-        <label for="loginUsername">
-          Username
-        </label>
-
-        <input
-          id="loginUsername"
-          type="text"
-          autocomplete="username"
-          autocapitalize="none"
-          spellcheck="false"
-          maxlength="50"
-          placeholder="Enter username"
-        >
-
-      </div>
-
-
-      <div class="field">
-
-        <label for="loginPassword">
-          Password
-        </label>
-
-        <input
-          id="loginPassword"
-          type="password"
-          autocomplete="current-password"
-          placeholder="Enter password"
-        >
-
-      </div>
-
+      <input
+        id="loginPassword"
+        type="password"
+        placeholder="Password"
+        autocomplete="current-password"
+      >
 
       <button
         id="loginBtn"
@@ -154,113 +98,65 @@
         Login
       </button>
 
+      <button
+        id="forgotPasswordBtn"
+        type="button"
+        class="text-btn"
+      >
+        Forgot Password?
+      </button>
 
-      <p class="auth-switch">
-
-        Don't have an account?
-
-        <button
-          id="showRegisterBtn"
-          type="button"
-          class="text-btn"
-        >
-          Create Account
-        </button>
-
-      </p>
+      <button
+        id="showRegisterBtn"
+        type="button"
+        class="secondary-btn"
+      >
+        Create New Account
+      </button>
 
     </div>
 
-
-    <!-- =================================================
-         REGISTER
-    ================================================== -->
+    <!-- REGISTER -->
 
     <div
       id="registerBox"
-      class="auth-card hidden"
+      class="auth-box hidden"
     >
 
       <h2>
-        Create account
+        Create Account
       </h2>
 
+      <p>
+        Join DekhoEarn
+      </p>
 
-      <div class="field">
+      <input
+        id="registerName"
+        type="text"
+        placeholder="Full Name"
+        autocomplete="name"
+      >
 
-        <label for="registerName">
-          Your Name
-        </label>
+      <input
+        id="registerUsername"
+        type="text"
+        placeholder="Username"
+        autocomplete="username"
+      >
 
-        <input
-          id="registerName"
-          type="text"
-          autocomplete="name"
-          maxlength="100"
-          placeholder="Enter your name"
-        >
+      <input
+        id="registerPassword"
+        type="password"
+        placeholder="Password - minimum 6 characters"
+        autocomplete="new-password"
+      >
 
-      </div>
-
-
-      <div class="field">
-
-        <label for="registerUsername">
-          Username
-        </label>
-
-        <input
-          id="registerUsername"
-          type="text"
-          autocomplete="username"
-          autocapitalize="none"
-          spellcheck="false"
-          maxlength="50"
-          placeholder="Choose username"
-        >
-
-      </div>
-
-
-      <div class="field">
-
-        <label for="registerPassword">
-          Password
-        </label>
-
-        <input
-          id="registerPassword"
-          type="password"
-          autocomplete="new-password"
-          placeholder="Minimum 6 characters"
-        >
-
-      </div>
-
-
-      <div class="field">
-
-        <label for="registerReferral">
-
-          Referral Code
-
-          <small>
-            (optional)
-          </small>
-
-        </label>
-
-        <input
-          id="registerReferral"
-          type="text"
-          autocapitalize="none"
-          spellcheck="false"
-          maxlength="50"
-          placeholder="Referral code"
-        >
-
-      </div>
-
+      <input
+        id="registerReferral"
+        type="text"
+        placeholder="Referral Code (optional)"
+      >
 
       <button
         id="registerBtn"
@@ -270,20 +166,107 @@
         Create Account
       </button>
 
+      <button
+        id="showLoginBtn"
+        type="button"
+        class="secondary-btn"
+      >
+        Back to Login
+      </button>
 
-      <p class="auth-switch">
+    </div>
 
-        Already have an account?
+    <!-- FORGOT PASSWORD -->
 
-        <button
-          id="showLoginBtn"
-          type="button"
-          class="text-btn"
-        >
-          Login
-        </button>
+    <div
+      id="forgotPasswordBox"
+      class="auth-box hidden"
+    >
 
+      <h2>
+        Forgot Password?
+      </h2>
+
+      <p>
+        Username ya email enter karo.
       </p>
+
+      <input
+        id="forgotPasswordIdentifier"
+        type="text"
+        placeholder="Username or Email"
+        autocomplete="username"
+      >
+
+      <button
+        id="forgotPasswordSubmitBtn"
+        type="button"
+        class="primary-btn"
+      >
+        Send Reset
+      </button>
+
+      <button
+        id="backToLoginFromForgotBtn"
+        type="button"
+        class="secondary-btn"
+      >
+        Back to Login
+      </button>
+
+    </div>
+
+    <!-- RESET PASSWORD -->
+
+    <div
+      id="resetPasswordBox"
+      class="auth-box hidden"
+    >
+
+      <h2>
+        Reset Password
+      </h2>
+
+      <p>
+        Apna new password set karo.
+      </p>
+
+      <input
+        id="resetPasswordToken"
+        type="text"
+        placeholder="Reset Token"
+        autocomplete="off"
+      >
+
+      <input
+        id="resetPasswordNew"
+        type="password"
+        placeholder="New Password"
+        autocomplete="new-password"
+      >
+
+      <input
+        id="resetPasswordConfirm"
+        type="password"
+        placeholder="Confirm New Password"
+        autocomplete="new-password"
+      >
+
+      <button
+        id="resetPasswordSubmitBtn"
+        type="button"
+        class="primary-btn"
+      >
+        Reset Password
+      </button>
+
+      <button
+        id="backToLoginFromResetBtn"
+        type="button"
+        class="secondary-btn"
+      >
+        Back to Login
+      </button>
 
     </div>
 
@@ -293,58 +276,56 @@
 
 
 <!-- =====================================================
-     MAIN APP
+     APP
 ====================================================== -->
 
-<div
+<main
   id="appShell"
   class="app-shell hidden"
 >
 
+  <!-- HEADER -->
 
-  <!-- ===================================================
-       HEADER
-  ==================================================== -->
+  <header class="app-header">
 
-  <header class="top-header">
-
-    <div class="top-header-inner">
-
-      <div class="greeting">
-
-        <strong id="headerGreeting">
-          Hi 👋
-        </strong>
-
-        <small>
-          Watch and earn
-        </small>
-
-      </div>
-
+    <div>
 
       <div
-        id="headerPoints"
-        class="points-pill"
+        id="headerGreeting"
+        class="header-greeting"
       >
-        0 Points
+        Welcome
       </div>
+
+      <div class="header-brand">
+        DekhoEarn
+      </div>
+
+    </div>
+
+    <div class="header-points">
+
+      <span>
+        Points
+      </span>
+
+      <strong id="headerPoints">
+        0
+      </strong>
 
     </div>
 
   </header>
 
 
-  <!-- ===================================================
-       HOME
-  ==================================================== -->
+  <!-- HOME -->
 
   <section
     id="homeSection"
-    class="page-section active"
+    class="page-section"
   >
 
-    <div class="section-head">
+    <div class="section-header">
 
       <div>
 
@@ -353,49 +334,36 @@
         </h2>
 
         <p>
-          Watch videos and earn points.
+          Latest videos
         </p>
 
       </div>
 
-
       <button
         id="refreshFeedBtn"
         type="button"
-        class="icon-btn"
-        aria-label="Refresh videos"
-        title="Refresh"
       >
         ↻
       </button>
 
     </div>
 
-
     <div
       id="videoFeed"
       class="video-feed"
-    >
-
-      <div class="loading-state">
-        Loading videos...
-      </div>
-
-    </div>
+    ></div>
 
   </section>
 
 
-  <!-- ===================================================
-       WATCH HISTORY
-  ==================================================== -->
+  <!-- WATCH HISTORY -->
 
   <section
     id="watchSection"
-    class="page-section"
+    class="page-section hidden"
   >
 
-    <div class="section-head">
+    <div class="section-header">
 
       <div>
 
@@ -404,48 +372,37 @@
         </h2>
 
         <p>
-          Your watched videos.
+          Your watched videos
         </p>
 
       </div>
 
     </div>
 
-
-    <div id="watchHistoryList">
-
-      <div class="loading-state">
-        Watch history will appear here.
-      </div>
-
-    </div>
+    <div
+      id="watchHistoryList"
+      class="history-list"
+    ></div>
 
   </section>
 
 
-  <!-- ===================================================
-       PLAYER
-  ==================================================== -->
+  <!-- PLAYER -->
 
   <section
     id="playerSection"
-    class="page-section"
+    class="page-section hidden"
   >
 
-    <div class="player-header">
+    <button
+      id="backFromPlayerBtn"
+      type="button"
+      class="back-btn"
+    >
+      ← Back
+    </button>
 
-      <button
-        id="backFromPlayerBtn"
-        type="button"
-        class="back-btn"
-      >
-        ← Back
-      </button>
-
-    </div>
-
-
-    <div class="player-box">
+    <div class="player-wrapper">
 
       <video
         id="mainVideo"
@@ -454,295 +411,250 @@
         preload="metadata"
       ></video>
 
+    </div>
 
-      <div class="player-info">
+    <div class="player-info">
 
-        <h2 id="playerTitle">
-        </h2>
+      <h2
+        id="playerTitle"
+      ></h2>
 
+      <p
+        id="playerDescription"
+      ></p>
 
-        <p
-          id="playerDescription"
-          class="player-description"
+      <div class="player-stats">
+
+        <span>
+          👁
+          <strong id="playerViews">
+            0
+          </strong>
+        </span>
+
+        <span>
+          ❤️
+          <strong id="playerLikes">
+            0
+          </strong>
+        </span>
+
+        <span>
+          💬
+          <strong id="playerCommentsCount">
+            0
+          </strong>
+        </span>
+
+      </div>
+
+      <div class="player-actions">
+
+        <button
+          id="likeVideoBtn"
+          type="button"
         >
-        </p>
+          ❤️ Like
+        </button>
 
+        <button
+          id="followCreatorBtn"
+          type="button"
+        >
+          Follow
+        </button>
 
-        <div class="player-stats">
-
-          <span id="playerViews">
-            0 views
-          </span>
-
-          <span id="playerLikes">
-            0 likes
-          </span>
-
-          <span id="playerCommentsCount">
-            0 comments
-          </span>
-
-        </div>
-
-
-        <div class="player-actions">
-
-          <button
-            id="likeVideoBtn"
-            type="button"
-            class="action-btn"
-          >
-            🤍 Like
-          </button>
-
-
-          <button
-            id="followCreatorBtn"
-            type="button"
-            class="action-btn"
-          >
-            Follow
-          </button>
-
-
-          <button
-            id="reportVideoBtn"
-            type="button"
-            class="action-btn"
-          >
-            ⚑ Report
-          </button>
-
-        </div>
+        <button
+          id="reportVideoBtn"
+          type="button"
+        >
+          Report
+        </button>
 
       </div>
 
     </div>
 
-
-    <!-- =================================================
-         COMMENTS
-    ================================================== -->
-
-    <div class="comments-section">
+    <div class="comments-box">
 
       <h3>
         Comments
       </h3>
 
+      <div class="comment-composer">
 
-      <div class="comment-form">
-
-        <input
+        <textarea
           id="commentInput"
-          type="text"
-          maxlength="1000"
-          autocomplete="off"
           placeholder="Write a comment..."
-        >
-
+          rows="2"
+        ></textarea>
 
         <button
           id="commentBtn"
           type="button"
+          class="primary-btn"
         >
-          Send
+          Comment
         </button>
 
       </div>
 
-
-      <div id="commentsList"></div>
+      <div
+        id="commentsList"
+        class="comments-list"
+      ></div>
 
     </div>
 
   </section>
 
 
-  <!-- ===================================================
-       EARN
-  ==================================================== -->
+  <!-- EARN -->
 
   <section
     id="earnSection"
-    class="page-section"
+    class="page-section hidden"
   >
 
-    <div class="section-head">
+    <div class="section-header">
 
       <div>
 
         <h2>
-          Earn
+          Earn Points
         </h2>
 
         <p>
-          Collect points from available rewards.
+          Complete rewards and earn
         </p>
 
       </div>
 
     </div>
 
+    <div class="reward-grid">
 
-    <div class="earn-grid">
+      <div class="reward-card">
 
-
-      <!-- DAILY REWARD -->
-
-      <div class="earn-card">
-
-        <div class="earn-card-icon">
+        <div class="reward-icon">
           🎁
         </div>
-
 
         <h3>
           Daily Reward
         </h3>
 
-
         <p>
-          Claim your daily 10-point reward.
+          Claim your daily points.
         </p>
-
 
         <button
           id="dailyRewardBtn"
           type="button"
           class="primary-btn"
         >
-          Claim Daily Reward
+          Claim Reward
         </button>
 
       </div>
 
+      <div class="reward-card">
 
-      <!-- REWARDED AD -->
-
-      <div class="earn-card">
-
-        <div class="earn-card-icon">
-          📺
+        <div class="reward-icon">
+          ▶️
         </div>
 
-
         <h3>
-          Reward Ad
+          Rewarded Ad
         </h3>
 
-
         <p>
-          Complete the rewarded action and collect points.
+          Complete an eligible rewarded ad.
         </p>
-
 
         <button
           id="rewardedAdBtn"
           type="button"
           class="primary-btn"
         >
-          🎁 Reward Ad
+          Earn From Ad
         </button>
 
       </div>
 
     </div>
 
-
-    <!-- POINTS HISTORY -->
-
-    <div class="points-history">
+    <div class="history-section">
 
       <h3>
         Points History
       </h3>
 
-
-      <div id="pointsHistory">
-
-        <div class="loading-state">
-          Points history will appear here.
-        </div>
-
-      </div>
+      <div
+        id="pointsHistory"
+        class="history-list"
+      ></div>
 
     </div>
 
   </section>
 
 
-  <!-- ===================================================
-       UPLOAD
-  ==================================================== -->
+  <!-- UPLOAD -->
 
   <section
     id="uploadSection"
-    class="page-section"
+    class="page-section hidden"
   >
 
-    <div class="section-head">
+    <div class="section-header">
 
       <div>
 
         <h2>
-          Upload
+          Upload Video
         </h2>
 
         <p>
-          Share your video with the community.
+          Share your content
         </p>
 
       </div>
 
     </div>
 
-
     <div class="upload-card">
 
+      <label
+        for="videoFile"
+        class="file-picker"
+      >
 
-      <!-- VIDEO SELECT -->
+        <span>
+          📹
+        </span>
 
-      <div class="video-picker">
+        <strong>
+          Select Video
+        </strong>
 
-        <label
-          class="video-select-box"
-          for="videoFile"
-        >
+        <small>
+          Maximum 100 MB
+        </small>
 
-          <input
-            id="videoFile"
-            type="file"
-            accept="video/*"
-          >
+      </label>
 
+      <input
+        id="videoFile"
+        type="file"
+        accept="video/*"
+        hidden
+      >
 
-          <div class="video-select-content">
-
-            <strong>
-              🎬 Select Video
-            </strong>
-
-            <span>
-              Maximum size: 100 MB
-            </span>
-
-          </div>
-
-        </label>
-
-
-        <div
-          id="videoFileName"
-          class="file-name"
-        >
-          No video selected
-        </div>
-
-      </div>
-
-
-      <!-- VIDEO PREVIEW -->
+      <div
+        id="videoFileName"
+        class="file-name"
+      ></div>
 
       <div
         id="uploadPreview"
@@ -753,85 +665,51 @@
           id="uploadPreviewVideo"
           controls
           playsinline
-          preload="metadata"
         ></video>
 
       </div>
 
+      <input
+        id="videoTitle"
+        type="text"
+        placeholder="Video title"
+        maxlength="200"
+      >
 
-      <!-- TITLE -->
-
-      <div class="field">
-
-        <label for="videoTitle">
-          Video Title
-        </label>
-
-
-        <input
-          id="videoTitle"
-          type="text"
-          maxlength="150"
-          placeholder="Enter video title"
-        >
-
-      </div>
-
-
-      <!-- DESCRIPTION -->
-
-      <div class="field">
-
-        <label for="videoDescription">
-          Description
-        </label>
-
-
-        <textarea
-          id="videoDescription"
-          maxlength="3000"
-          placeholder="Tell viewers about your video..."
-        ></textarea>
-
-      </div>
-
-
-      <!-- UPLOAD PROGRESS -->
+      <textarea
+        id="videoDescription"
+        placeholder="Description"
+        rows="5"
+        maxlength="2000"
+      ></textarea>
 
       <div
         id="uploadProgressBox"
         class="upload-progress hidden"
-        aria-live="polite"
       >
 
-        <div class="progress-text">
-
-          <span id="uploadProgressText">
-            Preparing...
-          </span>
-
-
-          <span id="uploadProgressPercent">
-            0%
-          </span>
-
+        <div
+          id="uploadProgressText"
+        >
+          Uploading...
         </div>
-
 
         <div class="progress-track">
 
           <div
             id="uploadProgressBar"
             class="progress-bar"
-            style="width:0%;"
           ></div>
 
         </div>
 
+        <div
+          id="uploadProgressPercent"
+        >
+          0%
+        </div>
+
       </div>
-
-
-      <!-- UPLOAD BUTTON -->
 
       <button
         id="uploadVideoBtn"
@@ -846,13 +724,11 @@
   </section>
 
 
-  <!-- ===================================================
-       PROFILE
-  ==================================================== -->
+  <!-- PROFILE -->
 
   <section
     id="profileSection"
-    class="page-section"
+    class="page-section hidden"
   >
 
     <div class="profile-card">
@@ -861,129 +737,131 @@
         👤
       </div>
 
+      <div>
 
-      <h2 id="profileName">
-        User
-      </h2>
-
-
-      <p id="profileUsername">
-        @user
-      </p>
-
-
-      <div class="profile-stats">
-
-
-        <div class="profile-stat">
-
-          <strong id="profilePoints">
-            0
-          </strong>
-
-          <span>
-            Points
-          </span>
-
-        </div>
-
-
-        <div class="profile-stat">
-
-          <strong id="profileVideos">
-            0
-          </strong>
-
-          <span>
-            Videos
-          </span>
-
-        </div>
-
-
-        <div class="profile-stat">
-
-          <strong id="profileEarned">
-            0
-          </strong>
-
-          <span>
-            Earned
-          </span>
-
-        </div>
-
-      </div>
-
-
-      <!-- PROFILE ACTIONS -->
-
-      <div class="profile-actions">
-
-        <button
-          id="myVideosBtn"
-          type="button"
-          class="secondary-btn"
+        <h2
+          id="profileName"
         >
-          🎬 My Videos
-        </button>
+          -
+        </h2>
 
-
-        <button
-          id="creatorDashboardBtn"
-          type="button"
-          class="secondary-btn"
+        <p
+          id="profileUsername"
         >
-          📊 Creator Dashboard
-        </button>
-
-
-        <button
-          id="installAppBtn"
-          type="button"
-          class="secondary-btn install-btn hidden"
-        >
-          📲 Install DekhoEarn
-        </button>
-
-
-        <button
-          id="logoutBtn"
-          type="button"
-          class="danger-btn"
-        >
-          Logout
-        </button>
+          -
+        </p>
 
       </div>
 
     </div>
 
+    <div class="stats-grid">
 
-    <!-- MY VIDEOS -->
+      <div class="stat-card">
+
+        <strong
+          id="profilePoints"
+        >
+          0
+        </strong>
+
+        <span>
+          Points
+        </span>
+
+      </div>
+
+      <div class="stat-card">
+
+        <strong
+          id="profileVideos"
+        >
+          0
+        </strong>
+
+        <span>
+          Videos
+        </span>
+
+      </div>
+
+      <div class="stat-card">
+
+        <strong
+          id="profileEarned"
+        >
+          0
+        </strong>
+
+        <span>
+          Earned
+        </span>
+
+      </div>
+
+    </div>
+
+    <div class="profile-actions">
+
+      <button
+        id="myVideosBtn"
+        type="button"
+      >
+        My Videos
+      </button>
+
+      <button
+        id="creatorDashboardBtn"
+        type="button"
+      >
+        Creator Dashboard
+      </button>
+
+      <button
+        id="installAppBtn"
+        type="button"
+        class="hidden"
+      >
+        Install App
+      </button>
+
+      <button
+        id="logoutBtn"
+        type="button"
+        class="danger-btn"
+      >
+        Logout
+      </button>
+
+    </div>
 
     <div
       id="myVideosContainer"
-      class="my-videos-container"
+      class="history-section"
     >
 
-      <div id="myVideosList"></div>
+      <h3>
+        My Videos
+      </h3>
+
+      <div
+        id="myVideosList"
+        class="history-list"
+      ></div>
 
     </div>
 
   </section>
 
 
-  <!-- ===================================================
-       CREATOR DASHBOARD
-  ==================================================== -->
+  <!-- CREATOR -->
 
   <section
     id="creatorSection"
-    class="page-section"
+    class="page-section hidden"
   >
 
-    <div class="section-head">
+    <div class="section-header">
 
       <div>
 
@@ -992,46 +870,39 @@
         </h2>
 
         <p>
-          Track your content performance.
+          Track your creator activity
         </p>
 
       </div>
 
     </div>
 
+    <div
+      id="creatorStats"
+      class="creator-stats"
+    >
 
-    <div class="creator-card">
-
-      <div id="creatorStats">
-
-        <div class="loading-state">
-          Creator stats will appear here.
-        </div>
-
+      <div class="loading">
+        Loading creator stats...
       </div>
 
-
-      <button
-        id="applyMonetizationBtn"
-        type="button"
-        class="primary-btn"
-        style="margin-top:15px;"
-      >
-        Apply for Monetization
-      </button>
-
     </div>
+
+    <button
+      id="applyMonetizationBtn"
+      type="button"
+      class="primary-btn"
+    >
+      Apply for Creator Program
+    </button>
 
   </section>
 
 
-  <!-- ===================================================
-       BOTTOM NAVIGATION
-  ==================================================== -->
+  <!-- BOTTOM NAV -->
 
   <nav
     class="bottom-nav"
-    aria-label="Main navigation"
   >
 
     <button
@@ -1039,54 +910,68 @@
       data-page="homeSection"
       class="active"
     >
-      <span>🏠</span>
-      Home
+      <span>
+        🏠
+      </span>
+      <small>
+        Home
+      </small>
     </button>
-
 
     <button
       type="button"
       data-page="watchSection"
     >
-      <span>🕘</span>
-      Watch
+      <span>
+        ▶️
+      </span>
+      <small>
+        Watch
+      </small>
     </button>
-
 
     <button
       type="button"
       data-page="earnSection"
     >
-      <span>💰</span>
-      Earn
+      <span>
+        🎁
+      </span>
+      <small>
+        Earn
+      </small>
     </button>
-
 
     <button
       type="button"
       data-page="uploadSection"
     >
-      <span>➕</span>
-      Upload
+      <span>
+        ＋
+      </span>
+      <small>
+        Upload
+      </small>
     </button>
-
 
     <button
       type="button"
       data-page="profileSection"
     >
-      <span>👤</span>
-      Profile
+      <span>
+        👤
+      </span>
+      <small>
+        Profile
+      </small>
     </button>
 
   </nav>
 
-</div>
+</main>
 
 
-<!-- =====================================================
-     TOAST
-====================================================== -->
+<!-- TOAST -->
 
 <div
   id="toast"
@@ -1096,108 +981,85 @@
 ></div>
 
 
-<!-- =====================================================
-     APP JAVASCRIPT
-====================================================== -->
+<!-- SCRIPT -->
 
 <script
-  src="/app.js?v=4.0.1"
+  src="/app.js?v=4.0.2"
   defer
 ></script>
 
 
-<!-- =====================================================
-     SERVICE WORKER
-====================================================== -->
+<!-- SERVICE WORKER -->
 
 <script>
 
-  if ("serviceWorker" in navigator) {
+  window.addEventListener(
+    "load",
+    () => {
 
-    window.addEventListener(
-      "load",
-      async () => {
+      /*
+       * Remove old DekhoEarn service workers/caches
+       * so v4.0.2 files are not stuck on the old UI.
+       */
 
-        try {
+      if (
+        "serviceWorker" in navigator
+      ) {
 
-          /*
-           Unregister old DekhoEarn service workers
-           so old cached JS/CSS cannot keep loading.
-          */
+        navigator.serviceWorker
+          .getRegistrations()
+          .then(
+            registrations => {
 
-          const registrations =
-            await navigator.serviceWorker.getRegistrations();
+              registrations.forEach(
+                registration => {
 
-          for (const registration of registrations) {
+                  registration.unregister();
 
-            const scope =
-              registration.scope || "";
+                }
+              );
 
-            if (
-              scope.includes(location.origin)
-            ) {
-
-              await registration.unregister();
             }
-          }
-
-
-          /*
-           Register fresh service worker.
-          */
-
-          const registration =
-            await navigator.serviceWorker.register(
-              "/sw.js?v=4.0.1"
-            );
-
-          console.log(
-            "DekhoEarn Service Worker registered:",
-            registration.scope
           );
 
+        if (
+          "caches" in window
+        ) {
 
-          /*
-           Remove old DekhoEarn caches.
-          */
+          caches.keys()
+            .then(
+              keys => {
 
-          if ("caches" in window) {
+                keys.forEach(
+                  key => {
 
-            const cacheNames =
-              await caches.keys();
+                    if (
+                      key.startsWith(
+                        "dekhoearn-"
+                      )
+                    ) {
 
-            for (const cacheName of cacheNames) {
+                      caches.delete(
+                        key
+                      );
 
-              if (
-                cacheName.startsWith(
-                  "dekhoearn-"
-                )
-              ) {
+                    }
 
-                await caches.delete(
-                  cacheName
+                  }
                 );
+
               }
-            }
-          }
-
-
-        } catch (error) {
-
-          console.error(
-            "DekhoEarn Service Worker error:",
-            error
-          );
+            );
 
         }
 
       }
-    );
 
-  }
+    }
+  );
 
 </script>
 
-
 </body>
+
 </html>
