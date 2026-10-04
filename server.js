@@ -855,7 +855,7 @@ async function userFromReq(req) {
     FROM dekhoearn_sessions s
     JOIN dekhoearn_users u
       ON CAST(s.user_id AS BIGINT) = u.id
-    WHERE s.token_hash = $1::text
+    WHERE s.token_hash = $1
       AND s.expires_at > NOW()
     LIMIT 1
   `, [hash(t)]);
