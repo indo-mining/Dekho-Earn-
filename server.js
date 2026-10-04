@@ -851,19 +851,15 @@ async function userFromReq(req) {
     return null;
   }
 
-  const result =
-    await q(
-      `
-      SELECT u.*
-      FROM dekhoearn_sessions s
-      JOIN dekhoearn_users u
-        ON u.id=s.user_id
-      WHERE s.token_hash=$1
-        AND s.expires_at>NOW()
-      LIMIT 1
-      `,
-      [hash(t)]
-    );
+  const result = await q(`
+  SELECT u.*
+  FROM dekhoearn_sessions s
+  JOIN dekhoearn_users u
+    ON u.id=s.user_id::bigint
+  WHERE s.token_hash=$1
+    AND s.expires_at>NOW()
+  LIMIT 1
+`, [hash(t)]);
 
   return (
     result.rows[0] ||
