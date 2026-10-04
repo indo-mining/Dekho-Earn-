@@ -844,27 +844,23 @@ function authToken(req) {
 
 async function userFromReq(req) {
 
-  const t =
-    authToken(req);
+  const t = authToken(req);
 
   if (!t) {
     return null;
   }
 
   const result = await q(`
-  SELECT u.*
-  FROM dekhoearn_sessions s
-  JOIN dekhoearn_users u
-    ON u.id=s.user_id::bigint
-  WHERE s.token_hash=$1
-    AND s.expires_at>NOW()
-  LIMIT 1
-`, [hash(t)]);
+    SELECT u.*
+    FROM dekhoearn_sessions s
+    JOIN dekhoearn_users u
+      ON CAST(s.user_id AS BIGINT) = u.id
+    WHERE s.token_hash = $1::text
+      AND s.expires_at > NOW()
+    LIMIT 1
+  `, [hash(t)]);
 
-  return (
-    result.rows[0] ||
-    null
-  );
+  return result.rows[0] || null;
 }
 
 /*
